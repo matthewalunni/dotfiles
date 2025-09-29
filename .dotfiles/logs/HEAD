@@ -1,6 +1,0 @@
-0000000000000000000000000000000000000000 07edbe5b08eaa9f169bde4248f3e48732b0c86c8 matthewalunni <matthew.alunni@gmail.com> 1758938668 -0400	commit (initial): Add tmux config
-07edbe5b08eaa9f169bde4248f3e48732b0c86c8 c118995b10ada754c20a60645d3c52d8d7a9e4d3 matthewalunni <matthew.alunni@gmail.com> 1758939101 -0400	commit: Add README.md with setup and usage instructions
-c118995b10ada754c20a60645d3c52d8d7a9e4d3 0000000000000000000000000000000000000000 matthewalunni <matthew.alunni@gmail.com> 1758939104 -0400	Branch: renamed refs/heads/master to refs/heads/main
-0000000000000000000000000000000000000000 c118995b10ada754c20a60645d3c52d8d7a9e4d3 matthewalunni <matthew.alunni@gmail.com> 1758939104 -0400	Branch: renamed refs/heads/master to refs/heads/main
-c118995b10ada754c20a60645d3c52d8d7a9e4d3 85f0bf091619d2a3222bf95c5630ac33171f6297 matthewalunni <matthew.alunni@gmail.com> 1758939546 -0400	commit: Darken text colors in tmux status and messages for better visibility
-85f0bf091619d2a3222bf95c5630ac33171f6297 b8c5557423bd8e6d145cde16ee67ef95db6bee4c matthewalunni <matthew.alunni@gmail.com> 1759110299 -0400	pull origin main: Fast-forward
