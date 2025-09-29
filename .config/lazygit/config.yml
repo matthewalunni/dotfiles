@@ -1,0 +1,7 @@
+gui:
+  theme:
+    stagedChangesColor:
+      - bold
+      - cyan
+    selectedLineBgColor:
+      - "#3761ab"
