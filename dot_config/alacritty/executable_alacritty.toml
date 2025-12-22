@@ -1,0 +1,108 @@
+[window]
+dynamic_padding = true
+opacity = 0.86
+decorations = "None"
+
+[window.padding]
+x = 6
+y = 6
+
+# ---------------------------------------------
+# FONT
+# ---------------------------------------------
+[font]
+size = 12.5
+builtin_box_drawing = true
+
+[font.normal]
+family = "JetBrainsMono NF"
+# style  = "Regular"
+
+[font.bold]
+family = "JetBrainsMono NF"
+# style = "Bold"
+
+[font.italic]
+family = "JetBrainsMono NF"
+# style = "Italic"
+
+# ---------------------------------------------
+# START IN WSL (login shell)
+# ---------------------------------------------
+[terminal.shell]
+program = "C:\\Windows\\System32\\wsl.exe"
+args = ["--cd", "~"]
+
+# ---------------------------------------------
+# CURSOR & SCROLLING
+# ---------------------------------------------
+[cursor]
+style = "Beam"
+
+[scrolling]
+history = 10000
+
+[mouse]
+hide_when_typing = true
+
+# ---------------------------------------------
+# COLORS — TokyoNight
+# ---------------------------------------------
+[colors.primary]
+background = "0x1a1b26"
+foreground = "0xc0caf5"
+
+[colors.normal]
+black   = "0x15161e"
+red     = "0xf7768e"
+green   = "0x9ece6a"
+yellow  = "0xe0af68"
+blue    = "0x7aa2f7"
+magenta = "0xbb9af7"
+cyan    = "0x7dcfff"
+white   = "0xa9b1d6"
+
+[colors.bright]
+black   = "0x414868"
+red     = "0xf7768e"
+green   = "0x9ece6a"
+yellow  = "0xe0af68"
+blue    = "0x7aa2f7"
+magenta = "0xbb9af7"
+cyan    = "0x7dcfff"
+white   = "0xc0caf5"
+
+# ---------------------------------------------
+# KEY BINDINGS
+# ---------------------------------------------
+[[keyboard.bindings]]
+key = "V"
+mods = "Control|Shift"
+action = "Paste"
+
+[[keyboard.bindings]]
+key = "C"
+mods = "Control|Shift"
+action = "Copy"
+
+[[keyboard.bindings]]
+key = "F11"
+action = "ToggleFullscreen"
+
+[[keyboard.bindings]]
+key = "+"
+mods = "Control"
+action = "IncreaseFontSize"
+
+[[keyboard.bindings]]
+key = "-"
+mods = "Control"
+action = "DecreaseFontSize"
+
+[[keyboard.bindings]]
+key = "Key0"
+mods = "Control"
+action = "ResetFontSize"
+
+[terminal]
+

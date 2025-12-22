@@ -1,0 +1,133 @@
+export PATH="/snap/bin:$PATH"
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Load system-wide profile (snap, locale, etc.)
+[[ -f /etc/profile ]] && source /etc/profile
+
+### Added by Zinit's installer
+if [[ ! -f $HOME/.local/share/zinit/zinit.git/zinit.zsh ]]; then
+    print -P "%F{33} %F{220}Installing %F{33}ZDHARMA-CONTINUUM%F{220} Initiative Plugin Manager (%F{33}zdharma-continuum/zinit%F{220})…%f"
+    command mkdir -p "$HOME/.local/share/zinit" && command chmod g-rwX "$HOME/.local/share/zinit"
+    command git clone https://github.com/zdharma-continuum/zinit "$HOME/.local/share/zinit/zinit.git" && \
+        print -P "%F{33} %F{34}Installation successful.%f%b" || \
+        print -P "%F{160} The clone has failed.%f%b"
+fi
+
+source "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+autoload -Uz _zinit
+(( ${+_comps} )) && _comps[zinit]=_zinit
+### End of Zinit's installer chunk
+
+eval "$(starship init zsh)"
+eval "$(zoxide init zsh)"
+
+# NVM (Node Version Manager) setup
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+
+# ========================
+# fzf
+# ========================
+# fzf base setup
+export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+
+# file preview with bat
+export FZF_DEFAULT_OPTS="
+  --height 80%
+  --layout=reverse
+  --border
+  --preview 'bat --style=numbers --color=always --line-range :500 {}'
+  --preview-window=right:60%
+"
+
+# find a local file and open it in nvim
+ff() {
+  local file
+  file=$(fzf --query="$1" --select-1 --exit-0) && nvim "$file"
+}
+
+# Search files that contain the pattern, preview with bat, open in nvim at the first match
+
+fs() {
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: rgfzf <pattern>"
+    return 1
+  fi
+
+  local pattern selected file line
+  pattern="$*"
+
+  selected=$(
+    rg --hidden --files-with-matches --glob '!.git/*' --no-messages --color=never "$pattern" 2>/dev/null |
+
+    fzf --preview 'bat --style=numbers --color=always --line-range :200 {}' --preview-window=right:60%
+  )
+
+
+  if [[ -n "$selected" ]]; then
+    file="$selected"
+    # find the first matching line number in that file
+    line=$(rg --hidden --no-heading --line-number --color=never "$pattern" "$file" 2>/dev/null | head -n1 | cut -d: -f2)
+    if [[ -n "$line" ]]; then
+      nvim +"$line" "$file"
+    else
+      nvim "$file"
+    fi
+  fi
+}
+
+# zoxide + fzf to change directory
+fz() {
+  local dir
+  dir=$(zoxide query -ls | awk '{ $1=""; print substr($0,2) }' |
+    fzf --height=80% --reverse --border \
+        --preview 'tree -C -L 2 {} | head -200' \
+        --preview-window=right:60%)
+  [[ -n "$dir" ]] && cd "$dir"
+}
+
+# Fancy fuzzy history search (fzf + preview)
+
+fh() {
+  local selected
+  selected=$(
+    fc -rln 1 | sed 's/^[ 0-9]*//' |
+    fzf --height=80% --border --reverse \
+        --prompt='History> ' \
+        --preview 'echo {}' \
+        --preview-window=down:3:wrap
+  )
+  [[ -n "$selected" ]] && print -z "$selected"
+}
+
+# some defaults 
+
+setopt autocd
+setopt correct
+setopt extendedglob
+setopt nocaseglob
+
+HISTSIZE=10000
+SAVEHIST=10000
+HISTFILE=~/.zsh_history
+setopt sharehistory
+
+# git dotfiles
+alias dotfiles='git --git-dir=$HOME/.dotfiles --work-tree=$HOME'
+
+# Config directory shortcuts
+alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
+alias zshconfig='nvim ~/.zshrc'
+alias nvimconfig='cd ~/.config/nvim'
+alias starshipconfig='nvim ~/.config/starship.toml'
+alias srczsh='source ~/.zshrc'
+
+# General shortcuts
+alias c='clear'
+alias n='nvim'
+alias lg='lazygit'
+alias ld='lazydocker'
+alias fd='fdfind'

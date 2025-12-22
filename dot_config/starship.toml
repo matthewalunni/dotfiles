@@ -1,0 +1,117 @@
+# ------------------------------
+# Global prompt behavior
+# ------------------------------
+add_newline = false
+command_timeout = 500
+
+format = """
+$directory\
+$git_branch\
+$git_status\
+$git_state\
+$nodejs\
+$python\
+$rust\
+$golang\
+$character
+"""
+
+# ------------------------------
+# Directory
+# ------------------------------
+[directory]
+style = "bold blue"
+truncate_to_repo = true
+truncation_length = 3
+format = "[$path]($style) "
+
+# ------------------------------
+# Git branch
+# ------------------------------
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "[$symbol$branch]($style) "
+only_attached = true
+
+# ------------------------------
+# Git status (the most important part)
+# ------------------------------
+[git_status]
+style = "bold yellow"
+format = "([$all_status$ahead_behind]($style) )"
+ignore_submodules = true
+
+conflicted = "≠"
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+
+untracked = "?"
+modified = "!"
+staged = "+"
+renamed = "»"
+deleted = "✘"
+stashed = "⚑"
+
+# ------------------------------
+# Git state (only when dangerous)
+# ------------------------------
+[git_state]
+rebase = "REBASING"
+merge = "MERGING"
+cherry_pick = "CHERRY"
+revert = "REVERT"
+bisect = "BISECT"
+style = "bold red"
+format = "[$state]($style) "
+
+# ------------------------------
+# Language runtimes (quiet + useful)
+# ------------------------------
+[nodejs]
+symbol = " "
+style = "bold green"
+format = "[$symbol$version]($style) "
+detect_extensions = ["js", "ts", "tsx"]
+detect_files = ["package.json"]
+
+[python]
+symbol = " "
+style = "bold yellow"
+format = "[$symbol$version]($style) "
+detect_extensions = ["py"]
+detect_files = ["pyproject.toml", "requirements.txt"]
+python_binary = ["python3", "python"]
+
+[rust]
+symbol = " "
+style = "bold red"
+format = "[$symbol$version]($style) "
+detect_extensions = ["rs"]
+
+[golang]
+symbol = " "
+style = "bold cyan"
+format = "[$symbol$version]($style) "
+detect_extensions = ["go"]
+
+# ------------------------------
+# Prompt character
+# ------------------------------
+[character]
+success_symbol = "❯"
+error_symbol = "❯"
+
+# ------------------------------
+# Performance / noise reduction
+# ------------------------------
+[cmd_duration]
+disabled = true
+
+[package]
+disabled = true
+
+[line_break]
+disabled = true
+
