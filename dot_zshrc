@@ -131,3 +131,6 @@ alias n='nvim'
 alias lg='lazygit'
 alias ld='lazydocker'
 alias fd='fdfind'
+
+# opencode
+export PATH=/home/matthewalunni/.opencode/bin:$PATH
