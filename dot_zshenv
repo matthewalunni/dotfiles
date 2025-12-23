@@ -2,3 +2,5 @@
 . "/home/matthewalunni/.local/share/bob/env/env.sh"
 # User binaries
 export PATH="$HOME/bin:$PATH"
+export EDITOR="nvim"
+export VISUAL="nvim"

@@ -120,7 +120,7 @@ alias dotfiles='git --git-dir=$HOME/.dotfiles --work-tree=$HOME'
 
 # Config directory shortcuts
 alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
-alias zshconfig='nvim ~/.zshrc'
+alias zshconfig='chezmoi edit ~/.zshrc'
 alias nvimconfig='cd ~/.config/nvim'
 alias starshipconfig='nvim ~/.config/starship.toml'
 alias srczsh='source ~/.zshrc'
