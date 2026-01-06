@@ -1,6 +1,9 @@
 export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
+# opencode
+export PATH="/home/$USER/.opencode/bin:$PATH"
+export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
 
 # Load system-wide profile (snap, locale, etc.)
 [[ -f /etc/profile ]] && source /etc/profile
@@ -115,14 +118,23 @@ SAVEHIST=10000
 HISTFILE=~/.zsh_history
 setopt sharehistory
 
-# git dotfiles
-alias dotfiles='git --git-dir=$HOME/.dotfiles --work-tree=$HOME'
+# OS Specific Settings, Arch
+# ========================
+if [[ "$(uname -r)" == *"arch"* ]]; then
+    fastfetch
+    alias alacrittyconfig='nvim ~/.config/alacritty/alacritty.toml'
+fi
+
+# OS Specific Settings, Windows
+# ========================
+if [[ "$(uname -r)" == *"microsoft"* ]]; then
+    alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
+fi
 
 # Config directory shortcuts
-alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
 alias zshconfig='chezmoi edit ~/.zshrc'
 alias nvimconfig='cd ~/.config/nvim'
-alias starshipconfig='nvim ~/.config/starship.toml'
+alias starshipconfig='chezmoi edit ~/.config/starship.toml'
 alias srczsh='source ~/.zshrc'
 
 # General shortcuts
@@ -131,6 +143,4 @@ alias n='nvim'
 alias lg='lazygit'
 alias ld='lazydocker'
 alias fd='fdfind'
-
-# opencode
-export PATH=/home/matthewalunni/.opencode/bin:$PATH
+alias y='yazi'
