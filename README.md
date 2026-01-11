@@ -81,3 +81,4 @@ Chezmoi uses prefixes to determine how files are managed:
 - **Zsh**: Shell configuration with zinit, starship, fzf, zoxide
 - **Starship**: Shell prompt theme
 - **Lazygit**: Git TUI configuration
+- **Tmux**: Tmux configuration
