@@ -74,6 +74,34 @@ Chezmoi uses prefixes to determine how files are managed:
 - `executable_` → makes file executable
 - `private_` → sets permissions to 600
 
+## Install Scripts
+
+Two scripts are included for bootstrapping a fresh Arch machine.
+
+### `install.sh` — Full desktop install
+
+Installs the complete environment: Hyprland, Waybar, Rofi, audio, Bluetooth,
+fonts, display manager, containers, and all dotfiles via chezmoi.
+
+```bash
+bash install.sh
+```
+
+### `install-minimal.sh` — Terminal-only install
+
+A lean setup for cyberdecks, Raspberry Pis, or any machine where you want just
+the terminal environment. Includes zsh, tmux, neovim (via bob), and the usual
+CLI tools — no desktop or GUI packages.
+
+```bash
+bash install-minimal.sh
+```
+
+> **Note:** Before running either script on a fresh machine, update the
+> `CHEZMOI_REPO` variable at the top to point to your actual GitHub repo URL.
+
+---
+
 ## What's Included
 
 - **Alacritty**: Terminal emulator config
