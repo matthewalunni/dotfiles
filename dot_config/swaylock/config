@@ -1,0 +1,50 @@
+image=~/Pictures/wallpaper.jpg
+# scaling=fill
+# color=1e1e2e
+# indicator-radius=100
+# indicator-thickness=10
+# ring-color=89b4fa
+# key-hl-color=a6e3a1
+# text-color=cdd6f4
+
+# Don't use an image if you don't have one
+# color=1e1e2e
+
+# Show input feedback
+show-failed-attempts
+# show-keyboard-layout
+daemonize
+clock
+indicator
+ignore-empty-password
+datestr=%a, %B %e
+timestr=%I:%M %p
+fade-in=0.3
+
+# Indicator
+indicator-radius=100
+indicator-thickness=7
+
+# Colors (Catppuccin Mocha)
+inside-color=1e1e2e
+ring-color=89b4fa
+key-hl-color=a6e3a1
+bs-hl-color=f38ba8
+text-color=cdd6f4
+
+# When typing
+inside-ver-color=89b4fa
+ring-ver-color=89b4fa
+
+# When wrong password
+inside-wrong-color=f38ba8
+ring-wrong-color=f38ba8
+
+# When cleared
+inside-clear-color=f9e2af
+ring-clear-color=f9e2af
+
+# Grace period (seconds before locking input)
+# grace=2
+# grace-no-mouse
+# grace-no-touch

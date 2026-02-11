@@ -1,0 +1,18 @@
+# Docked with lid closed - clamshell mode
+profile docked-closed {
+    output eDP-1 disable
+    output DP-1 mode 2560x1440@144 position 0,0
+    output DP-2 mode 1920x1080@60 position 2560,0
+}
+
+# Docked with lid open - all monitors
+profile docked-open {
+    output eDP-1 mode 1920x1080@60 position 0,0
+    output DP-1 mode 2560x1440@144 position 1920,0
+    output DP-2 mode 1920x1080@60 position 4480,0
+}
+
+# Laptop only (undocked)
+profile mobile {
+    output eDP-1 mode 1920x1080@60 position 0,0
+}

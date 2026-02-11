@@ -35,7 +35,7 @@ export NVM_DIR="$HOME/.nvm"
 # fzf
 # ========================
 # fzf base setup
-export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
 
 # file preview with bat
 export FZF_DEFAULT_OPTS="
@@ -128,7 +128,15 @@ fi
 # OS Specific Settings, Windows
 # ========================
 if [[ "$(uname -r)" == *"microsoft"* ]]; then
+    alias fd='fdfind'
     alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
+fi
+
+# OS Specific Settings, MacOS
+# ========================
+if [[ "$(uname)" == "Darwin" ]]; then
+    alias fd='fdfind'
+    alias alacrittyconfig='nvim ~/.config/alacritty/alacritty.toml'
 fi
 
 # Config directory shortcuts
@@ -142,6 +150,5 @@ alias c='clear'
 alias n='nvim'
 alias lg='lazygit'
 alias ld='lazydocker'
-alias fd='fdfind'
 alias y='yazi'
 alias oc='opencode'
