@@ -1,7 +1,11 @@
-. "$HOME/.cargo/env"
+# Source cargo env if present
+[ -r "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
 # Probably able to remove these in favor of a the path in zshrc
-. "/home/$USER/.local/share/bob/env/env.sh"
+if [ -r "$HOME/.local/share/bob/env/env.sh" ]; then
+  . "$HOME/.local/share/bob/env/env.sh"
+fi
+
 # User binaries
 export PATH="$HOME/bin:$PATH"
 export EDITOR="nvim"
