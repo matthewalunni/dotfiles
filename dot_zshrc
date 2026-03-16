@@ -152,3 +152,45 @@ alias lg='lazygit'
 alias ld='lazydocker'
 alias y='yazi'
 alias oc='opencode'
+
+# Initialise and publish the current directory as a new GitHub repo
+ghpublish() {
+    local default_name="${PWD##*/}"
+
+    # Repo name
+    echo -n "Repo name [$default_name]: "
+    read repo_name
+    repo_name="${repo_name:-$default_name}"
+
+    # Visibility
+    echo -n "Visibility [private/public, default: private]: "
+    read visibility
+    visibility="${visibility:-private}"
+    if [[ "$visibility" != "public" && "$visibility" != "private" ]]; then
+        echo "Invalid visibility '$visibility', defaulting to private."
+        visibility="private"
+    fi
+
+    # Description
+    echo -n "Description (optional): "
+    read description
+
+    # Require .gitignore
+    if [[ ! -f .gitignore ]]; then
+        echo "Error: no .gitignore found in current directory." >&2
+        return 1
+    fi
+
+    # Init git repo if needed
+    if [[ ! -d .git ]]; then
+        git init
+        git add -A
+        git commit -m "Initial commit"
+    fi
+
+    # Create remote repo and push
+    local gh_args=(repo create "$repo_name" "--$visibility" --source=. --remote=origin --push)
+    [[ -n "$description" ]] && gh_args+=(--description "$description")
+
+    gh "${gh_args[@]}"
+}
