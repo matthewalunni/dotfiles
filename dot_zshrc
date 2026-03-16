@@ -1,9 +1,9 @@
 export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
-export PATH="$HOME/.cargo/bin:$PATH"
+command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
 # opencode
 export PATH="/home/$USER/.opencode/bin:$PATH"
-export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
+[[ -d "$HOME/.local/share/bob/nvim-bin" ]] && export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
 
 # Load system-wide profile (snap, locale, etc.)
 [[ -f /etc/profile ]] && source /etc/profile
@@ -34,15 +34,21 @@ export NVM_DIR="$HOME/.nvm"
 # ========================
 # fzf
 # ========================
-# fzf base setup
-export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
+# fzf base setup — handle Ubuntu's fdfind/batcat naming
+if command -v fdfind &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+else
+  export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
+fi
+
+_bat_cmd=$(command -v batcat 2>/dev/null || command -v bat 2>/dev/null)
 
 # file preview with bat
 export FZF_DEFAULT_OPTS="
   --height 80%
   --layout=reverse
   --border
-  --preview 'bat --style=numbers --color=always --line-range :500 {}'
+  --preview '$_bat_cmd --style=numbers --color=always --line-range :500 {}'
   --preview-window=right:60%
 "
 
@@ -66,7 +72,7 @@ fs() {
   selected=$(
     rg --hidden --files-with-matches --glob '!.git/*' --no-messages --color=never "$pattern" 2>/dev/null |
 
-    fzf --preview 'bat --style=numbers --color=always --line-range :200 {}' --preview-window=right:60%
+    fzf --preview "$_bat_cmd --style=numbers --color=always --line-range :200 {}" --preview-window=right:60%
   )
 
 
