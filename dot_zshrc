@@ -152,6 +152,8 @@ alias lg='lazygit'
 alias ld='lazydocker'
 alias y='yazi'
 alias oc='opencode'
+alias bat='batcat'
+alias fd='fdfind'
 
 # Initialise and publish the current directory as a new GitHub repo
 ghpublish() {
