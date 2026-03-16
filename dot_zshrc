@@ -154,6 +154,7 @@ alias y='yazi'
 alias oc='opencode'
 alias bat='batcat'
 alias fd='fdfind'
+alias gdiff='git diff HEAD^ HEAD'
 
 # Initialise and publish the current directory as a new GitHub repo
 ghpublish() {
