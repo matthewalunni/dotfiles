@@ -1,7 +1,3 @@
-. "$HOME/.cargo/env"
-
-# Probably able to remove these in favor of a the path in zshrc
-. "/home/$USER/.local/share/bob/env/env.sh"
 # User binaries
 export PATH="$HOME/bin:$PATH"
 export EDITOR="nvim"
