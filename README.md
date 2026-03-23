@@ -5,6 +5,9 @@ Personal dotfiles managed with [chezmoi](https://www.chezmoi.io/).
 ## Quick Start
 
 ```bash
+# Initialize the repo
+chezmoi init <repo_url>
+
 # Apply changes from this repo to your home directory
 chezmoi apply
 

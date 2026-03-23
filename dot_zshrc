@@ -1,5 +1,6 @@
 export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+[[ -d /opt/homebrew/bin ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
 command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
 # opencode
 export PATH="/home/$USER/.opencode/bin:$PATH"
@@ -127,8 +128,12 @@ setopt sharehistory
 # OS Specific Settings, Arch
 # ========================
 if [[ "$(uname -r)" == *"arch"* ]]; then
-    fastfetch
     alias alacrittyconfig='nvim ~/.config/alacritty/alacritty.toml'
+fi
+
+# Run fastfetch on all non-Windows systems
+if [[ "$(uname -r)" != *"microsoft"* ]]; then
+    fastfetch
 fi
 
 # OS Specific Settings, Windows
