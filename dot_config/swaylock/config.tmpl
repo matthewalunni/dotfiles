@@ -1,0 +1,38 @@
+{{- $t := index .themes .theme -}}
+image=~/Pictures/wallpaper.jpg
+show-failed-attempts
+daemonize
+clock
+indicator
+ignore-empty-password
+datestr=%a, %B %e
+timestr=%I:%M %p
+fade-in=0.3
+
+# Indicator
+indicator-radius=100
+indicator-thickness=7
+
+# Colors
+inside-color={{ trimPrefix "#" $t.bg }}
+ring-color={{ trimPrefix "#" $t.border_active }}
+key-hl-color={{ trimPrefix "#" $t.green }}
+bs-hl-color={{ trimPrefix "#" $t.red }}
+text-color={{ trimPrefix "#" $t.fg }}
+
+# When typing
+inside-ver-color={{ trimPrefix "#" $t.blue }}
+ring-ver-color={{ trimPrefix "#" $t.blue }}
+
+# When wrong password
+inside-wrong-color={{ trimPrefix "#" $t.red }}
+ring-wrong-color={{ trimPrefix "#" $t.red }}
+
+# When cleared
+inside-clear-color={{ trimPrefix "#" $t.yellow }}
+ring-clear-color={{ trimPrefix "#" $t.yellow }}
+
+# Grace period (seconds before locking input)
+# grace=2
+# grace-no-mouse
+# grace-no-touch

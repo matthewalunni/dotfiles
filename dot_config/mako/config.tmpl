@@ -1,10 +1,11 @@
+{{- $t := index .themes .theme -}}
 # Mako notification daemon config
 
 # Appearance
 font=JetBrainsMono Nerd Font 11
-background-color=#1e1e2e
-text-color=#cdd6f4
-border-color=#89b4fa
+background-color={{ $t.bg }}
+text-color={{ $t.fg }}
+border-color={{ $t.border_active }}
 border-size=2
 border-radius=10
 padding=15
@@ -28,11 +29,11 @@ group-by=app-name
 
 # Urgency levels
 [urgency=low]
-border-color=#6c7086
+border-color={{ $t.ignored_color }}
 
 [urgency=normal]
-border-color=#89b4fa
+border-color={{ $t.border_active }}
 
 [urgency=high]
-border-color=#f38ba8
+border-color={{ $t.red }}
 default-timeout=0

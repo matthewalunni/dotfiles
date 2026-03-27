@@ -55,6 +55,11 @@ tmux_date      = "#bb9af7"
 tmux_separator = "#414868"
 tmux_inactive  = "#414868"
 tmux_active    = "#7aa2f7"
+# Waybar (decimal RGB components for rgba())
+bg_rgb      = "26, 27, 38"
+blue_rgb    = "122, 162, 247"
+red_rgb     = "247, 118, 142"
+surface_rgb = "65, 72, 104"
 
 # ──────────────────────────────────────────────────────
 # Earthcode — earth-toned dark theme
@@ -112,3 +117,8 @@ tmux_date      = "#9e8a7a"
 tmux_separator = "#414833"
 tmux_inactive  = "#656d4a"
 tmux_active    = "#936639"
+# Waybar (decimal RGB components for rgba())
+bg_rgb      = "0, 0, 0"
+blue_rgb    = "120, 143, 160"
+red_rgb     = "139, 58, 58"
+surface_rgb = "51, 61, 41"

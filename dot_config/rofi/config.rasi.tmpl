@@ -1,3 +1,4 @@
+{{- $t := index .themes .theme -}}
 configuration {
     modi: "drun,run,window";
     show-icons: true;
@@ -16,14 +17,14 @@ configuration {
 @theme "/dev/null"
 
 * {
-    bg-col:  #1e1e2e;
-    bg-col-light: #313244;
-    border-col: #89b4fa;
-    selected-col: #45475a;
-    blue: #89b4fa;
-    fg-col: #cdd6f4;
-    fg-col2: #f38ba8;
-    grey: #6c7086;
+    bg-col:       {{ $t.bg }};
+    bg-col-light: {{ $t.br_black }};
+    border-col:   {{ $t.border_active }};
+    selected-col: {{ $t.selected_bg }};
+    blue:         {{ $t.blue }};
+    fg-col:       {{ $t.fg }};
+    fg-col2:      {{ $t.red }};
+    grey:         {{ $t.ignored_color }};
 
     width: 600;
     font: "JetBrainsMono Nerd Font 12";
@@ -105,7 +106,7 @@ button {
     padding: 10px;
     background-color: @bg-col-light;
     text-color: @grey;
-    vertical-align: 0.5; 
+    vertical-align: 0.5;
     horizontal-align: 0.5;
 }
 
