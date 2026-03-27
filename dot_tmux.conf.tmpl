@@ -1,3 +1,4 @@
+{{- $t := index .themes .theme -}}
 # ============================
 # TMUX Configuration
 # Prefix: Ctrl+a (like screen)
@@ -133,37 +134,37 @@ bind C-k switch-client -p
 bind s choose-session
 
 # ============================
-# Visual Tweaks
+# Visual Tweaks — {{ .theme }}
 # ============================
 
 # Pane borders
-set -g pane-border-style 'fg=colour238'
-set -g pane-active-border-style 'fg=colour81'
+set -g pane-border-style 'fg={{ $t.tmux_inactive }}'
+set -g pane-active-border-style 'fg={{ $t.tmux_active }}'
 
 # Message style
-set -g message-style 'fg=colour232 bg=colour81 bold'
+set -g message-style 'fg={{ $t.bg }} bg={{ $t.tmux_active }} bold'
 
 # ============================
-# Status Bar - Catppuccin Mocha
+# Status Bar
 # ============================
 
 # Status bar position
 set -g status-position bottom
 
 # Status bar colors
-set -g status-style 'bg=#1e1e2e fg=#cdd6f4'
+set -g status-style 'bg={{ $t.bg }} fg={{ $t.fg }}'
 
 # Left status
 set -g status-left-length 40
-set -g status-left '#[fg=#89b4fa,bold]❐ #S #[fg=#6c7086]| '
+set -g status-left '#[fg={{ $t.tmux_session }},bold]❐ #S #[fg={{ $t.tmux_separator }}]| '
 
 # Right status
 set -g status-right-length 80
-set -g status-right '#[fg=#a6e3a1]#(whoami)#[fg=#6c7086]@#[fg=#f9e2af]#h #[fg=#6c7086]| #[fg=#89dceb]%H:%M #[fg=#6c7086]| #[fg=#cba6f7]%Y-%m-%d'
+set -g status-right '#[fg={{ $t.tmux_user }}]#(whoami)#[fg={{ $t.tmux_separator }}]@#[fg={{ $t.tmux_host }}]#h #[fg={{ $t.tmux_separator }}]| #[fg={{ $t.tmux_time }}]%H:%M #[fg={{ $t.tmux_separator }}]| #[fg={{ $t.tmux_date }}]%Y-%m-%d'
 
 # Window status
-set -g window-status-format '#[fg=#6c7086] #I:#W '
-set -g window-status-current-format '#[fg=#89b4fa,bold] #I:#W '
+set -g window-status-format '#[fg={{ $t.tmux_inactive }}] #I:#W '
+set -g window-status-current-format '#[fg={{ $t.tmux_active }},bold] #I:#W '
 
 # Window separator
 set -g window-status-separator ''

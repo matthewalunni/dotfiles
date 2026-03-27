@@ -1,3 +1,4 @@
+{{- $t := index .themes .theme -}}
 [window]
 dynamic_padding = true
 opacity = 0.86
@@ -46,31 +47,31 @@ history = 10000
 hide_when_typing = true
 
 # ---------------------------------------------
-# COLORS — TokyoNight
+# COLORS — {{ .theme }}
 # ---------------------------------------------
 [colors.primary]
-background = "0x1a1b26"
-foreground = "0xc0caf5"
+background = "{{ replace "#" "0x" $t.bg }}"
+foreground = "{{ replace "#" "0x" $t.fg }}"
 
 [colors.normal]
-black   = "0x15161e"
-red     = "0xf7768e"
-green   = "0x9ece6a"
-yellow  = "0xe0af68"
-blue    = "0x7aa2f7"
-magenta = "0xbb9af7"
-cyan    = "0x7dcfff"
-white   = "0xa9b1d6"
+black   = "{{ replace "#" "0x" $t.black }}"
+red     = "{{ replace "#" "0x" $t.red }}"
+green   = "{{ replace "#" "0x" $t.green }}"
+yellow  = "{{ replace "#" "0x" $t.yellow }}"
+blue    = "{{ replace "#" "0x" $t.blue }}"
+magenta = "{{ replace "#" "0x" $t.magenta }}"
+cyan    = "{{ replace "#" "0x" $t.cyan }}"
+white   = "{{ replace "#" "0x" $t.white }}"
 
 [colors.bright]
-black   = "0x414868"
-red     = "0xf7768e"
-green   = "0x9ece6a"
-yellow  = "0xe0af68"
-blue    = "0x7aa2f7"
-magenta = "0xbb9af7"
-cyan    = "0x7dcfff"
-white   = "0xc0caf5"
+black   = "{{ replace "#" "0x" $t.br_black }}"
+red     = "{{ replace "#" "0x" $t.br_red }}"
+green   = "{{ replace "#" "0x" $t.br_green }}"
+yellow  = "{{ replace "#" "0x" $t.br_yellow }}"
+blue    = "{{ replace "#" "0x" $t.br_blue }}"
+magenta = "{{ replace "#" "0x" $t.br_magenta }}"
+cyan    = "{{ replace "#" "0x" $t.br_cyan }}"
+white   = "{{ replace "#" "0x" $t.br_white }}"
 
 # ---------------------------------------------
 # KEY BINDINGS
@@ -105,4 +106,3 @@ mods = "Control"
 action = "ResetFontSize"
 
 [terminal]
-

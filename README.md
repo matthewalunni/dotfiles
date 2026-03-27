@@ -105,6 +105,28 @@ bash install-minimal.sh
 
 ---
 
+## Color Themes
+
+Terminal colors are managed via chezmoi templates. The active theme is set in
+`.chezmoidata.toml` and applied across Ghostty, Alacritty, tmux, and lazygit
+with a single `chezmoi apply`.
+
+Available themes: `tokyonight`, `earthcode`
+
+```bash
+# Edit the theme value in .chezmoidata.toml
+chezmoi edit ~/.local/share/chezmoi/.chezmoidata.toml
+# Change: theme = "earthcode"  →  theme = "tokyonight"
+
+# Apply to all configs
+chezmoi apply
+```
+
+To add a new theme, add a `[themes.mytheme]` block to `.chezmoidata.toml`
+with the same keys as an existing theme, then set `theme = "mytheme"`.
+
+---
+
 ## What's Included
 
 - **Alacritty**: Terminal emulator config

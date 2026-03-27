@@ -1,0 +1,38 @@
+{{- $t := index .themes .theme -}}
+# Font
+font-family = JetBrainsMono NF
+font-size = 12.5
+
+# Window
+background-opacity = 0.86
+window-padding-x = 6
+window-padding-y = 6
+macos-titlebar-style = hidden
+
+# Cursor
+cursor-style = bar
+mouse-hide-while-typing = true
+
+# Scrollback
+scrollback-limit = 10000
+
+# Theme — {{ .theme }}
+background = {{ trimPrefix "#" $t.bg }}
+foreground = {{ trimPrefix "#" $t.fg }}
+
+palette = 0={{ $t.black }}
+palette = 1={{ $t.red }}
+palette = 2={{ $t.green }}
+palette = 3={{ $t.yellow }}
+palette = 4={{ $t.blue }}
+palette = 5={{ $t.magenta }}
+palette = 6={{ $t.cyan }}
+palette = 7={{ $t.white }}
+palette = 8={{ $t.br_black }}
+palette = 9={{ $t.br_red }}
+palette = 10={{ $t.br_green }}
+palette = 11={{ $t.br_yellow }}
+palette = 12={{ $t.br_blue }}
+palette = 13={{ $t.br_magenta }}
+palette = 14={{ $t.br_cyan }}
+palette = 15={{ $t.br_white }}
