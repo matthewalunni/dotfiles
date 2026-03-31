@@ -2,7 +2,7 @@
 # Global prompt behavior
 # ------------------------------
 add_newline = false
-command_timeout = 500
+command_timeout = 1500
 
 format = """
 $directory\
@@ -107,7 +107,10 @@ error_symbol = "❯"
 # Performance / noise reduction
 # ------------------------------
 [cmd_duration]
-disabled = true
+disabled = false
+min_time = 2000
+style = "bold yellow"
+format = "[$duration]($style) "
 
 [package]
 disabled = true
