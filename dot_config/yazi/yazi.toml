@@ -1,3 +1,10 @@
 [mgr]
 show_hidden = true
+linemode = "size"
+ratio = [1, 4, 3]
 
+[opener]
+edit = [{ run = 'nvim "$@"', for = "unix" }]
+
+[preview]
+max_size = 10485760
