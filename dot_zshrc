@@ -1,9 +1,9 @@
-export PATH="/snap/bin:$PATH"
+[[ -d /snap/bin ]] && export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 [[ -d /opt/homebrew/bin ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
 command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
 # opencode
-export PATH="/home/$USER/.opencode/bin:$PATH"
+[[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
 [[ -d "$HOME/.local/share/bob/nvim-bin" ]] && export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
 
 # Load system-wide profile (snap, locale, etc.)
@@ -23,13 +23,30 @@ autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
 ### End of Zinit's installer chunk
 
+zinit light zsh-users/zsh-completions
+zinit light zsh-users/zsh-autosuggestions
+zinit light zdharma-continuum/fast-syntax-highlighting
+autoload -Uz compinit && compinit
+
+# Performance: history-only autosuggest is faster than the default multi-strategy
+export ZSH_AUTOSUGGEST_STRATEGY=(history)
+# Reduce vi-mode key sequence delay
+export KEYTIMEOUT=1
+
 eval "$(starship init zsh)"
 eval "$(zoxide init zsh)"
 
-# NVM (Node Version Manager) setup
+# NVM (Node Version Manager) — lazy-loaded for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+nvm() {
+  unset -f nvm node npm npx
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+  nvm "$@"
+}
+node() { nvm; node "$@"; }
+npm()  { nvm; npm  "$@"; }
+npx()  { nvm; npx  "$@"; }
 
 
 # ========================
@@ -131,8 +148,8 @@ if [[ "$(uname -r)" == *"arch"* ]]; then
     alias alacrittyconfig='nvim ~/.config/alacritty/alacritty.toml'
 fi
 
-# Run fastfetch on all non-Windows systems
-if [[ "$(uname -r)" != *"microsoft"* ]]; then
+# Run fastfetch on interactive, non-Windows shells only
+if [[ $- == *i* ]] && [[ "$(uname -r)" != *"microsoft"* ]]; then
     fastfetch
 fi
 
@@ -140,13 +157,13 @@ fi
 # ========================
 if [[ "$(uname -r)" == *"microsoft"* ]]; then
     alias fd='fdfind'
+    alias bat='batcat'
     alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
 fi
 
 # OS Specific Settings, MacOS
 # ========================
 if [[ "$(uname)" == "Darwin" ]]; then
-    alias fd='fdfind'
     alias alacrittyconfig='nvim ~/.config/alacritty/alacritty.toml'
 fi
 
@@ -163,8 +180,6 @@ alias lg='lazygit'
 alias ld='lazydocker'
 alias y='yazi'
 alias oc='opencode'
-alias bat='batcat'
-alias fd='fdfind'
 alias gdiff='git diff HEAD^ HEAD'
 
 # Initialise and publish the current directory as a new GitHub repo
