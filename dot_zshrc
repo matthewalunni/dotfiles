@@ -213,6 +213,9 @@ theme() {
   chezmoi apply
 }
 
+# Sync dotfiles across machines
+alias czsync='git -C ~/.local/share/chezmoi pull && chezmoi apply'
+
 # General shortcuts
 alias c='clear'
 alias n='nvim'
