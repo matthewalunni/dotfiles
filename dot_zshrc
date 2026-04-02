@@ -180,6 +180,21 @@ alias nvimconfig='cd ~/.config/nvim'
 alias starshipconfig='chezmoi edit ~/.config/starship.toml'
 alias srczsh='source ~/.zshrc'
 
+# Switch chezmoi theme and apply
+theme() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: theme <name>"
+    echo "Available: $(grep '^\[themes\.' ~/.local/share/chezmoi/.chezmoidata.toml | sed 's/\[themes\.\(.*\)\]/\1/' | tr '\n' ' ')"
+    return 1
+  fi
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s/^theme = .*/theme = \"$1\"/" ~/.local/share/chezmoi/.chezmoidata.toml
+  else
+    sed -i "s/^theme = .*/theme = \"$1\"/" ~/.local/share/chezmoi/.chezmoidata.toml
+  fi
+  chezmoi apply
+}
+
 # General shortcuts
 alias c='clear'
 alias n='nvim'
