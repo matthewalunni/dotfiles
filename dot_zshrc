@@ -214,7 +214,7 @@ theme() {
 }
 
 # Sync dotfiles across machines
-alias czsync='git -C ~/.local/share/chezmoi pull && chezmoi apply'
+czsync() { git -C "$(chezmoi source-path)" pull && chezmoi apply }
 
 # General shortcuts
 alias c='clear'
