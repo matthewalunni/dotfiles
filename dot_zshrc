@@ -182,16 +182,34 @@ alias srczsh='source ~/.zshrc'
 
 # Switch chezmoi theme and apply
 theme() {
+  local src
+  src="$(chezmoi source-path)"
+  local data_file="$src/.chezmoidata.toml"
+  local available
+  available="$(grep '^\[themes\.' "$data_file" | sed 's/\[themes\.\(.*\)\]/\1/' | tr '\n' ' ')"
+
   if [[ -z "$1" ]]; then
     echo "Usage: theme <name>"
-    echo "Available: $(grep '^\[themes\.' ~/.local/share/chezmoi/.chezmoidata.toml | sed 's/\[themes\.\(.*\)\]/\1/' | tr '\n' ' ')"
+    echo "Available: $available"
+    return 0
+  fi
+
+  if [[ ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "theme: invalid name '$1' (alphanumeric, hyphens, underscores only)"
     return 1
   fi
-  if [[ "$(uname)" == "Darwin" ]]; then
-    sed -i '' "s/^theme = .*/theme = \"$1\"/" ~/.local/share/chezmoi/.chezmoidata.toml
-  else
-    sed -i "s/^theme = .*/theme = \"$1\"/" ~/.local/share/chezmoi/.chezmoidata.toml
+
+  if ! grep -q "^\[themes\.$1\]" "$data_file"; then
+    echo "theme: '$1' not found. Available: $available"
+    return 1
   fi
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s/^theme = .*/theme = \"$1\"/" "$data_file" || return 1
+  else
+    sed -i "s/^theme = .*/theme = \"$1\"/" "$data_file" || return 1
+  fi
+
   chezmoi apply
 }
 
