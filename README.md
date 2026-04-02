@@ -127,6 +127,27 @@ with the same keys as an existing theme, then set `theme = "mytheme"`.
 
 ---
 
+## Desktop Flag
+
+Some configs (Hyprland, Waybar, Rofi, etc.) are only relevant on Arch desktop machines.
+They are gated by the `desktop` flag in `.chezmoidata.toml`:
+
+```toml
+desktop = false  # default: don't apply Arch-only configs
+```
+
+On a desktop Arch machine, override this in your local config:
+
+```bash
+# ~/.config/chezmoi/chezmoi.toml (not tracked)
+desktop = true
+```
+
+Then `chezmoi apply` will include the Hyprland and desktop-specific configs.
+On non-desktop machines (macOS, WSL, headless servers), leave it as `false`.
+
+---
+
 ## What's Included
 
 - **Alacritty**: Terminal emulator config

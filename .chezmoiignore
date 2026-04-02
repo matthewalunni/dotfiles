@@ -1,0 +1,10 @@
+{{ if not .desktop }}
+.config/hypr
+.config/waybar
+.config/rofi
+.config/kanshi
+.config/mako
+.config/swaylock
+.config/nwg-displays
+.config/yay
+{{ end }}
