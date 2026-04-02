@@ -161,7 +161,7 @@ if [[ "$(uname -r)" == *"microsoft"* ]]; then
     alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
 fi
 
-# OS Specific Settings, Ubuntu (non-WSL)
+# OS Specific Settings, Linux (non-WSL)
 # ========================
 if [[ "$(uname -r)" != *"microsoft"* ]] && [[ "$(uname)" == "Linux" ]]; then
     command -v batcat &>/dev/null && alias bat='batcat'
@@ -183,7 +183,7 @@ alias srczsh='source ~/.zshrc'
 # Switch chezmoi theme and apply
 theme() {
   local src
-  src="$(chezmoi source-path)"
+  src="$(chezmoi source-path)" || { echo "theme: chezmoi source-path failed"; return 1; }
   local data_file="$src/.chezmoidata.toml"
   local available
   available="$(grep '^\[themes\.' "$data_file" | sed 's/\[themes\.\(.*\)\]/\1/' | tr '\n' ' ')"
@@ -199,7 +199,7 @@ theme() {
     return 1
   fi
 
-  if ! grep -q "^\[themes\.$1\]" "$data_file"; then
+  if ! grep -qF "[themes.$1]" "$data_file"; then
     echo "theme: '$1' not found. Available: $available"
     return 1
   fi
@@ -214,7 +214,11 @@ theme() {
 }
 
 # Sync dotfiles across machines
-czsync() { git -C "$(chezmoi source-path)" pull && chezmoi apply }
+czsync() {
+  local src
+  src="$(chezmoi source-path)" || return 1
+  git -C "$src" pull && chezmoi apply
+}
 
 # General shortcuts
 alias c='clear'
