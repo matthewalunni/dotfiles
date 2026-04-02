@@ -153,7 +153,7 @@ if [[ $- == *i* ]] && [[ "$(uname -r)" != *"microsoft"* ]]; then
     fastfetch
 fi
 
-# OS Specific Settings, Windows
+# OS Specific Settings, WSL
 # ========================
 if [[ "$(uname -r)" == *"microsoft"* ]]; then
     alias fd='fdfind'
@@ -163,9 +163,9 @@ fi
 
 # OS Specific Settings, Ubuntu (non-WSL)
 # ========================
-if [[ "$(uname -r)" != *"microsoft"* ]] && [[ "$(uname)" == "Linux" ]] && command -v batcat &>/dev/null; then
-    alias bat='batcat'
-    alias fd='fdfind'
+if [[ "$(uname -r)" != *"microsoft"* ]] && [[ "$(uname)" == "Linux" ]]; then
+    command -v batcat &>/dev/null && alias bat='batcat'
+    command -v fdfind &>/dev/null && alias fd='fdfind'
 fi
 
 # OS Specific Settings, MacOS
