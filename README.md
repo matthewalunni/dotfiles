@@ -138,8 +138,9 @@ desktop = false  # default: don't apply Arch-only configs
 
 On a desktop Arch machine, override this in your local config:
 
-```bash
+```toml
 # ~/.config/chezmoi/chezmoi.toml (not tracked)
+[data]
 desktop = true
 ```
 
