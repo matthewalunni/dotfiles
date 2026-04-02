@@ -97,14 +97,14 @@ bind [ copy-mode
 
 # Vim-style selection and copying
 bind-key -T copy-mode-vi 'v' send -X begin-selection
-bind-key -T copy-mode-vi 'y' send -X copy-selection-and-cancel
 bind-key -T copy-mode-vi 'C-v' send -X rectangle-toggle
 
 # Copy to system clipboard
+{{- $osrelease := index .chezmoi.kernel "osrelease" | default "" }}
 {{- if eq .chezmoi.os "darwin" }}
 bind-key -T copy-mode-vi 'y' send -X copy-pipe-and-cancel "pbcopy"
 bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "pbcopy"
-{{- else if contains "microsoft" .chezmoi.kernel.osrelease }}
+{{- else if contains "microsoft" $osrelease }}
 bind-key -T copy-mode-vi 'y' send -X copy-pipe-and-cancel "clip.exe"
 bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "clip.exe"
 {{- else }}
