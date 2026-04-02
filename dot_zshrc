@@ -161,6 +161,13 @@ if [[ "$(uname -r)" == *"microsoft"* ]]; then
     alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
 fi
 
+# OS Specific Settings, Ubuntu (non-WSL)
+# ========================
+if [[ "$(uname -r)" != *"microsoft"* ]] && [[ "$(uname)" == "Linux" ]] && command -v batcat &>/dev/null; then
+    alias bat='batcat'
+    alias fd='fdfind'
+fi
+
 # OS Specific Settings, MacOS
 # ========================
 if [[ "$(uname)" == "Darwin" ]]; then
