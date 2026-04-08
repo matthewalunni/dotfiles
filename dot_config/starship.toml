@@ -2,7 +2,7 @@
 # Global prompt behavior
 # ------------------------------
 add_newline = false
-command_timeout = 1500
+command_timeout = 5000
 
 format = """
 $directory\
@@ -41,6 +41,7 @@ only_attached = true
 style = "bold yellow"
 format = "([$all_status$ahead_behind]($style) )"
 ignore_submodules = true
+scan_timeout = 3000
 
 conflicted = "≠"
 ahead = "⇡"
@@ -72,14 +73,14 @@ format = "[$state]($style) "
 [nodejs]
 symbol = " "
 style = "bold green"
-format = "[$symbol$version]($style) "
+format = "[$symbol]($style) "
 detect_extensions = ["js", "ts", "tsx"]
 detect_files = ["package.json"]
 
 [python]
 symbol = " "
 style = "bold yellow"
-format = "[$symbol$version]($style) "
+format = "[$symbol]($style) "
 detect_extensions = ["py"]
 detect_files = ["pyproject.toml", "requirements.txt"]
 python_binary = ["python3", "python"]
@@ -87,13 +88,13 @@ python_binary = ["python3", "python"]
 [rust]
 symbol = " "
 style = "bold red"
-format = "[$symbol$version]($style) "
+format = "[$symbol]($style) "
 detect_extensions = ["rs"]
 
 [golang]
 symbol = " "
 style = "bold cyan"
-format = "[$symbol$version]($style) "
+format = "[$symbol]($style) "
 detect_extensions = ["go"]
 
 # ------------------------------
