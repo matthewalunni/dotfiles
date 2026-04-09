@@ -1,0 +1,99 @@
+{{- $t := index .themes .theme -}}
+gui:
+  theme:
+    # Border color of focused window
+    activeBorderColor:
+      - "{{ $t.border_active }}"
+      - bold
+
+    # Border color of non-focused windows
+    inactiveBorderColor:
+      - "{{ $t.border_inactive }}"
+
+    # Border color of focused window when searching in that window
+    searchingActiveBorderColor:
+      - "{{ $t.search_border }}"
+      - bold
+
+    # Color of keybindings help text in the bottom line
+    optionsTextColor:
+      - "{{ $t.options_text }}"
+
+    # Background color of selected line
+    selectedLineBgColor:
+      - "{{ $t.selected_bg }}"
+
+    # Background color of selected line when view doesn't have focus
+    inactiveViewSelectedLineBgColor:
+      - "{{ $t.inactive_selected_bg }}"
+
+    # Foreground color of copied commit
+    cherryPickedCommitFgColor:
+      - "{{ $t.cherry_fg }}"
+
+    # Background color of copied commit
+    cherryPickedCommitBgColor:
+      - "{{ $t.cherry_bg }}"
+
+    # Foreground color of marked base commit (for rebase)
+    markedBaseCommitFgColor:
+      - "{{ $t.marked_base_fg }}"
+
+    # Background color of marked base commit (for rebase)
+    markedBaseCommitBgColor:
+      - "{{ $t.marked_base_bg }}"
+
+    # Color for file with unstaged changes
+    unstagedChangesColor:
+      - "{{ $t.unstaged_color }}"
+
+    # Color for file with staged changes
+    stagedChangesColor:
+      - "{{ $t.staged_color }}"
+
+    # Color for untracked files
+    untrackedFileColor:
+      - "{{ $t.untracked_color }}"
+      - bold
+
+    # Color for merge conflicts
+    conflictedFileColor:
+      - "{{ $t.conflicted_color }}"
+      - bold
+
+    # Color for ignored files
+    ignoredFileColor:
+      - "{{ $t.ignored_color }}"
+
+    # Default text color
+    defaultFgColor:
+      - "{{ $t.default_fg }}"
+
+    # Color for commit author
+    commitAuthorColor:
+      - "{{ $t.commit_author_color }}"
+
+    # Color for commit message
+    commitMessageColor:
+      - "{{ $t.commit_msg_color }}"
+
+    # Color for commit hash
+    commitHashColor:
+      - "{{ $t.commit_hash_color }}"
+
+    # Color for branch name
+    branchNameColor:
+      - "{{ $t.branch_color }}"
+      - bold
+
+    # Color for remote branch
+    remoteBranchColor:
+      - "{{ $t.remote_color }}"
+
+    # Color for tag
+    tagColor:
+      - "{{ $t.tag_color }}"
+
+    # Color for stashed changes
+    stashColor:
+      - "{{ $t.stash_color }}"

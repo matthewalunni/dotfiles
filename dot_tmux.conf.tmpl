@@ -29,7 +29,8 @@ set -g history-limit 50000
 
 # Enable 256 color support
 set -g default-terminal "tmux-256color"
-set -ga terminal-overrides ",*256col*:Tc"
+set -ga terminal-overrides ",*:Tc"
+set -as terminal-features ",xterm-ghostty:RGB"
 
 # Faster command sequences (no delay)
 set -s escape-time 0
