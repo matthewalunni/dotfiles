@@ -1,0 +1,18 @@
+{
+  "model": "opusplan",
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "clangd-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "medium",
+  "skipDangerousModePermissionPrompt": true,
+  "statusLine": {
+    "type": "command",
+    "command": "bash /Users/matthewalunni/.claude/statusline-command.sh"
+  }
+}
