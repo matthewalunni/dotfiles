@@ -9,7 +9,7 @@ $directory\
 $git_branch\
 $git_status\
 $git_state\
-$nodejs\
+$custom\
 $python\
 $rust\
 $golang\
@@ -41,7 +41,6 @@ only_attached = true
 style = "bold yellow"
 format = "([$all_status$ahead_behind]($style) )"
 ignore_submodules = true
-scan_timeout = 3000
 
 conflicted = "≠"
 ahead = "⇡"
@@ -71,11 +70,14 @@ format = "[$state]($style) "
 # Language runtimes (quiet + useful)
 # ------------------------------
 [nodejs]
+disabled = true
+
+[custom.node]
 symbol = " "
 style = "bold green"
 format = "[$symbol]($style) "
-detect_extensions = ["js", "ts", "tsx"]
-detect_files = ["package.json"]
+when = "test -f package.json"
+shell = ["sh", "-c"]
 
 [python]
 symbol = " "
