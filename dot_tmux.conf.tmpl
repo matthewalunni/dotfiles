@@ -154,6 +154,14 @@ bind s choose-session
 set -g pane-border-style 'fg={{ $t.tmux_inactive }}'
 set -g pane-active-border-style 'fg={{ $t.tmux_active }}'
 
+# Dim inactive panes
+set -g window-style 'fg={{ $t.tmux_inactive }}'
+set -g window-active-style 'fg={{ $t.fg }}'
+
+# Pane status labels
+set -g pane-border-status top
+set -g pane-border-format '#{?pane_active,#[fg={{ $t.tmux_active }},bold],#[fg={{ $t.tmux_inactive }}]} #{pane_index} #{pane_current_command} '
+
 # Message style
 set -g message-style 'fg={{ $t.bg }} bg={{ $t.tmux_active }} bold'
 
