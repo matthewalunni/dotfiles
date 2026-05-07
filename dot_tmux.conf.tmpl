@@ -93,8 +93,12 @@ bind-key -n 'C-l' if-shell "$is_vim" 'send-keys C-l'  'select-pane -R'
 # Use vim keybindings in copy mode
 setw -g mode-keys vi
 
-# Enter copy mode with Prefix+[
+# Enter copy mode
 bind [ copy-mode
+bind v copy-mode
+
+# Exit copy mode with Enter
+bind-key -T copy-mode-vi 'Enter' send -X cancel
 
 # Vim-style selection and copying
 bind-key -T copy-mode-vi 'v' send -X begin-selection
