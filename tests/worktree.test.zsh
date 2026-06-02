@@ -88,6 +88,11 @@ main() {
   check "tree gone after rm"     '[[ ! -d "$repo/.worktrees/to-remove" ]]'
   check "branch kept on n"       'git -C "$repo" show-ref --verify --quiet refs/heads/to-remove'
 
+  # wtrm steps out and removes when PWD is exactly the worktree root (not a subdirectory)
+  ( cd "$repo" && worktree at-root >/dev/null )
+  ( cd "$repo/.worktrees/at-root" && print -- n | wtrm at-root >/dev/null )
+  check "rm from worktree root steps out and removes" '[[ ! -d "$repo/.worktrees/at-root" ]]'
+
   # wtrm refuses the main worktree
   check "refuses main worktree" '! ( cd "$repo" && wtrm "" </dev/null >/dev/null 2>&1 ) || true'
   rm -rf "$repo"

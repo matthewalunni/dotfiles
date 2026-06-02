@@ -77,6 +77,7 @@ _wt_copy_env() {
 }
 # fzf-pick an existing worktree and cd into it.
 _wt_switch() {
+  git rev-parse --git-dir >/dev/null 2>&1 || { print -u2 "worktree: not inside a git repository"; return 1; }
   local line wtpath
   line="$(git worktree list 2>/dev/null \
     | fzf --height=80% --reverse --border --prompt='worktree> ')" || return 0
@@ -127,10 +128,10 @@ wtrm() {
 
   branch="$(git -C "$wtpath" symbolic-ref --quiet --short HEAD 2>/dev/null)"
 
-  # if the shell is inside the tree being removed, step out first
-  case "$PWD/" in
-    "$wtpath"/*) cd "$root" ;;
-  esac
+  # if the shell is inside the tree being removed (at root or deeper), step out first
+  if [[ "$PWD" == "$wtpath" || "$PWD" == "$wtpath"/* ]]; then
+    cd "$root"
+  fi
 
   if ! git -C "$root" worktree remove "$wtpath" 2>/dev/null; then
     print -n "wtrm: worktree is dirty. Force remove? [y/N] "
