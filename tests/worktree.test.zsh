@@ -50,6 +50,20 @@ main() {
   # ensure-ignored appends to local exclude when not already ignored
   _wt_ensure_ignored "$repo" ".worktrees"
   check "container now ignored" 'git -C "$repo" check-ignore -q .worktrees'
+
+  # default branch falls back to main
+  check "default branch is main" '[[ "$(_wt_default_branch "$repo")" == "main" ]]'
+
+  # creating a worktree makes the branch, the dir, and cds into it
+  ( cd "$repo" && worktree feat-x >/dev/null )
+  check "worktree dir created" '[[ -d "$repo/.worktrees/feat-x" ]]'
+  check "branch created"       'git -C "$repo" show-ref --verify --quiet refs/heads/feat-x'
+  check "cd landed in worktree" '[[ "$(cd "$repo" && worktree feat-x >/dev/null && print -r -- $PWD)" == "$repo/.worktrees/feat-x" ]]'
+
+  # explicit base ref is honored
+  git -C "$repo" branch dev main >/dev/null
+  ( cd "$repo" && worktree off-dev dev >/dev/null )
+  check "base ref honored" '[[ "$(git -C "$repo/.worktrees/off-dev" rev-parse HEAD)" == "$(git -C "$repo" rev-parse dev)" ]]'
   rm -rf "$repo"
 
   print
