@@ -73,6 +73,12 @@ main() {
   check "example present via checkout" '[[ -f "$repo/.worktrees/envtest/.env.example" ]]'
   # copied content matches source
   check "env content matches"     '[[ "$(<"$repo/.worktrees/envtest/.env")" == "ROOT=1" ]]'
+
+  # re-entering an existing worktree must NOT clobber local env edits
+  ( cd "$repo" && worktree envtest >/dev/null )                # create (Task 4 already did, but safe)
+  print -- 'LOCAL_EDIT=1' > "$repo/.worktrees/envtest/.env"    # local change in the tree
+  ( cd "$repo" && worktree envtest >/dev/null )                # re-enter
+  check "re-entry does not re-copy" '[[ "$(<"$repo/.worktrees/envtest/.env")" == "LOCAL_EDIT=1" ]]'
   rm -rf "$repo"
 
   print

@@ -75,7 +75,15 @@ _wt_copy_env() {
   (( count > 0 )) && print -- "worktree: copied $count env file(s)"
   return 0
 }
-_wt_switch()   { :; }   # replaced in Task 5
+# fzf-pick an existing worktree and cd into it.
+_wt_switch() {
+  local line wtpath
+  line="$(git worktree list 2>/dev/null \
+    | fzf --height=80% --reverse --border --prompt='worktree> ')" || return 0
+  [[ -n "$line" ]] || return 0
+  wtpath="${line%% *}"          # first field is the path
+  [[ -d "$wtpath" ]] && cd "$wtpath"
+}
 
 # Absolute path of the primary worktree (source of truth). Non-zero if not in a repo.
 _wt_main_root() {
