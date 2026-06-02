@@ -64,6 +64,15 @@ main() {
   git -C "$repo" branch dev main >/dev/null
   ( cd "$repo" && worktree off-dev dev >/dev/null )
   check "base ref honored" '[[ "$(git -C "$repo/.worktrees/off-dev" rev-parse HEAD)" == "$(git -C "$repo" rev-parse dev)" ]]'
+
+  # fresh tree gets the gitignored env files at correct relative paths…
+  ( cd "$repo" && worktree envtest >/dev/null )
+  check "root .env copied"        '[[ -f "$repo/.worktrees/envtest/.env" ]]'
+  check "nested env copied"       '[[ -f "$repo/.worktrees/envtest/apps/web/.env.local" ]]'
+  # …but committed .env.example is NOT re-copied by the env step (it arrives via checkout anyway)
+  check "example present via checkout" '[[ -f "$repo/.worktrees/envtest/.env.example" ]]'
+  # copied content matches source
+  check "env content matches"     '[[ "$(<"$repo/.worktrees/envtest/.env")" == "ROOT=1" ]]'
   rm -rf "$repo"
 
   print

@@ -46,7 +46,35 @@ worktree() {
   cd "$wtpath"
 }
 
-_wt_copy_env() { :; }   # replaced in Task 4
+# Copy gitignored .env* files from main root $1 into worktree $2 (skip container $3),
+# preserving each file's path relative to the root. Only gitignored files are copied.
+_wt_copy_env() {
+  local root="$1" dest="$2" container="$3"
+  local fd_cmd f rel i
+  local -a files
+  fd_cmd="$(command -v fd 2>/dev/null || command -v fdfind 2>/dev/null)"
+
+  if [[ -n "$fd_cmd" ]]; then
+    files=("${(@f)$("$fd_cmd" --hidden --no-ignore --type f --glob '.env*' \
+      --exclude node_modules --exclude .git --exclude "$container" . "$root")}")
+  else
+    files=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
+      | grep -E '(^|/)\.env')}")
+    for i in {1..$#files}; do files[$i]="$root/${files[$i]}"; done
+  fi
+
+  local count=0
+  for f in $files; do
+    [[ -n "$f" ]] || continue
+    git -C "$root" check-ignore -q "$f" || continue   # never copy tracked files
+    rel="${f#$root/}"
+    mkdir -p "$dest/${rel:h}"
+    cp "$f" "$dest/$rel"
+    (( count++ ))
+  done
+  (( count > 0 )) && print -- "worktree: copied $count env file(s)"
+  return 0
+}
 _wt_switch()   { :; }   # replaced in Task 5
 
 # Absolute path of the primary worktree (source of truth). Non-zero if not in a repo.
