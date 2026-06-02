@@ -16,6 +16,7 @@ check() { if eval "$2"; then ok "$1"; else no "$1 — failed: $2"; fi }
 make_repo() {
   local repo
   repo="$(mktemp -d)"
+  repo="${repo:A}"   # canonicalize (resolves /var -> /private/var on macOS)
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email t@t.t
   git -C "$repo" config user.name t
@@ -35,6 +36,20 @@ make_repo() {
 main() {
   local repo; repo="$(make_repo)"
   check "functions are defined" '[[ $(typeset -f worktree) ]]'
+
+  # _wt_main_root resolves the primary checkout from inside the repo
+  check "main root from repo" '[[ "$(cd "$repo" && _wt_main_root)" == "$repo" ]]'
+
+  # default container is .worktrees when none exists
+  check "default container" '[[ "$(_wt_container "$repo")" == ".worktrees" ]]'
+  # an existing plain worktrees/ dir is preferred
+  mkdir -p "$repo/worktrees"
+  check "existing container preferred" '[[ "$(_wt_container "$repo")" == "worktrees" ]]'
+  rmdir "$repo/worktrees"
+
+  # ensure-ignored appends to local exclude when not already ignored
+  _wt_ensure_ignored "$repo" ".worktrees"
+  check "container now ignored" 'git -C "$repo" check-ignore -q .worktrees'
   rm -rf "$repo"
 
   print
