@@ -270,3 +270,6 @@ ghpublish() {
 
     gh "${gh_args[@]}"
 }
+
+# Git worktree workflow helpers
+[[ -f ~/.config/zsh/worktree.zsh ]] && source ~/.config/zsh/worktree.zsh
