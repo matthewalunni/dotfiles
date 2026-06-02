@@ -8,3 +8,4 @@
 .config/nwg-displays
 .config/yay
 {{ end }}
+tests
