@@ -93,8 +93,8 @@ main() {
   ( cd "$repo/.worktrees/at-root" && print -- n | wtrm at-root >/dev/null )
   check "rm from worktree root steps out and removes" '[[ ! -d "$repo/.worktrees/at-root" ]]'
 
-  # wtrm refuses the main worktree
-  check "refuses main worktree" '! ( cd "$repo" && wtrm "" </dev/null >/dev/null 2>&1 ) || true'
+  # wtrm errors on an unknown name
+  check "wtrm errors on unknown name" '! ( cd "$repo" && wtrm no-such-tree >/dev/null 2>&1 )'
   rm -rf "$repo"
 
   print

@@ -30,7 +30,7 @@ worktree() {
   wtpath="$root/$container/$name"
 
   if [[ -d "$wtpath" ]]; then
-    cd "$wtpath"
+    cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
     return 0
   fi
 
@@ -43,24 +43,27 @@ worktree() {
   fi
 
   _wt_copy_env "$root" "$wtpath" "$container"
-  cd "$wtpath"
+  cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
 }
 
 # Copy gitignored .env* files from main root $1 into worktree $2 (skip container $3),
 # preserving each file's path relative to the root. Only gitignored files are copied.
 _wt_copy_env() {
+  emulate -L zsh
   local root="$1" dest="$2" container="$3"
-  local fd_cmd f rel i
+  local fd_cmd f rel
   local -a files
   fd_cmd="$(command -v fd 2>/dev/null || command -v fdfind 2>/dev/null)"
 
   if [[ -n "$fd_cmd" ]]; then
     files=("${(@f)$("$fd_cmd" --hidden --no-ignore --type f --glob '.env*' \
-      --exclude node_modules --exclude .git --exclude "$container" . "$root")}")
+      --exclude node_modules --exclude .git --exclude "$container" "$root")}")
   else
-    files=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
+    local -a rel
+    rel=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
       | grep -E '(^|/)\.env')}")
-    for i in {1..$#files}; do files[$i]="$root/${files[$i]}"; done
+    local r
+    for r in $rel; do [[ -n "$r" ]] && files+=("$root/$r"); done
   fi
 
   local count=0
@@ -77,13 +80,13 @@ _wt_copy_env() {
 }
 # fzf-pick an existing worktree and cd into it.
 _wt_switch() {
+  emulate -L zsh
   git rev-parse --git-dir >/dev/null 2>&1 || { print -u2 "worktree: not inside a git repository"; return 1; }
-  local line wtpath
-  line="$(git worktree list 2>/dev/null \
+  local wtpath
+  wtpath="$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' \
     | fzf --height=80% --reverse --border --prompt='worktree> ')" || return 0
-  [[ -n "$line" ]] || return 0
-  wtpath="${line%% *}"          # first field is the path
-  [[ -d "$wtpath" ]] && cd "$wtpath"
+  [[ -n "$wtpath" ]] || return 0
+  cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
 }
 
 # Absolute path of the primary worktree (source of truth). Non-zero if not in a repo.
@@ -105,15 +108,15 @@ _wt_container() {
 # Remove a worktree (and optionally its branch). No arg → fzf-pick (excludes main).
 wtrm() {
   emulate -L zsh
-  local root target wtpath line branch ans container
+  local root target wtpath branch ans container
   root="$(_wt_main_root)" || { print -u2 "wtrm: not inside a git repository"; return 1; }
   target="$1"
 
   if [[ -z "$target" ]]; then
-    line="$(git -C "$root" worktree list | grep -v "^$root " \
+    wtpath="$(git -C "$root" worktree list --porcelain \
+      | awk -v r="$root" '/^worktree /{p=substr($0,10); if (p != r) print p}' \
       | fzf --height=80% --reverse --border --prompt='remove worktree> ')" || return 0
-    [[ -n "$line" ]] || return 0
-    wtpath="${line%% *}"
+    [[ -n "$wtpath" ]] || return 0
   else
     container="$(_wt_container "$root")"
     wtpath="$root/$container/$target"
