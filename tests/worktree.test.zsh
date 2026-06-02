@@ -79,6 +79,17 @@ main() {
   print -- 'LOCAL_EDIT=1' > "$repo/.worktrees/envtest/.env"    # local change in the tree
   ( cd "$repo" && worktree envtest >/dev/null )                # re-enter
   check "re-entry does not re-copy" '[[ "$(<"$repo/.worktrees/envtest/.env")" == "LOCAL_EDIT=1" ]]'
+
+  # removing by name takes down the worktree dir
+  ( cd "$repo" && worktree to-remove >/dev/null )
+  check "tree exists before rm" '[[ -d "$repo/.worktrees/to-remove" ]]'
+  # answer "n" to the delete-branch prompt so the branch stays
+  ( cd "$repo" && print -- n | wtrm to-remove >/dev/null )
+  check "tree gone after rm"     '[[ ! -d "$repo/.worktrees/to-remove" ]]'
+  check "branch kept on n"       'git -C "$repo" show-ref --verify --quiet refs/heads/to-remove'
+
+  # wtrm refuses the main worktree
+  check "refuses main worktree" '! ( cd "$repo" && wtrm "" </dev/null >/dev/null 2>&1 ) || true'
   rm -rf "$repo"
 
   print

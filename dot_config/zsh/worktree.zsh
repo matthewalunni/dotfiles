@@ -101,6 +101,51 @@ _wt_container() {
   fi
 }
 
+# Remove a worktree (and optionally its branch). No arg → fzf-pick (excludes main).
+wtrm() {
+  emulate -L zsh
+  local root target wtpath line branch ans container
+  root="$(_wt_main_root)" || { print -u2 "wtrm: not inside a git repository"; return 1; }
+  target="$1"
+
+  if [[ -z "$target" ]]; then
+    line="$(git -C "$root" worktree list | grep -v "^$root " \
+      | fzf --height=80% --reverse --border --prompt='remove worktree> ')" || return 0
+    [[ -n "$line" ]] || return 0
+    wtpath="${line%% *}"
+  else
+    container="$(_wt_container "$root")"
+    wtpath="$root/$container/$target"
+  fi
+
+  if [[ "$wtpath" == "$root" ]]; then
+    print -u2 "wtrm: refusing to remove the main worktree"; return 1
+  fi
+  if [[ ! -d "$wtpath" ]]; then
+    print -u2 "wtrm: no worktree at $wtpath"; return 1
+  fi
+
+  branch="$(git -C "$wtpath" symbolic-ref --quiet --short HEAD 2>/dev/null)"
+
+  # if the shell is inside the tree being removed, step out first
+  case "$PWD/" in
+    "$wtpath"/*) cd "$root" ;;
+  esac
+
+  if ! git -C "$root" worktree remove "$wtpath" 2>/dev/null; then
+    print -n "wtrm: worktree is dirty. Force remove? [y/N] "
+    read -r ans
+    [[ "$ans" == [yY]* ]] || return 1
+    git -C "$root" worktree remove --force "$wtpath" || return 1
+  fi
+
+  if [[ -n "$branch" ]]; then
+    print -n "wtrm: delete branch '$branch'? [y/N] "
+    read -r ans
+    [[ "$ans" == [yY]* ]] && git -C "$root" branch -D "$branch" || true
+  fi
+}
+
 # Ensure "<container>/" is git-ignored in repo $1; append to local exclude if not.
 _wt_ensure_ignored() {
   emulate -L zsh
