@@ -149,6 +149,38 @@ On non-desktop machines (macOS, WSL, headless servers), leave it as `false`.
 
 ---
 
+## Git Worktree Helpers
+
+Defined in `dot_config/zsh/worktree.zsh` (sourced by `.zshrc`). They keep
+worktrees in a gitignored `.worktrees/` container at the repo root and copy your
+gitignored `.env*` files into each new tree so apps run immediately.
+
+```bash
+# Create-or-enter a worktree and cd into it.
+# Branches off the repo's default branch (origin/HEAD → main → master).
+worktree <name>
+
+# Same, but branch off a specific base ref.
+worktree <name> <base-ref>
+
+# No arg: fzf-pick an existing worktree to cd into.
+# The preview pane shows that worktree's branch and recent commits.
+worktree
+
+# Remove a worktree by name (prompts to delete its branch too).
+wtrm <name>
+
+# No arg: fzf-pick a worktree to remove (the main checkout is excluded).
+wtrm
+```
+
+The fzf pickers set their own git-log `--preview`, overriding the global
+`bat`-based `FZF_DEFAULT_OPTS` preview (which can't render a directory path).
+
+Run the test suite with `zsh tests/worktree.test.zsh`.
+
+---
+
 ## What's Included
 
 - **Alacritty**: Terminal emulator config
@@ -157,3 +189,4 @@ On non-desktop machines (macOS, WSL, headless servers), leave it as `false`.
 - **Starship**: Shell prompt theme
 - **Lazygit**: Git TUI configuration
 - **Tmux**: Tmux configuration
+- **Git worktree helpers**: `worktree` / `wtrm` commands (see above)

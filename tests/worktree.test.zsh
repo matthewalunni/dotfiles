@@ -37,6 +37,11 @@ main() {
   local repo; repo="$(make_repo)"
   check "functions are defined" '[[ $(typeset -f worktree) ]]'
 
+  # fzf pickers must set their own --preview so they don't inherit the global
+  # FZF_DEFAULT_OPTS bat preview, which errors on a worktree (a directory) path.
+  check "_wt_switch overrides fzf preview" 'typeset -f _wt_switch | grep -q -- "--preview"'
+  check "wtrm overrides fzf preview"       'typeset -f wtrm | grep -q -- "--preview"'
+
   # _wt_main_root resolves the primary checkout from inside the repo
   check "main root from repo" '[[ "$(cd "$repo" && _wt_main_root)" == "$repo" ]]'
 
