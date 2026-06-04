@@ -53,7 +53,7 @@ _wt_copy_env() {
   local root="$1" dest="$2" container="$3"
   local fd_cmd f rel
   local -a files
-  fd_cmd="$(command -v fd 2>/dev/null || command -v fdfind 2>/dev/null)"
+  fd_cmd="$(command -v fdfind 2>/dev/null || command -v fd 2>/dev/null)"
 
   if [[ -n "$fd_cmd" ]]; then
     files=("${(@f)$("$fd_cmd" --hidden --no-ignore --type f --glob '.env*' \
