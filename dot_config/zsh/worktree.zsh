@@ -83,11 +83,14 @@ _wt_switch() {
   emulate -L zsh
   git rev-parse --git-dir >/dev/null 2>&1 || { print -u2 "worktree: not inside a git repository"; return 1; }
   local wtpath
-  wtpath="$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' \
+  wtpath="$(git worktree list --porcelain \
+    | awk '/^worktree /{p=substr($0,10); n=split(p,a,"/"); print p "\t" a[n]}' \
     | fzf --height=80% --reverse --border --prompt='worktree> ' \
-        --preview 'git -C {} log --oneline --decorate --color=always -n 25 2>/dev/null || ls -la {}' \
+        --delimiter $'\t' --with-nth 2 \
+        --preview 'git -C {1} log --oneline --decorate --color=always -n 25 2>/dev/null || ls -la {1}' \
         --preview-window=right:60%)" || return 0
   [[ -n "$wtpath" ]] || return 0
+  wtpath="${wtpath%%$'\t'*}"
   cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
 }
 
@@ -116,11 +119,13 @@ wtrm() {
 
   if [[ -z "$target" ]]; then
     wtpath="$(git -C "$root" worktree list --porcelain \
-      | awk -v r="$root" '/^worktree /{p=substr($0,10); if (p != r) print p}' \
+      | awk -v r="$root" '/^worktree /{p=substr($0,10); if (p != r) { n=split(p,a,"/"); print p "\t" a[n] }}' \
       | fzf --height=80% --reverse --border --prompt='remove worktree> ' \
-          --preview 'git -C {} log --oneline --decorate --color=always -n 25 2>/dev/null || ls -la {}' \
+          --delimiter $'\t' --with-nth 2 \
+          --preview 'git -C {1} log --oneline --decorate --color=always -n 25 2>/dev/null || ls -la {1}' \
           --preview-window=right:60%)" || return 0
     [[ -n "$wtpath" ]] || return 0
+    wtpath="${wtpath%%$'\t'*}"
   else
     container="$(_wt_container "$root")"
     wtpath="$root/$container/$target"
