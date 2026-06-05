@@ -27,6 +27,9 @@ zinit light zsh-users/zsh-completions
 zinit light zsh-users/zsh-autosuggestions
 zinit light zdharma-continuum/fast-syntax-highlighting
 autoload -Uz compinit && compinit
+zinit light Aloxaf/fzf-tab
+# keep npm run scripts in package.json order
+zstyle ':fzf-tab:complete:npm:*' fzf-flags '--no-sort'
 
 # Performance: history-only autosuggest is faster than the default multi-strategy
 export ZSH_AUTOSUGGEST_STRATEGY=(history)
