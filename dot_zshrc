@@ -276,3 +276,15 @@ ghpublish() {
 
 # Git worktree workflow helpers
 [[ -f ~/.config/zsh/worktree.zsh ]] && source ~/.config/zsh/worktree.zsh
+
+# Defensive: a pane program (vim/less/fzf/etc.) that crashes or gets
+# killed can leave raw mouse-tracking escape modes enabled, so moving
+# the mouse at an idle prompt dumps garbage characters into the shell.
+# Reset those modes on every new prompt so a dangling mode is harmless.
+if [[ -n "$TMUX" ]]; then
+  _reset_mouse_tracking() {
+    printf '\e[?1000l\e[?1002l\e[?1003l\e[?1006l'
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _reset_mouse_tracking
+fi
