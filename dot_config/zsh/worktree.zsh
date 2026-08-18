@@ -175,12 +175,17 @@ _wt_cd_target() {
 
 # Respawn every other window's active pane in the current tmux session into
 # the current worktree, preserving each pane's subdirectory when it exists
-# there too. Kills whatever's running in those panes. Skips the pane you're
+# there too. Kills whatever's running in those panes — except SSH panes
+# (pane_current_command == ssh, e.g. a Codespace connection), which get a
+# `cd` sent into the live session instead of being killed, since the local
+# and remote worktree paths are assumed identical. This only works if that
+# pane is idle at a shell prompt when you run worktree-cd; anything else
+# running there will receive the keystrokes instead. Skips the pane you're
 # typing in.
 worktree-cd() {
   emulate -L zsh
   [[ -n "$TMUX" ]] || { print -u2 "worktree-cd: not inside tmux"; return 1; }
-  local new_root cur_pane pane_id pane_path target
+  local new_root cur_pane pane_id pane_path pane_cmd target
   new_root="$(git rev-parse --show-toplevel 2>/dev/null)" || { print -u2 "worktree-cd: not inside a git repository"; return 1; }
   cur_pane="$(tmux display-message -p '#{pane_id}')" || return 1
   local -a panes
@@ -188,8 +193,13 @@ worktree-cd() {
   for pane_id in $panes; do
     [[ -n "$pane_id" && "$pane_id" != "$cur_pane" ]] || continue
     pane_path="$(tmux display-message -t "$pane_id" -p '#{pane_current_path}')"
+    pane_cmd="$(tmux display-message -t "$pane_id" -p '#{pane_current_command}')"
     target="$(_wt_cd_target "$pane_path" "$new_root")"
-    tmux respawn-pane -k -t "$pane_id" -c "$target"
+    if [[ "$pane_cmd" == "ssh" ]]; then
+      tmux send-keys -t "$pane_id" "cd ${(q)target} && clear" Enter
+    else
+      tmux respawn-pane -k -t "$pane_id" -c "$target"
+    fi
   done
 }
 
