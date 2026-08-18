@@ -2,6 +2,7 @@
 #   worktree <name> [base-ref]  create-or-enter a worktree; copy gitignored .env* files
 #   worktree                    fzf-pick an existing worktree to cd into
 #   wtrm [name]                 remove a worktree (and optionally its branch)
+#   worktree-cd                 respawn every other tmux window into this worktree, same subdir
 
 # Repo default branch: origin/HEAD if set, else main, else master, else current HEAD.
 _wt_default_branch() {
@@ -157,6 +158,39 @@ wtrm() {
     read -r ans
     [[ "$ans" == [yY]* ]] && git -C "$root" branch -D "$branch" || true
   fi
+}
+
+# Where a pane should land in the new worktree: same path relative to its own
+# worktree root, rejoined onto $2 (the new root) — or $2 itself if the pane
+# wasn't in a git repo, or the relative path doesn't exist in the new worktree.
+_wt_cd_target() {
+  emulate -L zsh
+  local pane_path="$1" new_root="$2" old_top rel target
+  old_top="$(git -C "$pane_path" rev-parse --show-toplevel 2>/dev/null)" || { print -r -- "$new_root"; return 0; }
+  rel="${pane_path#$old_top}"
+  rel="${rel#/}"
+  target="$new_root${rel:+/$rel}"
+  [[ -d "$target" ]] && print -r -- "$target" || print -r -- "$new_root"
+}
+
+# Respawn every other window's active pane in the current tmux session into
+# the current worktree, preserving each pane's subdirectory when it exists
+# there too. Kills whatever's running in those panes. Skips the pane you're
+# typing in.
+worktree-cd() {
+  emulate -L zsh
+  [[ -n "$TMUX" ]] || { print -u2 "worktree-cd: not inside tmux"; return 1; }
+  local new_root cur_pane pane_id pane_path target
+  new_root="$(git rev-parse --show-toplevel 2>/dev/null)" || { print -u2 "worktree-cd: not inside a git repository"; return 1; }
+  cur_pane="$(tmux display-message -p '#{pane_id}')" || return 1
+  local -a panes
+  panes=("${(@f)$(tmux list-windows -F '#{pane_id}')}")
+  for pane_id in $panes; do
+    [[ -n "$pane_id" && "$pane_id" != "$cur_pane" ]] || continue
+    pane_path="$(tmux display-message -t "$pane_id" -p '#{pane_current_path}')"
+    target="$(_wt_cd_target "$pane_path" "$new_root")"
+    tmux respawn-pane -k -t "$pane_id" -c "$target"
+  done
 }
 
 # Ensure "<container>/" is git-ignored in repo $1; append to local exclude if not.

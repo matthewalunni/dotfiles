@@ -100,6 +100,22 @@ main() {
 
   # wtrm errors on an unknown name
   check "wtrm errors on unknown name" '! ( cd "$repo" && wtrm no-such-tree >/dev/null 2>&1 )'
+
+  # worktree-cd refuses to run outside tmux
+  check "functions are defined (worktree-cd)" '[[ $(typeset -f worktree-cd) ]]'
+  check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd >/dev/null 2>&1 )'
+
+  # _wt_cd_target: preserves a subdirectory that also exists in the new worktree
+  mkdir -p "$repo/.worktrees/feat-x/apps/web" "$repo/.worktrees/envtest/apps/web"
+  check "cd target preserves matching subdir" \
+    '[[ "$(_wt_cd_target "$repo/.worktrees/feat-x/apps/web" "$repo/.worktrees/envtest")" == "$repo/.worktrees/envtest/apps/web" ]]'
+  # _wt_cd_target: falls back to new root when the subdir does not exist there
+  check "cd target falls back when subdir missing" \
+    '[[ "$(_wt_cd_target "$repo/.worktrees/feat-x" "$repo/.worktrees/off-dev")" == "$repo/.worktrees/off-dev" ]]'
+  # _wt_cd_target: falls back to new root when the pane path is not a git repo
+  check "cd target falls back for non-repo path" \
+    '[[ "$(_wt_cd_target "/tmp" "$repo/.worktrees/envtest")" == "$repo/.worktrees/envtest" ]]'
+
   rm -rf "$repo"
 
   print
