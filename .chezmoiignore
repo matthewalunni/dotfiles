@@ -9,3 +9,4 @@
 .config/yay
 {{ end }}
 tests
+agent-ios
