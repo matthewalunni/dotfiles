@@ -1,8 +1,9 @@
 # Git worktree workflow helpers.
-#   worktree <name> [base-ref]  create-or-enter a worktree; copy gitignored .env* files
+#   worktree <name> [base-ref]  create-or-enter a worktree; copy gitignored secrets
+#                               (.env*, Xcode Config/Secrets)
 #   worktree                    fzf-pick an existing worktree to cd into
 #   wtrm [name]                 remove a worktree (and optionally its branch)
-#   worktree-cd                 respawn every other tmux window into this worktree, same subdir
+#   worktree-cd <name>          send `cd` into every tmux pane SSH'd into the codespace's worktree <name>
 
 # Repo default branch: origin/HEAD if set, else main, else master, else current HEAD.
 _wt_default_branch() {
@@ -16,6 +17,37 @@ _wt_default_branch() {
   git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null
 }
 
+# Create-or-locate worktree <name> from optional [base-ref], and print its path.
+#
+# The path is the only thing on stdout — git chatter and the secret-copy notice
+# go to stderr — so non-shell callers can capture it. This is the shared core
+# behind both `worktree` and the `worktree-create` executable that the `agent`
+# CLI shells out to; keep it free of `cd` and of anything interactive.
+_wt_create() {
+  emulate -L zsh
+  local name="$1" base="$2" root container wtpath
+  root="$(_wt_main_root)" || { print -u2 "worktree: not inside a git repository"; return 1; }
+  container="$(_wt_container "$root")"
+  _wt_ensure_ignored "$root" "$container"
+  wtpath="$root/$container/$name"
+
+  if [[ -d "$wtpath" ]]; then
+    print -r -- "$wtpath"
+    return 0
+  fi
+
+  [[ -z "$base" ]] && base="$(_wt_default_branch "$root")"
+
+  if git -C "$root" show-ref --verify --quiet "refs/heads/$name"; then
+    git -C "$root" worktree add "$wtpath" "$name" >&2 || return 1   # attach existing branch
+  else
+    git -C "$root" worktree add -b "$name" "$wtpath" "$base" >&2 || return 1
+  fi
+
+  _wt_copy_secrets "$root" "$wtpath" "$container"
+  print -r -- "$wtpath"
+}
+
 worktree() {
   emulate -L zsh
 
@@ -24,59 +56,39 @@ worktree() {
     return $?
   fi
 
-  local name="$1" base="$2" root container wtpath
-  root="$(_wt_main_root)" || { print -u2 "worktree: not inside a git repository"; return 1; }
-  container="$(_wt_container "$root")"
-  _wt_ensure_ignored "$root" "$container"
-  wtpath="$root/$container/$name"
-
-  if [[ -d "$wtpath" ]]; then
-    cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
-    return 0
-  fi
-
-  [[ -z "$base" ]] && base="$(_wt_default_branch "$root")"
-
-  if git -C "$root" show-ref --verify --quiet "refs/heads/$name"; then
-    git -C "$root" worktree add "$wtpath" "$name" || return 1   # attach existing branch
-  else
-    git -C "$root" worktree add -b "$name" "$wtpath" "$base" || return 1
-  fi
-
-  _wt_copy_env "$root" "$wtpath" "$container"
+  local wtpath
+  wtpath="$(_wt_create "$1" "$2")" || return 1
   cd "$wtpath" || { print -u2 "worktree: failed to cd into $wtpath"; return 1; }
 }
 
-# Copy gitignored .env* files from main root $1 into worktree $2 (skip container $3),
+# Gitignored local-secret paths worth carrying into a new worktree, matched against
+# a path relative to the repo root:
+#   .env, .env.local, apps/web/.env.*        — dotenv files anywhere
+#   Config/Secrets/Debug.xcconfig            — Xcode secrets directory
+#   Config/Secrets.xcconfig                  — Xcode secrets file
+_WT_SECRET_RE='(^|/)(\.env|Config/Secrets(/|\.))'
+
+# Copy gitignored secret files from main root $1 into worktree $2 (skip container $3),
 # preserving each file's path relative to the root. Only gitignored files are copied.
-_wt_copy_env() {
+_wt_copy_secrets() {
   emulate -L zsh
   local root="$1" dest="$2" container="$3"
-  local fd_cmd f rel
+  local rel
   local -a files
-  fd_cmd="$(command -v fdfind 2>/dev/null || command -v fd 2>/dev/null)"
-
-  if [[ -n "$fd_cmd" ]]; then
-    files=("${(@f)$("$fd_cmd" --hidden --no-ignore --type f --glob '.env*' \
-      --exclude node_modules --exclude .git --exclude "$container" "$root")}")
-  else
-    local -a rel
-    rel=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
-      | grep -E '(^|/)\.env')}")
-    local r
-    for r in $rel; do [[ -n "$r" ]] && files+=("$root/$r"); done
-  fi
+  files=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
+    | grep -E "$_WT_SECRET_RE")}")
 
   local count=0
-  for f in $files; do
-    [[ -n "$f" ]] || continue
-    git -C "$root" check-ignore -q "$f" || continue   # never copy tracked files
-    rel="${f#$root/}"
+  for rel in $files; do
+    [[ -n "$rel" ]] || continue
+    [[ "$rel" == "$container"/* ]] && continue
+    git -C "$root" check-ignore -q "$root/$rel" || continue   # never copy tracked files
     mkdir -p "$dest/${rel:h}"
-    cp "$f" "$dest/$rel"
+    cp "$root/$rel" "$dest/$rel"
     (( count++ ))
   done
-  (( count > 0 )) && print -- "worktree: copied $count env file(s)"
+  # stderr: _wt_create reserves stdout for the worktree path.
+  (( count > 0 )) && print -u2 -- "worktree: copied $count secret file(s)"
   return 0
 }
 # fzf-pick an existing worktree and cd into it.
@@ -160,46 +172,44 @@ wtrm() {
   fi
 }
 
-# Where a pane should land in the new worktree: same path relative to its own
-# worktree root, rejoined onto $2 (the new root) — or $2 itself if the pane
-# wasn't in a git repo, or the relative path doesn't exist in the new worktree.
-_wt_cd_target() {
+# Resolve the absolute path of worktree $2 on the codespace reached by
+# `gh cs ssh`. $2 is passed as $1 to the remote script rather than
+# interpolated, so it can't break out of the remote command.
+_wt_remote_target() {
   emulate -L zsh
-  local pane_path="$1" new_root="$2" old_top rel target
-  old_top="$(git -C "$pane_path" rev-parse --show-toplevel 2>/dev/null)" || { print -r -- "$new_root"; return 0; }
-  rel="${pane_path#$old_top}"
-  rel="${rel#/}"
-  target="$new_root${rel:+/$rel}"
-  [[ -d "$target" ]] && print -r -- "$target" || print -r -- "$new_root"
+  local name="$1"
+  local remote_cmd='root=$(git rev-parse --show-toplevel) || exit 1
+    for c in .worktrees worktrees; do
+      if [ -d "$root/$c/$1" ]; then print -r -- "$root/$c/$1"; exit 0; fi
+    done
+    exit 1'
+  gh cs ssh -- sh -c "$remote_cmd" sh "$name" 2>/dev/null
 }
 
-# Respawn every other window's active pane in the current tmux session into
-# the current worktree, preserving each pane's subdirectory when it exists
-# there too. Kills whatever's running in those panes — except SSH panes
-# (pane_current_command == ssh, e.g. a Codespace connection), which get a
-# `cd` sent into the live session instead of being killed, since the local
-# and remote worktree paths are assumed identical. This only works if that
-# pane is idle at a shell prompt when you run worktree-cd; anything else
-# running there will receive the keystrokes instead. Skips the pane you're
-# typing in.
+# Send `cd <worktree>` into every tmux pane in the current session that's
+# SSH'd into the codespace (pane_current_command is ssh or gh, covering
+# `gh cs ssh`), so all your codespace panes jump to the same worktree at
+# once. Every other pane (local port-forwards, etc.) is left untouched.
+# Only works if the target pane is idle at a shell prompt — anything else
+# running there will receive the keystrokes instead.
 worktree-cd() {
   emulate -L zsh
   [[ -n "$TMUX" ]] || { print -u2 "worktree-cd: not inside tmux"; return 1; }
-  local new_root cur_pane pane_id pane_path pane_cmd target
-  new_root="$(git rev-parse --show-toplevel 2>/dev/null)" || { print -u2 "worktree-cd: not inside a git repository"; return 1; }
-  cur_pane="$(tmux display-message -p '#{pane_id}')" || return 1
+  local name="$1"
+  [[ -n "$name" ]] || { print -u2 "worktree-cd: usage: worktree-cd <name>"; return 1; }
+
+  local target
+  target="$(_wt_remote_target "$name")"
+  [[ -n "$target" ]] || { print -u2 "worktree-cd: no worktree named '$name' on the codespace"; return 1; }
+
+  local pane_id pane_cmd line
   local -a panes
-  panes=("${(@f)$(tmux list-windows -F '#{pane_id}')}")
-  for pane_id in $panes; do
-    [[ -n "$pane_id" && "$pane_id" != "$cur_pane" ]] || continue
-    pane_path="$(tmux display-message -t "$pane_id" -p '#{pane_current_path}')"
-    pane_cmd="$(tmux display-message -t "$pane_id" -p '#{pane_current_command}')"
-    target="$(_wt_cd_target "$pane_path" "$new_root")"
-    if [[ "$pane_cmd" == "ssh" ]]; then
-      tmux send-keys -t "$pane_id" "cd ${(q)target} && clear" Enter
-    else
-      tmux respawn-pane -k -t "$pane_id" -c "$target"
-    fi
+  panes=("${(@f)$(tmux list-panes -F '#{pane_id} #{pane_current_command}')}")
+  for line in $panes; do
+    pane_id="${line%% *}"
+    pane_cmd="${line#* }"
+    [[ "$pane_cmd" == "ssh" || "$pane_cmd" == "gh" ]] || continue
+    tmux send-keys -t "$pane_id" "cd ${(q)target} && clear" Enter
   done
 }
 

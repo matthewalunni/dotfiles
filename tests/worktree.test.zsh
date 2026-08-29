@@ -12,7 +12,7 @@ ok()   { print -P "%F{green}✓%f $1"; (( ++PASS )); }
 no()   { print -P "%F{red}✗%f $1"; (( ++FAIL )); }
 check() { if eval "$2"; then ok "$1"; else no "$1 — failed: $2"; fi }
 
-# Build a throwaway repo with seeded env files. Echoes the repo root.
+# Build a throwaway repo with seeded secret files. Echoes the repo root.
 make_repo() {
   local repo
   repo="$(mktemp -d)"
@@ -23,6 +23,8 @@ make_repo() {
   print -- '.env'           >  "$repo/.gitignore"
   print -- '.env.local'     >> "$repo/.gitignore"
   print -- 'apps/*/.env.local' >> "$repo/.gitignore"
+  print -- 'Config/Secrets/'   >> "$repo/.gitignore"   # Xcode secrets dir
+  print -- 'ios/Config/Secrets.xcconfig' >> "$repo/.gitignore"   # Xcode secrets file
   print -- 'EXAMPLE=1'      >  "$repo/.env.example"   # committed, must NOT be copied
   git -C "$repo" add .gitignore .env.example
   git -C "$repo" commit -q -m init
@@ -30,6 +32,10 @@ make_repo() {
   print -- 'ROOT=1'         >  "$repo/.env"
   mkdir -p "$repo/apps/web"
   print -- 'WEB=1'          >  "$repo/apps/web/.env.local"
+  mkdir -p "$repo/Config/Secrets" "$repo/ios/Config"
+  print -- 'API_KEY = abc'  >  "$repo/Config/Secrets/Debug.xcconfig"
+  print -- 'API_KEY = def'  >  "$repo/ios/Config/Secrets.xcconfig"
+  print -- 'NOTSECRET=1'    >  "$repo/Config/Secretsauce.txt"   # near-miss, must NOT be copied
   print -- "$repo"
 }
 
@@ -78,12 +84,49 @@ main() {
   check "example present via checkout" '[[ -f "$repo/.worktrees/envtest/.env.example" ]]'
   # copied content matches source
   check "env content matches"     '[[ "$(<"$repo/.worktrees/envtest/.env")" == "ROOT=1" ]]'
+  # Xcode secrets travel too: a Config/Secrets/ dir and a Config/Secrets.* file
+  check "xcode secrets dir copied"  '[[ -f "$repo/.worktrees/envtest/Config/Secrets/Debug.xcconfig" ]]'
+  check "xcode secrets file copied" '[[ -f "$repo/.worktrees/envtest/ios/Config/Secrets.xcconfig" ]]'
+  check "xcode secret content matches" '[[ "$(<"$repo/.worktrees/envtest/Config/Secrets/Debug.xcconfig")" == "API_KEY = abc" ]]'
+  # a name that merely starts with Secrets is not a secret path
+  check "near-miss not copied"      '[[ ! -f "$repo/.worktrees/envtest/Config/Secretsauce.txt" ]]'
 
   # re-entering an existing worktree must NOT clobber local env edits
   ( cd "$repo" && worktree envtest >/dev/null )                # create (Task 4 already did, but safe)
   print -- 'LOCAL_EDIT=1' > "$repo/.worktrees/envtest/.env"    # local change in the tree
   ( cd "$repo" && worktree envtest >/dev/null )                # re-enter
   check "re-entry does not re-copy" '[[ "$(<"$repo/.worktrees/envtest/.env")" == "LOCAL_EDIT=1" ]]'
+
+  # _wt_create is the shared core: it must put the path, and nothing else, on
+  # stdout so the `agent` CLI can capture it. The secret-copy notice and git's
+  # own chatter belong on stderr.
+  check "_wt_create prints the path" \
+    '[[ "$(cd "$repo" && _wt_create createtest 2>/dev/null)" == "$repo/.worktrees/createtest" ]]'
+  check "_wt_create stdout is only the path" \
+    '[[ "$(cd "$repo" && _wt_create secretstest 2>/dev/null | wc -l | tr -d " ")" == 1 ]]'
+  check "_wt_create copied secrets despite quiet stdout" \
+    '[[ -f "$repo/.worktrees/secretstest/.env" ]]'
+  check "_wt_create is idempotent for an existing tree" \
+    '[[ "$(cd "$repo" && _wt_create createtest 2>/dev/null)" == "$repo/.worktrees/createtest" ]]'
+
+  # The worktree-create executable is what `agent` actually shells out to. Point
+  # it at this repo's copy of the library rather than the deployed one.
+  local xdg; xdg="$(mktemp -d)"
+  mkdir -p "$xdg/zsh"
+  cp "$SCRIPT_DIR/../dot_config/zsh/worktree.zsh" "$xdg/zsh/worktree.zsh"
+  local wtcreate="$SCRIPT_DIR/../dot_local/bin/executable_worktree-create"
+  check "worktree-create exists" '[[ -f "$wtcreate" ]]'
+  check "worktree-create prints the path" \
+    '[[ "$(cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" exectest 2>/dev/null)" == "$repo/.worktrees/exectest" ]]'
+  check "worktree-create made the tree" '[[ -d "$repo/.worktrees/exectest" ]]'
+  check "worktree-create copied secrets" '[[ -f "$repo/.worktrees/exectest/.env" ]]'
+  check "worktree-create honors a base ref" \
+    '[[ "$(cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" exec-on-dev dev >/dev/null 2>&1; git -C "$repo/.worktrees/exec-on-dev" rev-parse HEAD)" == "$(git -C "$repo" rev-parse dev)" ]]'
+  check "worktree-create errors without a name" \
+    '! ( cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" >/dev/null 2>&1 )'
+  check "worktree-create errors outside a repo" \
+    '! ( cd "$xdg" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" nope >/dev/null 2>&1 )'
+  rm -rf "$xdg"
 
   # removing by name takes down the worktree dir
   ( cd "$repo" && worktree to-remove >/dev/null )
@@ -103,18 +146,9 @@ main() {
 
   # worktree-cd refuses to run outside tmux
   check "functions are defined (worktree-cd)" '[[ $(typeset -f worktree-cd) ]]'
-  check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd >/dev/null 2>&1 )'
-
-  # _wt_cd_target: preserves a subdirectory that also exists in the new worktree
-  mkdir -p "$repo/.worktrees/feat-x/apps/web" "$repo/.worktrees/envtest/apps/web"
-  check "cd target preserves matching subdir" \
-    '[[ "$(_wt_cd_target "$repo/.worktrees/feat-x/apps/web" "$repo/.worktrees/envtest")" == "$repo/.worktrees/envtest/apps/web" ]]'
-  # _wt_cd_target: falls back to new root when the subdir does not exist there
-  check "cd target falls back when subdir missing" \
-    '[[ "$(_wt_cd_target "$repo/.worktrees/feat-x" "$repo/.worktrees/off-dev")" == "$repo/.worktrees/off-dev" ]]'
-  # _wt_cd_target: falls back to new root when the pane path is not a git repo
-  check "cd target falls back for non-repo path" \
-    '[[ "$(_wt_cd_target "/tmp" "$repo/.worktrees/envtest")" == "$repo/.worktrees/envtest" ]]'
+  check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd feat-x >/dev/null 2>&1 )'
+  # worktree-cd requires a name once inside tmux
+  check "worktree-cd errors without a name" '! ( TMUX=fake worktree-cd >/dev/null 2>&1 )'
 
   rm -rf "$repo"
 
