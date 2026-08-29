@@ -207,6 +207,9 @@ bind C-l send-keys 'C-l' \; clear-history
 # Toggle synchronize panes
 bind S set-window-option synchronize-panes\; display-message "synchronize-panes is now #{?pane_synchronized,on,off}"
 
+# Switch every SSH'd-in codespace pane to a worktree (see worktree-cd)
+bind W command-prompt -p "worktree:" "run-shell 'zsh -c \"source ~/.config/zsh/worktree.zsh; worktree-cd %1\"'"
+
 # Zoom pane
 bind z resize-pane -Z
 
