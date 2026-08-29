@@ -1,0 +1,28 @@
+#!/usr/bin/env zsh
+# Create-or-locate a git worktree and print its absolute path on stdout.
+#
+# This is the non-interactive half of the `worktree` shell function, exposed as
+# an executable so the `agent` CLI can reuse it instead of reimplementing
+# worktree creation and gitignored-secret copying. Both callers go through
+# _wt_create, so the two cannot drift.
+#
+#   worktree-create <name> [base-ref]
+#
+# Run from anywhere inside the target repository; the worktree is created under
+# the main working tree's container dir (.worktrees by default).
+emulate -L zsh
+setopt err_return pipe_fail
+
+local lib="${XDG_CONFIG_HOME:-$HOME/.config}/zsh/worktree.zsh"
+if [[ ! -r "$lib" ]]; then
+  print -u2 "worktree-create: cannot read $lib"
+  exit 1
+fi
+source "$lib"
+
+if (( $# < 1 )) || [[ -z "$1" ]]; then
+  print -u2 "usage: worktree-create <name> [base-ref]"
+  exit 2
+fi
+
+_wt_create "$1" "${2-}"
