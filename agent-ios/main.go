@@ -11,6 +11,8 @@ Usage:
   agent spawn <claude|codex> <branch> [flags]   Launch an agent in its own worktree
   agent list                                    Show active agents
   agent simulators                              Show simulators and who holds them
+  agent devices                                 Show physical devices and who holds them
+  agent device <status|claim|release>           Manage the exclusive physical-device lease
   agent config <agent-id>                       Show an agent's launch command and MCP wiring
   agent kill <agent-id>                         Release an agent's leases
   agent doctor                                  Report environment and state drift
@@ -19,6 +21,9 @@ Spawn flags:
   --scheme <name>   Override the auto-detected Xcode scheme
   --base <ref>      Branch to create <branch> from (default: repo default branch)
   --sim <udid>      Lease a specific simulator instead of the first free one
+  --device          Target the connected physical device instead of a simulator
+  --device-id <id>  Target a specific physical device (implies --device)
+  --bundle-id <id>  App bundle identifier, needed by the launch and stop tools
   --create-sim      Create a new Agent-N simulator if none are free
   --no-launch       Register and lease without starting the coding agent
 
@@ -38,6 +43,10 @@ func main() {
 		err = cmdList(os.Args[2:])
 	case "simulators", "sims":
 		err = cmdSimulators(os.Args[2:])
+	case "devices":
+		err = cmdDevices(os.Args[2:])
+	case "device":
+		err = cmdDevice(os.Args[2:])
 	case "config":
 		err = cmdConfig(os.Args[2:])
 	case "kill":

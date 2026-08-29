@@ -14,6 +14,9 @@ func cmdSpawn(args []string) error {
 	scheme := fs.String("scheme", "", "override the auto-detected Xcode scheme")
 	base := fs.String("base", "", "branch to create a new branch from (default: repo default branch)")
 	simSel := fs.String("sim", "", "lease a specific simulator by UDID")
+	useDevice := fs.Bool("device", false, "target the connected physical device instead of a simulator")
+	deviceSel := fs.String("device-id", "", "target a specific physical device (implies --device)")
+	bundleID := fs.String("bundle-id", "", "app bundle identifier (lets launch/stop tools work without a lookup)")
 	createSim := fs.Bool("create-sim", false, "create a new simulator if none are free")
 	noLaunch := fs.Bool("no-launch", false, "register and lease without launching the agent")
 	if err := fs.Parse(args); err != nil {
@@ -52,7 +55,15 @@ func cmdSpawn(args []string) error {
 			p.Scheme = *scheme
 		}
 
-		sim, err := leaseSimulator(s, *simSel, *createSim)
+		if *simSel != "" && (*useDevice || *deviceSel != "") {
+			return fmt.Errorf("--sim and --device are mutually exclusive")
+		}
+		var target Target
+		if *useDevice || *deviceSel != "" {
+			target, err = leaseDevice(s, *deviceSel)
+		} else {
+			target, err = leaseSimulator(s, *simSel, *createSim)
+		}
 		if err != nil {
 			return err
 		}
@@ -76,7 +87,7 @@ func cmdSpawn(args []string) error {
 			Branch:      branch,
 			Worktree:    worktree,
 			DerivedData: DerivedDataPath(p.Name, id),
-			Target:      Target{Kind: TargetSimulator, UDID: sim.UDID, Name: sim.Name},
+			Target:      target,
 			CreatedAt:   nowUTC(),
 			UpdatedAt:   nowUTC(),
 		}
@@ -89,6 +100,7 @@ func cmdSpawn(args []string) error {
 				a.PIDStart = st
 			}
 		}
+		a.BundleID = *bundleID
 		if err := os.MkdirAll(a.DerivedData, 0o755); err != nil {
 			return err
 		}
@@ -104,8 +116,12 @@ func cmdSpawn(args []string) error {
 	fmt.Printf("  branch:        %s\n", created.Branch)
 	fmt.Printf("  worktree:      %s\n", created.Worktree)
 	fmt.Printf("  project:       %s (scheme %s)\n", created.Project, project.Scheme)
-	fmt.Printf("  simulator:     %s\n", created.Target.Name)
-	fmt.Printf("  simulator id:  %s\n", created.Target.UDID)
+	label := "simulator"
+	if created.Target.Kind == TargetDevice {
+		label = "device"
+	}
+	fmt.Printf("  %-14s %s\n", label+":", created.Target.Name)
+	fmt.Printf("  %-14s %s\n", label+" id:", created.Target.UDID)
 	fmt.Printf("  derived data:  %s\n", created.DerivedData)
 
 	if *noLaunch {
@@ -117,8 +133,10 @@ func cmdSpawn(args []string) error {
 	if err != nil {
 		return releaseOnFailure(created.ID, err)
 	}
-	if err := BootSimulator(created.Target.UDID); err != nil {
-		return releaseOnFailure(created.ID, err)
+	if created.Target.Kind == TargetSimulator {
+		if err := BootSimulator(created.Target.UDID); err != nil {
+			return releaseOnFailure(created.ID, err)
+		}
 	}
 	fmt.Printf("\nLaunching %s in %s\n\n", created.Type, created.Worktree)
 	// Only returns on failure; on success this process becomes the agent.
@@ -142,12 +160,43 @@ func releaseOnFailure(id string, cause error) error {
 	return cause
 }
 
+// leaseDevice takes the exclusive lease on a physical device.
+//
+// A device is a single shared piece of hardware, so a second agent is refused
+// by name rather than quietly taking it: two agents installing over each other
+// on the same phone is silent, confusing, and destroys the first agent's build.
+// Keying the lease on UDID means this already generalises to several devices.
+func leaseDevice(s *State, want string) (Target, error) {
+	devices, err := ListDevices()
+	if err != nil {
+		return Target{}, err
+	}
+	var d Device
+	if want != "" {
+		d, err = FindDevice(devices, want)
+	} else {
+		d, err = SoleDevice(devices)
+	}
+	if err != nil {
+		return Target{}, err
+	}
+	if !d.Connected {
+		return Target{}, fmt.Errorf("device %s (%s) is not connected", d.Name, d.UDID)
+	}
+	if holder := s.HolderOfUDID(d.UDID); holder != nil {
+		return Target{}, fmt.Errorf("physical device currently leased by %s.\n"+
+			"  Release it with: agent kill %s   (or: agent device release --force)",
+			holder.ID, holder.ID)
+	}
+	return Target{Kind: TargetDevice, UDID: d.UDID, Name: d.Name}, nil
+}
+
 // leaseSimulator picks a simulator not held by a live agent. It never takes one
 // that is already leased, and it does not invent a simulator unless asked.
-func leaseSimulator(s *State, wantUDID string, allowCreate bool) (Simulator, error) {
+func leaseSimulator(s *State, wantUDID string, allowCreate bool) (Target, error) {
 	sims, err := ListSimulators()
 	if err != nil {
-		return Simulator{}, err
+		return Target{}, err
 	}
 
 	if wantUDID != "" {
@@ -156,17 +205,17 @@ func leaseSimulator(s *State, wantUDID string, allowCreate bool) (Simulator, err
 				continue
 			}
 			if holder := s.HolderOfUDID(sim.UDID); holder != nil {
-				return Simulator{}, fmt.Errorf("simulator %s (%s) is leased by %s",
+				return Target{}, fmt.Errorf("simulator %s (%s) is leased by %s",
 					sim.Name, sim.UDID, holder.ID)
 			}
-			return sim, nil
+			return simTarget(sim), nil
 		}
-		return Simulator{}, fmt.Errorf("no available simulator with UDID %s", wantUDID)
+		return Target{}, fmt.Errorf("no available simulator with UDID %s", wantUDID)
 	}
 
 	for _, sim := range sims {
 		if s.HolderOfUDID(sim.UDID) == nil {
-			return sim, nil
+			return simTarget(sim), nil
 		}
 	}
 
@@ -177,10 +226,18 @@ func leaseSimulator(s *State, wantUDID string, allowCreate bool) (Simulator, err
 				held = append(held, fmt.Sprintf("    %-24s %s  held by %s", sim.Name, sim.UDID, h.ID))
 			}
 		}
-		return Simulator{}, fmt.Errorf("every simulator is leased:\n%s\n  rerun with --create-sim to add one",
+		return Target{}, fmt.Errorf("every simulator is leased:\n%s\n  rerun with --create-sim to add one",
 			strings.Join(held, "\n"))
 	}
-	return createPoolSimulator(sims)
+	sim, err := createPoolSimulator(sims)
+	if err != nil {
+		return Target{}, err
+	}
+	return simTarget(sim), nil
+}
+
+func simTarget(s Simulator) Target {
+	return Target{Kind: TargetSimulator, UDID: s.UDID, Name: s.Name}
 }
 
 // createPoolSimulator adds an Agent-N simulator on the newest installed runtime

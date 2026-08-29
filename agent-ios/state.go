@@ -33,18 +33,21 @@ type Target struct {
 }
 
 type Agent struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Project     string    `json:"project"`
-	RepoRoot    string    `json:"repoRoot"`
-	Branch      string    `json:"branch"`
-	Worktree    string    `json:"worktree"`
-	DerivedData string    `json:"derivedData"`
-	Target      Target    `json:"target"`
-	PID         int       `json:"pid"`
-	PIDStart    string    `json:"pidStart"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Project     string `json:"project"`
+	RepoRoot    string `json:"repoRoot"`
+	Branch      string `json:"branch"`
+	Worktree    string `json:"worktree"`
+	DerivedData string `json:"derivedData"`
+	Target      Target `json:"target"`
+	// BundleID is optional. The launch and stop tools require it, and it cannot
+	// be derived without a build, so it is supplied rather than guessed.
+	BundleID  string    `json:"bundleId,omitempty"`
+	PID       int       `json:"pid"`
+	PIDStart  string    `json:"pidStart"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Agent statuses. Only "stale" releases a lease implicitly.

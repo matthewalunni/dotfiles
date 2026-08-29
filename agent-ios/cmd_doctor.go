@@ -38,6 +38,24 @@ func cmdDoctor(args []string) error {
 		return err
 	}
 	fmt.Printf("  %-12s %d available\n", "simulators", len(sims))
+
+	// Device discovery is reported rather than fatal: a Mac with no phone
+	// attached is a perfectly normal state for simulator-only work.
+	devices, devErr := ListDevices()
+	switch {
+	case devErr != nil:
+		fmt.Printf("  %-12s error: %v\n", "devices", devErr)
+	case len(devices) == 0:
+		fmt.Printf("  %-12s none paired\n", "devices")
+	default:
+		for _, d := range devices {
+			state := d.Transport
+			if !d.Connected {
+				state = "disconnected"
+			}
+			fmt.Printf("  %-12s %s (%s, iOS %s, %s)\n", "device", d.Name, d.Model, d.OSVersion, state)
+		}
+	}
 	fmt.Printf("  %-12s %s\n", "state", StatePath())
 
 	s, err := ReadState()
@@ -50,6 +68,10 @@ func cmdDoctor(args []string) error {
 	for _, sim := range sims {
 		known[sim.UDID] = true
 	}
+	connected := map[string]bool{}
+	for _, d := range devices {
+		connected[d.UDID] = d.Connected
+	}
 	issues := 0
 	for _, a := range s.SortedAgents() {
 		switch {
@@ -61,6 +83,13 @@ func cmdDoctor(args []string) error {
 			issues++
 			fmt.Printf("  missing   %s: simulator %s (%s) no longer exists\n",
 				a.ID, a.Target.Name, a.Target.UDID)
+		case a.Target.Kind == TargetDevice && devErr == nil && !connected[a.Target.UDID]:
+			// The lease is kept: the phone is usually just asleep or off the
+			// network, and dropping the lease would let another agent take a
+			// device the first one is still working against.
+			issues++
+			fmt.Printf("  offline   %s: device %s is not connected; the lease is still held\n",
+				a.ID, a.Target.Name)
 		default:
 			fmt.Printf("  ok        %s: %s on %s\n", a.ID, a.Status(), a.Target.Name)
 		}
