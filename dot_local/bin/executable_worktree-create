@@ -6,7 +6,10 @@
 # worktree creation and gitignored-secret copying. Both callers go through
 # _wt_create, so the two cannot drift.
 #
-#   worktree-create <name> [base-ref]
+#   worktree-create [-b branch] <name> [base-ref]
+#
+# The branch defaults to <name>; -b separates them so a caller can name the
+# directory after the agent while checking out some other branch.
 #
 # Run from anywhere inside the target repository; the worktree is created under
 # the main working tree's container dir (.worktrees by default).
@@ -20,9 +23,18 @@ if [[ ! -r "$lib" ]]; then
 fi
 source "$lib"
 
+local -a opts
+while [[ "$1" == -* ]]; do
+  case "$1" in
+    -b|--branch) opts+=(-b "$2"); shift 2 ;;
+    --) shift; break ;;
+    *) print -u2 "worktree-create: unknown option $1"; exit 2 ;;
+  esac
+done
+
 if (( $# < 1 )) || [[ -z "$1" ]]; then
-  print -u2 "usage: worktree-create <name> [base-ref]"
+  print -u2 "usage: worktree-create [-b branch] <name> [base-ref]"
   exit 2
 fi
 
-_wt_create "$1" "${2-}"
+_wt_create $opts "$1" "${2-}"

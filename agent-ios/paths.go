@@ -42,3 +42,10 @@ func EnsureRoot() error {
 	}
 	return nil
 }
+
+// AgentDir holds per-agent generated files (currently the MCP config). It is
+// regenerated on every spawn, so nothing here is precious.
+func AgentDir(agentID string) string { return filepath.Join(Root(), "agents", agentID) }
+
+// MCPConfigPath is the --mcp-config file handed to Claude Code.
+func MCPConfigPath(agentID string) string { return filepath.Join(AgentDir(agentID), "mcp.json") }

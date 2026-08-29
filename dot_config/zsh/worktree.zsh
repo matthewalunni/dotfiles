@@ -19,13 +19,31 @@ _wt_default_branch() {
 
 # Create-or-locate worktree <name> from optional [base-ref], and print its path.
 #
+#   _wt_create [-b branch] <name> [base-ref]
+#
+# The branch defaults to <name>. They separate for the `agent` CLI, which names
+# directories after the agent holding them (claude-1) while checking out the
+# branch the user actually asked for.
+#
 # The path is the only thing on stdout — git chatter and the secret-copy notice
 # go to stderr — so non-shell callers can capture it. This is the shared core
 # behind both `worktree` and the `worktree-create` executable that the `agent`
 # CLI shells out to; keep it free of `cd` and of anything interactive.
 _wt_create() {
   emulate -L zsh
+  local branch=""
+  while [[ "$1" == -* ]]; do
+    case "$1" in
+      -b|--branch) branch="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) print -u2 "worktree: unknown option $1"; return 2 ;;
+    esac
+  done
+
   local name="$1" base="$2" root container wtpath
+  [[ -n "$name" ]] || { print -u2 "worktree: a name is required"; return 2; }
+  [[ -z "$branch" ]] && branch="$name"
+
   root="$(_wt_main_root)" || { print -u2 "worktree: not inside a git repository"; return 1; }
   container="$(_wt_container "$root")"
   _wt_ensure_ignored "$root" "$container"
@@ -38,10 +56,10 @@ _wt_create() {
 
   [[ -z "$base" ]] && base="$(_wt_default_branch "$root")"
 
-  if git -C "$root" show-ref --verify --quiet "refs/heads/$name"; then
-    git -C "$root" worktree add "$wtpath" "$name" >&2 || return 1   # attach existing branch
+  if git -C "$root" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$root" worktree add "$wtpath" "$branch" >&2 || return 1   # attach existing branch
   else
-    git -C "$root" worktree add -b "$name" "$wtpath" "$base" >&2 || return 1
+    git -C "$root" worktree add -b "$branch" "$wtpath" "$base" >&2 || return 1
   fi
 
   _wt_copy_secrets "$root" "$wtpath" "$container"
