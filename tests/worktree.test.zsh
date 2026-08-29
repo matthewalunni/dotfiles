@@ -109,6 +109,23 @@ main() {
   check "_wt_create is idempotent for an existing tree" \
     '[[ "$(cd "$repo" && _wt_create createtest 2>/dev/null)" == "$repo/.worktrees/createtest" ]]'
 
+  # -b separates the directory name from the branch, which is how `agent` gets
+  # an agent-named tree (claude-1) on the branch the user asked for.
+  ( cd "$repo" && _wt_create -b feat/branchy dirname-only >/dev/null 2>&1 )
+  check "-b uses the name for the directory" '[[ -d "$repo/.worktrees/dirname-only" ]]'
+  check "-b checks out the given branch" \
+    '[[ "$(git -C "$repo/.worktrees/dirname-only" symbolic-ref --short HEAD)" == "feat/branchy" ]]'
+  check "-b did not create a branch named after the dir" \
+    '! git -C "$repo" show-ref --verify --quiet refs/heads/dirname-only'
+  # an existing branch is attached, not recreated
+  git -C "$repo" branch existing-br main >/dev/null
+  ( cd "$repo" && _wt_create -b existing-br attach-test >/dev/null 2>&1 )
+  check "-b attaches an existing branch" \
+    '[[ "$(git -C "$repo/.worktrees/attach-test" symbolic-ref --short HEAD)" == "existing-br" ]]'
+  check "_wt_create rejects an unknown option" \
+    '! ( cd "$repo" && _wt_create --nope x >/dev/null 2>&1 )'
+  check "_wt_create requires a name" '! ( cd "$repo" && _wt_create -b b >/dev/null 2>&1 )'
+
   # The worktree-create executable is what `agent` actually shells out to. Point
   # it at this repo's copy of the library rather than the deployed one.
   local xdg; xdg="$(mktemp -d)"
@@ -126,6 +143,10 @@ main() {
     '! ( cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" >/dev/null 2>&1 )'
   check "worktree-create errors outside a repo" \
     '! ( cd "$xdg" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" nope >/dev/null 2>&1 )'
+  check "worktree-create passes -b through" \
+    '[[ "$(cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" -b feat/exec-br execbranch >/dev/null 2>&1; git -C "$repo/.worktrees/execbranch" symbolic-ref --short HEAD)" == "feat/exec-br" ]]'
+  check "worktree-create rejects an unknown option" \
+    '! ( cd "$repo" && XDG_CONFIG_HOME="$xdg" zsh "$wtcreate" --nope x >/dev/null 2>&1 )'
   rm -rf "$xdg"
 
   # removing by name takes down the worktree dir

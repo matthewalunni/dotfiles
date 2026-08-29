@@ -12,6 +12,7 @@ var validAgentTypes = map[string]bool{"claude": true, "codex": true}
 func cmdSpawn(args []string) error {
 	fs := flag.NewFlagSet("spawn", flag.ContinueOnError)
 	scheme := fs.String("scheme", "", "override the auto-detected Xcode scheme")
+	base := fs.String("base", "", "branch to create a new branch from (default: repo default branch)")
 	simSel := fs.String("sim", "", "lease a specific simulator by UDID")
 	createSim := fs.Bool("create-sim", false, "create a new simulator if none are free")
 	noLaunch := fs.Bool("no-launch", false, "register and lease without launching the agent")
@@ -40,21 +41,15 @@ func cmdSpawn(args []string) error {
 		return err
 	}
 
-	// Phase 1 stops after leasing; worktree creation and agent launch land in
-	// phase 2. Refuse rather than silently doing less than the flag implies.
-	if !*noLaunch {
-		return fmt.Errorf("launching is not implemented yet; rerun with --no-launch")
-	}
-
 	var created *Agent
-	var createdScheme string
+	var project Project
 	err = WithState(func(s *State) error {
-		project, err := ResolveProject(s, cwd)
+		p, err := ResolveProject(s, cwd)
 		if err != nil {
 			return err
 		}
 		if *scheme != "" {
-			project.Scheme = *scheme
+			p.Scheme = *scheme
 		}
 
 		sim, err := leaseSimulator(s, *simSel, *createSim)
@@ -63,22 +58,42 @@ func cmdSpawn(args []string) error {
 		}
 
 		id := s.NextAgentID(agentType)
+		// Worktree creation runs while the lock is held so that a second spawn
+		// cannot pick the same simulator in the seconds this takes.
+		worktree, err := CreateWorktree(p.Root, id, branch, *base)
+		if err != nil {
+			return err
+		}
+		if err := checkNoProjectConfig(worktree); err != nil {
+			return err
+		}
+
 		a := &Agent{
 			ID:          id,
 			Type:        agentType,
-			Project:     project.Name,
-			RepoRoot:    project.Root,
+			Project:     p.Name,
+			RepoRoot:    p.Root,
 			Branch:      branch,
-			DerivedData: DerivedDataPath(project.Name, id),
+			Worktree:    worktree,
+			DerivedData: DerivedDataPath(p.Name, id),
 			Target:      Target{Kind: TargetSimulator, UDID: sim.UDID, Name: sim.Name},
 			CreatedAt:   nowUTC(),
 			UpdatedAt:   nowUTC(),
+		}
+		if !*noLaunch {
+			// Recorded before the exec that turns this process into the agent.
+			// exec preserves the pid and the start time, so this pair keeps
+			// identifying the right process for as long as the agent runs.
+			a.PID = os.Getpid()
+			if st, err := processStart(a.PID); err == nil {
+				a.PIDStart = st
+			}
 		}
 		if err := os.MkdirAll(a.DerivedData, 0o755); err != nil {
 			return err
 		}
 		s.Agents[id] = a
-		created, createdScheme = a, project.Scheme
+		created, project = a, *p
 		return nil
 	})
 	if err != nil {
@@ -86,12 +101,45 @@ func cmdSpawn(args []string) error {
 	}
 
 	fmt.Printf("%s\n", created.ID)
-	fmt.Printf("  branch:       %s\n", created.Branch)
-	fmt.Printf("  project:      %s (scheme %s)\n", created.Project, createdScheme)
-	fmt.Printf("  simulator:    %s\n", created.Target.Name)
-	fmt.Printf("  simulatorUDID:%s\n", " "+created.Target.UDID)
-	fmt.Printf("  derivedData:  %s\n", created.DerivedData)
-	return nil
+	fmt.Printf("  branch:        %s\n", created.Branch)
+	fmt.Printf("  worktree:      %s\n", created.Worktree)
+	fmt.Printf("  project:       %s (scheme %s)\n", created.Project, project.Scheme)
+	fmt.Printf("  simulator:     %s\n", created.Target.Name)
+	fmt.Printf("  simulator id:  %s\n", created.Target.UDID)
+	fmt.Printf("  derived data:  %s\n", created.DerivedData)
+
+	if *noLaunch {
+		fmt.Printf("\nRegistered without launching. Release with: agent kill %s\n", created.ID)
+		return nil
+	}
+
+	argv, err := LaunchArgv(created, &project)
+	if err != nil {
+		return releaseOnFailure(created.ID, err)
+	}
+	if err := BootSimulator(created.Target.UDID); err != nil {
+		return releaseOnFailure(created.ID, err)
+	}
+	fmt.Printf("\nLaunching %s in %s\n\n", created.Type, created.Worktree)
+	// Only returns on failure; on success this process becomes the agent.
+	return releaseOnFailure(created.ID, Exec(created.Worktree, argv))
+}
+
+// releaseOnFailure drops the agent record so a failed launch does not strand
+// its simulator lease. The worktree is deliberately left in place: it may
+// already hold copied secrets, and removing a git worktree is never something
+// this tool does on its own initiative.
+func releaseOnFailure(id string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	if err := WithState(func(s *State) error {
+		delete(s.Agents, id)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("%w (and releasing the lease failed: %v)", cause, err)
+	}
+	return cause
 }
 
 // leaseSimulator picks a simulator not held by a live agent. It never takes one
