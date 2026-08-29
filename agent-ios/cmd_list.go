@@ -25,7 +25,7 @@ func cmdList(args []string) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "AGENT\tTYPE\tBRANCH\tTARGET\tSTATUS")
+	fmt.Fprintln(w, "AGENT\tTYPE\tBRANCH/NOTE\tTARGET\tSTATUS")
 	for _, a := range agents {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Type, a.Branch, a.Target.Name, a.Status())
 	}
@@ -75,8 +75,13 @@ func cmdKill(args []string) error {
 		// worktree are left alone; removing user work is `agent cleanup`'s job
 		// and is guarded there.
 		delete(s.Agents, id)
-		fmt.Printf("released %s (simulator %s)\n", a.ID, a.Target.Name)
-		fmt.Printf("  DerivedData left in place: %s\n", a.DerivedData)
+		fmt.Printf("released %s (%s %s)\n", a.ID, a.Target.Kind, a.Target.Name)
+		if a.DerivedData != "" {
+			fmt.Printf("  DerivedData left in place: %s\n", a.DerivedData)
+		}
+		if a.Worktree != "" {
+			fmt.Printf("  worktree left in place:    %s\n", a.Worktree)
+		}
 		return nil
 	})
 }

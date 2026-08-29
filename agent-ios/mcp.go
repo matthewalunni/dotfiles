@@ -64,6 +64,10 @@ func xcodeBuildEnv(a *Agent, p *Project) (map[string]string, error) {
 		"XCODEBUILDMCP_DERIVED_DATA_PATH": a.DerivedData,
 	}
 
+	if a.BundleID != "" {
+		env["XCODEBUILDMCP_BUNDLE_ID"] = a.BundleID
+	}
+
 	// The container must point at the agent's worktree, not the main checkout.
 	// Building the main tree's project from a worktree agent would defeat the
 	// entire point of the isolation.
@@ -81,8 +85,19 @@ func xcodeBuildEnv(a *Agent, p *Project) (map[string]string, error) {
 	switch a.Target.Kind {
 	case TargetSimulator:
 		env["XCODEBUILDMCP_SIMULATOR_ID"] = a.Target.UDID
+		// Left on the default workflow selection deliberately. "simulator" is
+		// one of only two workflows MCP enables by default, and the obvious
+		// addition — simulator-management — hands an agent tools that erase and
+		// delete simulators, including the ones other agents are leasing.
 	case TargetDevice:
 		env["XCODEBUILDMCP_DEVICE_ID"] = a.Target.UDID
+		// Load-bearing. Workflows are opt-in for MCP unless the manifest marks
+		// them defaultEnabled, and only "simulator" and "session-management"
+		// are. Without this a --device agent starts with no build_device,
+		// install_app_device or launch_app_device at all — it simply cannot
+		// reach the phone, and the failure looks like a missing tool rather
+		// than a misconfiguration.
+		env["XCODEBUILDMCP_ENABLED_WORKFLOWS"] = "device"
 	default:
 		return nil, fmt.Errorf("agent %s has no target", a.ID)
 	}
