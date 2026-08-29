@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+#
+# sweep — remove git worktrees and local branches whose work has landed.
+#
+# Reports by default; only deletes when asked. Refuses to touch anything
+# holding work that exists nowhere else.
+#
+#   sweep              audit and report (no changes)
+#   sweep --apply      remove clean, merged worktrees and their branches
+#   sweep --apply -y   same, without the confirmation prompt
+#   sweep --branches   also delete merged branches that have no worktree
+#
+set -uo pipefail
+
+APPLY=0
+ASSUME_YES=0
+DO_BRANCHES=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --apply) APPLY=1 ;;
+        -y|--yes) ASSUME_YES=1 ;;
+        --branches) DO_BRANCHES=1 ;;
+        -h|--help)
+            sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        *) printf 'sweep: unknown option %s\n' "$1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "sweep: not a git repository" >&2; exit 1; }
+
+bold=$(tput bold 2>/dev/null || true)
+dim=$(tput dim 2>/dev/null || true)
+red=$(tput setaf 1 2>/dev/null || true)
+green=$(tput setaf 2 2>/dev/null || true)
+yellow=$(tput setaf 3 2>/dev/null || true)
+reset=$(tput sgr0 2>/dev/null || true)
+
+# The branch everything is measured against: origin's HEAD if we can read it.
+DEFAULT_REF=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)
+if [ -n "$DEFAULT_REF" ]; then
+    BASE="${DEFAULT_REF#refs/remotes/}"
+else
+    for candidate in origin/main origin/master; do
+        if git rev-parse --verify --quiet "$candidate" >/dev/null; then BASE="$candidate"; break; fi
+    done
+fi
+[ -n "${BASE:-}" ] || { echo "sweep: cannot determine the default branch" >&2; exit 1; }
+
+git fetch --quiet --prune origin 2>/dev/null || echo "${yellow}sweep: fetch failed; working from stale refs${reset}" >&2
+
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir)
+MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd -P)
+HERE=$(git rev-parse --show-toplevel)
+
+# A branch counts as landed if its commits are ancestors of BASE, or if its
+# content was squash-merged (one commit on BASE with an identical tree — the
+# common case for PR workflows, where ancestry alone reports a false negative).
+is_landed() {
+    local branch="$1" base_commit tree synthetic
+    git merge-base --is-ancestor "$branch" "$BASE" 2>/dev/null && return 0
+    base_commit=$(git merge-base "$BASE" "$branch" 2>/dev/null) || return 1
+    tree=$(git rev-parse "$branch^{tree}" 2>/dev/null) || return 1
+    synthetic=$(git commit-tree "$tree" -p "$base_commit" -m _ 2>/dev/null) || return 1
+    [ -n "$(git cherry "$BASE" "$synthetic" 2>/dev/null | grep '^-')" ]
+}
+
+printf '%ssweep%s  base=%s  repo=%s\n\n' "$bold" "$reset" "$BASE" "$(basename "$MAIN_ROOT")"
+
+REMOVABLE=()
+printf '%s%-9s %-6s %-5s %-7s %s%s\n' "$dim" "STATUS" "DIRTY" "LOCK" "SIZE" "WORKTREE [branch]" "$reset"
+
+while IFS= read -r line; do
+    case "$line" in worktree\ *) wt="${line#worktree }" ;; branch\ *) br="${line#branch }"; br="${br#refs/heads/}" ;;
+        locked*) locked=1 ;; "") ;; esac
+    [ -n "${line}" ] && continue
+
+    [ -z "${wt:-}" ] && continue
+    if [ "$wt" = "$MAIN_ROOT" ]; then wt=""; br=""; locked=0; continue; fi
+
+    dirty=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    size=$(du -sh "$wt" 2>/dev/null | cut -f1)
+    if [ -n "${br:-}" ] && is_landed "$br"; then status="${green}landed${reset}"; landed=1
+    else status="${yellow}active${reset}"; landed=0; fi
+
+    note=""
+    if [ "$wt" = "$HERE" ]; then note=" ${dim}(you are here)${reset}"
+    elif [ "${locked:-0}" = 1 ]; then note=" ${dim}(locked)${reset}"
+    elif [ "$dirty" != 0 ]; then note=" ${red}(uncommitted work)${reset}"
+    elif [ "$landed" = 1 ]; then REMOVABLE+=("$wt|${br:-}")
+    fi
+
+    printf '%-18s %-6s %-5s %-7s %s [%s]%s\n' "$status" "$dirty" \
+        "$([ "${locked:-0}" = 1 ] && echo yes || echo no)" "$size" "$(basename "$wt")" "${br:-detached}" "$note"
+
+    wt=""; br=""; locked=0
+done < <(git worktree list --porcelain; echo)
+
+echo
+if [ ${#REMOVABLE[@]} -eq 0 ]; then
+    echo "Nothing to sweep — every worktree is active, dirty, locked, or in use."
+else
+    printf '%s%d worktree(s) safe to remove:%s\n' "$bold" "${#REMOVABLE[@]}" "$reset"
+    for entry in "${REMOVABLE[@]}"; do printf '  %s [%s]\n' "$(basename "${entry%%|*}")" "${entry##*|}"; done
+fi
+
+if [ "$DO_BRANCHES" = 1 ]; then
+    echo
+    printf '%sMerged branches with no worktree:%s\n' "$bold" "$reset"
+    STALE=()
+    while IFS= read -r br; do
+        [ -z "$br" ] && continue
+        git worktree list --porcelain | grep -qx "branch refs/heads/$br" && continue
+        is_landed "$br" && STALE+=("$br") && printf '  %s\n' "$br"
+    done < <(git for-each-ref --format='%(refname:short)' refs/heads | grep -vx "${BASE#origin/}")
+    [ ${#STALE[@]} -eq 0 ] && echo "  (none)"
+fi
+
+if [ "$APPLY" != 1 ]; then
+    echo
+    echo "${dim}Report only. Re-run with --apply to remove.${reset}"
+    exit 0
+fi
+
+[ ${#REMOVABLE[@]} -eq 0 ] && [ "${#STALE[@]:-0}" -eq 0 ] && exit 0
+
+if [ "$ASSUME_YES" != 1 ]; then
+    echo
+    printf 'Remove these? [y/N] '
+    read -r reply
+    case "$reply" in y|Y|yes) ;; *) echo "Aborted."; exit 0 ;; esac
+fi
+
+cd "$MAIN_ROOT" || exit 1
+for entry in "${REMOVABLE[@]}"; do
+    wt="${entry%%|*}"; br="${entry##*|}"
+    if git worktree remove "$wt" 2>/dev/null; then
+        echo "${green}removed${reset} worktree $(basename "$wt")"
+        [ -n "$br" ] && git branch -d "$br" >/dev/null 2>&1 && echo "${green}removed${reset} branch $br"
+    else
+        echo "${red}kept${reset} $(basename "$wt") — git refused (check for untracked files)"
+    fi
+done
+
+if [ "$DO_BRANCHES" = 1 ]; then
+    for br in "${STALE[@]:-}"; do
+        [ -z "$br" ] && continue
+        git branch -d "$br" >/dev/null 2>&1 && echo "${green}removed${reset} branch $br"
+    done
+fi
+
+git worktree prune
+echo
+echo "Done. ${dim}Disk now:${reset} $(df -h / | awk 'NR==2{print $4" free"}')"
