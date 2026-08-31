@@ -172,12 +172,81 @@ wtrm <name>
 
 # No arg: fzf-pick a worktree to remove (the main checkout is excluded).
 wtrm
+
+# Create-or-locate a worktree and print only its path (no cd, no fzf).
+# The non-interactive half of `worktree`, exposed for non-shell callers.
+worktree-create [-b branch] <name> [base-ref]
 ```
+
+Both `worktree` and `worktree-create` go through the same `_wt_create`, so the
+interactive and scripted paths cannot drift. The `agent` CLI (below) uses
+`worktree-create` rather than reimplementing worktree setup.
+
+Inside tmux, `prefix + W` prompts for a worktree name and runs `worktree-cd`,
+which sends a `cd` into every pane currently SSH'd into the codespace so the
+whole window follows you into that worktree at once.
 
 The fzf pickers set their own git-log `--preview`, overriding the global
 `bat`-based `FZF_DEFAULT_OPTS` preview (which can't render a directory path).
 
 Run the test suite with `zsh tests/worktree.test.zsh`.
+
+---
+
+## Sweeping Landed Worktrees
+
+`sweep` (in `dot_local/bin/`) audits every worktree in the current repo against
+the default branch and reports which ones are safe to delete. It reports by
+default and only removes things when you ask.
+
+```bash
+sweep              # audit and report; changes nothing
+sweep --apply      # remove landed, clean worktrees and their branches
+sweep --apply -y   # same, skipping the confirmation prompt
+sweep --branches   # also delete landed branches that have no worktree
+```
+
+A branch counts as *landed* if its commits are ancestors of the base branch, or
+if its tree was squash-merged — checked by synthesizing a commit and running
+`git cherry`, since ancestry alone reports a false negative for the usual
+squash-merge PR workflow. Worktrees that are dirty, locked, or hold commits that
+exist nowhere else are reported but never removed, as is the one you're standing
+in. There is a matching `/sweep` Claude command in `dot_claude/commands/`.
+
+---
+
+## Parallel iOS Agents (`agent`)
+
+`agent-ios/` holds a small Go CLI for running several coding agents against one
+iOS project at once, each in its own worktree with its own simulator, so they
+don't fight over build directories or devices. It is listed in `.chezmoiignore`
+— it lives in this repo but is never deployed into `$HOME`; build it instead:
+
+```bash
+agent-ios/build.sh          # gofmt + go vet + install to ~/.local/bin/agent
+```
+
+```bash
+# Launch an agent in its own worktree, leasing a free simulator
+agent spawn claude <branch> [--scheme X] [--base ref] [--sim UDID] [--create-sim]
+
+# Target the one connected physical device instead (an exclusive lease)
+agent spawn codex <branch> --device
+agent device status|claim|release
+
+# Inspect
+agent list                  # active agents
+agent simulators            # simulators and who holds them
+agent devices               # physical devices and who holds them
+agent config <agent-id>     # that agent's launch command and MCP wiring
+agent doctor                # environment and state drift
+
+agent kill <agent-id>       # release its leases
+```
+
+Spawning creates the worktree via `worktree-create`, writes a per-agent MCP
+config pointed at that agent's leased device, and starts the coding agent in it.
+`--no-launch` registers and leases without starting anything.
 
 ---
 
@@ -189,4 +258,6 @@ Run the test suite with `zsh tests/worktree.test.zsh`.
 - **Starship**: Shell prompt theme
 - **Lazygit**: Git TUI configuration
 - **Tmux**: Tmux configuration
-- **Git worktree helpers**: `worktree` / `wtrm` commands (see above)
+- **Git worktree helpers**: `worktree` / `wtrm` / `worktree-create` commands (see above)
+- **sweep**: reaper for worktrees and branches whose work has landed (see above)
+- **agent**: isolated worktree + simulator environments for parallel iOS coding agents (see above)
