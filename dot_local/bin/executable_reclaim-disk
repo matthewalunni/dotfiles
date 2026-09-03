@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
         -y|--yes) ASSUME_YES=1 ;;
         --keep) KEEP="${2:-}"; shift ;;
         -h|--help)
-            sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) printf 'reclaim-disk: unknown option %s\n' "$1" >&2; exit 2 ;;
     esac
