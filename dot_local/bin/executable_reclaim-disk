@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# reclaim-disk — reclaim developer cache space that nothing else garbage-collects.
+#
+# Reports by default; only deletes when asked. Touches caches that rebuild
+# themselves, never source, simulators, device support, or Downloads.
+#
+#   reclaim-disk              audit and report (no changes)
+#   reclaim-disk --apply      delete
+#   reclaim-disk --apply -y   same, without the confirmation prompt
+#   reclaim-disk --keep N     keep N newest runs per workspace (default 5)
+#
+set -uo pipefail
+
+APPLY=0
+ASSUME_YES=0
+KEEP=5
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --apply) APPLY=1 ;;
+        -y|--yes) ASSUME_YES=1 ;;
+        --keep) KEEP="${2:-}"; shift ;;
+        -h|--help)
+            sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        *) printf 'reclaim-disk: unknown option %s\n' "$1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+case "$KEEP" in ''|*[!0-9]*) echo "reclaim-disk: --keep needs a number" >&2; exit 2 ;; esac
+
+# Overridable so the test suite can point at a throwaway tree.
+XCBMCP_ROOT="${RECLAIM_XCBMCP_ROOT:-$HOME/Library/Developer/XcodeBuildMCP}"
+DERIVED_ROOT="${RECLAIM_DERIVED_ROOT:-$HOME/Library/Developer/Xcode/DerivedData}"
+DERIVED_AGE_DAYS=14
+
+bold=$(tput bold 2>/dev/null || true)
+dim=$(tput dim 2>/dev/null || true)
+green=$(tput setaf 2 2>/dev/null || true)
+yellow=$(tput setaf 3 2>/dev/null || true)
+reset=$(tput sgr0 2>/dev/null || true)
+
+# A root has to look like a cache directory before we delete anything inside
+# it. Guards against an empty or mistyped override pointing us at / or $HOME.
+assert_safe_root() {
+    local root="$1" label="$2" resolved
+    [ -d "$root" ] || return 0
+    resolved=$(cd "$root" && pwd -P) || return 0
+    case "$resolved" in
+        "$HOME"/Library/Developer/*|/private/var/folders/*|/var/folders/*|/tmp/*|/private/tmp/*) return 0 ;;
+    esac
+    printf 'reclaim-disk: refusing to sweep %s root %s — not a cache directory\n' "$label" "$resolved" >&2
+    exit 1
+}
+
+# Everything we would delete, one path per line, accumulated before any removal
+# so the report and the deletion can never disagree.
+DOOMED=()
+declare -a CATEGORY_NAME=() CATEGORY_COUNT=() CATEGORY_SIZE=()
+
+size_of() { du -sk "$@" 2>/dev/null | awk '{t+=$1} END {print t+0}'; }
+
+human() { awk -v k="$1" 'BEGIN {
+    split("K M G T", u, " ");
+    if (k < 1) { print "0K"; exit }
+    i = 1; while (k >= 1024 && i < 4) { k /= 1024; i++ }
+    printf (k < 10 && i > 1) ? "%.1f%s\n" : "%.0f%s\n", k, u[i]
+}'; }
+
+# Record a category's contribution, then queue its paths for removal.
+note_category() {
+    local name="$1"; shift
+    [ $# -eq 0 ] && return 0
+    CATEGORY_NAME+=("$name")
+    CATEGORY_COUNT+=("$#")
+    CATEGORY_SIZE+=("$(size_of "$@")")
+    DOOMED+=("$@")
+}
+
+# --- XcodeBuildMCP: cap each per-run artifact directory at $KEEP newest -------
+assert_safe_root "$XCBMCP_ROOT" XcodeBuildMCP
+
+SKIPPED_LOCKED=()
+if [ -d "$XCBMCP_ROOT/workspaces" ]; then
+    for ws in "$XCBMCP_ROOT"/workspaces/*/; do
+        [ -d "$ws" ] || continue
+        wsname=$(basename "$ws")
+
+        # A non-empty locks/ means a build or test run is in flight. Its
+        # artifacts are live; leave the whole workspace alone.
+        if [ -d "$ws/locks" ] && [ -n "$(ls -A "$ws/locks" 2>/dev/null)" ]; then
+            SKIPPED_LOCKED+=("$wsname")
+            continue
+        fi
+
+        for cat in test-products result-bundles logs; do
+            [ -d "$ws$cat" ] || continue
+            # Rank runs by mtime, newest first, ignoring the sidecar
+            # `.xcodebuildmcp-completed` markers — they ride along with the run
+            # they belong to rather than competing with it for a slot.
+            old=()
+            while IFS= read -r entry; do
+                [ -z "$entry" ] && continue
+                old+=("$entry")
+                [ -e "$entry.xcodebuildmcp-completed" ] && old+=("$entry.xcodebuildmcp-completed")
+            done < <(find "$ws$cat" -mindepth 1 -maxdepth 1 ! -name '*.xcodebuildmcp-completed' \
+                        -exec stat -f '%m %N' {} + 2>/dev/null \
+                     | sort -rn | tail -n "+$((KEEP + 1))" | cut -d' ' -f2-)
+            [ ${#old[@]} -gt 0 ] && note_category "XcodeBuildMCP $wsname/$cat" "${old[@]}"
+        done
+    done
+fi
+
+# --- Xcode DerivedData: drop builds nothing has touched in a fortnight -------
+assert_safe_root "$DERIVED_ROOT" DerivedData
+
+if [ -d "$DERIVED_ROOT" ]; then
+    stale=()
+    while IFS= read -r entry; do
+        [ -n "$entry" ] && stale+=("$entry")
+    done < <(find "$DERIVED_ROOT" -mindepth 1 -maxdepth 1 -mtime "+$DERIVED_AGE_DAYS" 2>/dev/null)
+    [ ${#stale[@]} -gt 0 ] && note_category "Xcode DerivedData (${DERIVED_AGE_DAYS}d+ untouched)" "${stale[@]}"
+fi
+
+# --- Report ------------------------------------------------------------------
+printf '%sreclaim-disk%s  keep=%s newest runs per workspace\n\n' "$bold" "$reset" "$KEEP"
+
+TOTAL_KB=0
+if [ ${#CATEGORY_NAME[@]} -eq 0 ]; then
+    echo "Nothing to reclaim — every cache is already within its limits."
+else
+    printf '%s%-10s %6s  %s%s\n' "$dim" "SIZE" "ITEMS" "CATEGORY" "$reset"
+    for i in "${!CATEGORY_NAME[@]}"; do
+        printf '%-10s %6s  %s\n' \
+            "$(human "${CATEGORY_SIZE[$i]}")" "${CATEGORY_COUNT[$i]}" "${CATEGORY_NAME[$i]}"
+        TOTAL_KB=$((TOTAL_KB + CATEGORY_SIZE[i]))
+    done
+    printf '\n%s%s reclaimable%s\n' "$bold" "$(human "$TOTAL_KB")" "$reset"
+fi
+
+for ws in ${SKIPPED_LOCKED[@]+"${SKIPPED_LOCKED[@]}"}; do
+    [ -n "$ws" ] && printf '%sskipped%s %s — locked, a build is in flight\n' "$yellow" "$reset" "$ws"
+done
+
+if [ "${RECLAIM_SKIP_PACKAGES:-0}" != 1 ]; then
+    echo
+    echo "${dim}Package caches (reported by their own tools, pruned on --apply):${reset}"
+    command -v npm  >/dev/null && printf '  npm   %s\n' "$(du -sh "${NPM_CONFIG_CACHE:-$HOME/.npm}" 2>/dev/null | cut -f1)"
+    command -v pnpm >/dev/null && printf '  pnpm  %s\n' "$(du -sh "$(pnpm store path 2>/dev/null)" 2>/dev/null | cut -f1)"
+fi
+
+if [ "$APPLY" != 1 ]; then
+    echo
+    echo "${dim}Report only. Re-run with --apply to reclaim.${reset}"
+    exit 0
+fi
+
+[ ${#DOOMED[@]} -eq 0 ] && [ "${RECLAIM_SKIP_PACKAGES:-0}" = 1 ] && exit 0
+
+if [ "$ASSUME_YES" != 1 ]; then
+    echo
+    printf 'Delete these? [y/N] '
+    read -r reply
+    case "$reply" in y|Y|yes) ;; *) echo "Aborted."; exit 0 ;; esac
+fi
+
+echo
+for path in ${DOOMED[@]+"${DOOMED[@]}"}; do
+    [ -n "$path" ] && rm -rf "$path"
+done
+[ ${#DOOMED[@]} -gt 0 ] && printf '%sremoved%s %d cache item(s), %s\n' \
+    "$green" "$reset" "${#DOOMED[@]}" "$(human "$TOTAL_KB")"
+
+if [ "${RECLAIM_SKIP_PACKAGES:-0}" != 1 ]; then
+    command -v npm  >/dev/null && { npm cache verify >/dev/null 2>&1 && echo "${green}pruned${reset} npm cache"; }
+    command -v pnpm >/dev/null && { pnpm store prune  >/dev/null 2>&1 && echo "${green}pruned${reset} pnpm store"; }
+fi
+
+echo
+echo "Done. ${dim}Disk now:${reset} $(df -h / | awk 'NR==2{print $4" free"}')"
