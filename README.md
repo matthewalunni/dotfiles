@@ -215,6 +215,36 @@ in. There is a matching `/sweep` Claude command in `dot_claude/commands/`.
 
 ---
 
+## Reclaiming Cache Space (`reclaim-disk`)
+
+`reclaim-disk` (in `dot_local/bin/`) frees developer cache space that nothing
+else garbage-collects. Like `sweep`, it reports by default and only deletes when
+asked.
+
+```bash
+reclaim-disk              # audit and report; changes nothing
+reclaim-disk --apply      # delete, with a confirmation prompt
+reclaim-disk --apply -y   # same, skipping the prompt
+reclaim-disk --keep 10    # keep 10 newest runs per workspace (default 5)
+```
+
+XcodeBuildMCP has no retention logic of its own: every `test_sim` run leaves a
+`test-products` bundle, a result bundle and a log under
+`~/Library/Developer/XcodeBuildMCP/workspaces/`, and nothing ever removes them —
+a few hundred MB per run, which is what fills the disk. `reclaim-disk` keeps the
+newest few of each per workspace, drops `DerivedData` builds untouched for a
+fortnight, and prunes the npm and pnpm caches. A workspace with a non-empty
+`locks/` is skipped: a build is in flight and its artifacts are live.
+
+It refuses to run against any root outside `~/Library/Developer`, so a mistyped
+override can't point it at `$HOME`. Simulators, iOS DeviceSupport and
+`~/Downloads` are deliberately left alone — those are judgment calls, not
+garbage.
+
+Run the test suite with `zsh tests/reclaim-disk.test.zsh`.
+
+---
+
 ## Parallel iOS Agents (`agent`)
 
 `agent-ios/` holds a small Go CLI for running several coding agents against one
