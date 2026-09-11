@@ -153,7 +153,8 @@ if [[ "$(uname -r)" == *"arch"* ]]; then
 fi
 
 # Run fastfetch on interactive, non-Windows shells only
-if [[ $- == *i* ]] && [[ "$(uname -r)" != *"microsoft"* ]]; then
+# (-t 1: skip when stdout isn't a terminal, e.g. GUI apps parsing shell output)
+if [[ $- == *i* ]] && [[ -t 1 ]] && [[ "$(uname -r)" != *"microsoft"* ]]; then
     fastfetch
 fi
 
