@@ -1,0 +1,97 @@
+{{- $t := index .themes .theme -}}
+# ============================
+# Herdr Configuration
+# Mirrors ~/.tmux.conf: Ctrl+a prefix, vim-style navigation
+# Reference: herdr --default-config
+# ============================
+
+onboarding = false
+
+# ============================
+# Theme — {{ .theme }}
+# ============================
+
+[theme]
+# Inherit the terminal palette (Ghostty/Alacritty already follow the chezmoi theme)
+name = "terminal"
+auto_switch = false
+
+[theme.custom]
+accent = "{{ $t.tmux_active }}"
+
+# ============================
+# General
+# ============================
+
+[terminal]
+# New panes, tabs and workspaces open in the current pane's directory
+new_cwd = "follow"
+
+[advanced]
+# ~50k lines of scrollback, like tmux's history-limit
+scrollback_limit_bytes = 20000000
+
+[ui]
+accent = "{{ $t.tmux_active }}"
+# tmux-style internal splitters with no outer frame
+pane_outer_borders = false
+pane_gaps = false
+show_agent_labels_on_pane_borders = true
+hide_tab_bar_when_single_tab = true
+prompt_new_tab_name = false
+status_indicators = "symbols"
+
+[ui.toast]
+delivery = "herdr"
+
+# ============================
+# Key Bindings
+# ============================
+
+[keys]
+# Prefix: Ctrl+a (like screen / tmux config)
+prefix = "ctrl+a"
+
+reload_config = "prefix+r"
+resize_mode = "prefix+shift+r"
+
+# Splits: | right, - down
+split_vertical = "prefix+|"
+split_horizontal = "prefix+minus"
+
+# Vim-style pane focus
+focus_pane_left = "prefix+h"
+focus_pane_down = "prefix+j"
+focus_pane_up = "prefix+k"
+focus_pane_right = "prefix+l"
+
+# Vim-style pane resizing without entering resize mode
+resize_pane_left = "prefix+shift+h"
+resize_pane_down = "prefix+shift+j"
+resize_pane_up = "prefix+shift+k"
+resize_pane_right = "prefix+shift+l"
+
+# Kill pane / tab
+close_pane = "prefix+x"
+close_tab = "prefix+shift+x"
+zoom = "prefix+z"
+
+# Tabs (tmux windows)
+new_tab = "prefix+c"
+previous_tab = "prefix+ctrl+h"
+next_tab = "prefix+ctrl+l"
+move_tab_previous = "prefix+<"
+move_tab_next = "prefix+>"
+
+# Workspaces (tmux sessions)
+workspace_picker = "prefix+s"
+previous_workspace = "prefix+ctrl+k"
+next_workspace = "prefix+ctrl+j"
+settings = "prefix+shift+s"
+
+[[keys.command]]
+key = "prefix+alt+g"
+type = "popup"
+command = "lazygit"
+width = "90%"
+height = "90%"
