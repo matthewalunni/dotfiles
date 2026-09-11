@@ -18,6 +18,9 @@ auto_switch = false
 
 [theme.custom]
 accent = "{{ $t.tmux_active }}"
+# Explicit panel bg: accent-filled buttons draw their text in panel_bg,
+# and the terminal theme's "reset" turns that into light fg-on-light-accent
+panel_bg = "{{ $t.bg }}"
 # Keep highlighted rows dark so light text stays readable on them
 active_row_bg = "{{ $t.selected_bg }}"
 selection_bg = "{{ $t.selected_bg }}"
