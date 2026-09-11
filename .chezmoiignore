@@ -8,5 +8,8 @@
 .config/nwg-displays
 .config/yay
 {{ end }}
+{{ if ne .chezmoi.os "darwin" }}
+.aerospace.toml
+{{ end }}
 tests
 agent-ios
