@@ -13,3 +13,8 @@
 {{ end }}
 tests
 agent-ios
+docs
+README.md
+Brewfile
+install.sh
+install-minimal.sh
