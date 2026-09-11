@@ -79,16 +79,22 @@ Chezmoi uses prefixes to determine how files are managed:
 
 ## Install Scripts
 
-Two scripts are included for bootstrapping a fresh Arch machine.
+Two scripts are included for bootstrapping a fresh machine.
 
 ### `install.sh` — Full desktop install
 
-Installs the complete environment: Hyprland, Waybar, Rofi, audio, Bluetooth,
-fonts, display manager, containers, and all dotfiles via chezmoi.
+On Arch, installs the complete environment: Hyprland, Waybar, Rofi, audio,
+Bluetooth, fonts, display manager, containers, and all dotfiles via chezmoi.
+
+On macOS, installs Homebrew, applies the dotfiles, then installs everything in
+the `Brewfile` with `brew bundle`.
 
 ```bash
 bash install.sh
 ```
+
+> **Note:** The macOS path assumes Apple Silicon (Homebrew in `/opt/homebrew`).
+> On an Intel Mac, change the `brew shellenv` line to `/usr/local/bin/brew`.
 
 ### `install-minimal.sh` — Terminal-only install
 

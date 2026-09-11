@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # =============================================================================
-# Fresh Arch Linux install script
+# Fresh install script for Arch Linux or macOS
 # Installs dependencies and applies chezmoi dotfiles
 # =============================================================================
 
@@ -16,6 +16,46 @@ warn()    { printf '\e[1;33m! \e[0m%s\n' "$*"; }
 die()     { printf '\e[1;31m✘ \e[0m%s\n' "$*" >&2; exit 1; }
 
 require() { command -v "$1" &>/dev/null || die "Required command not found: $1"; }
+
+apply_dotfiles() {
+    if [[ -d "$HOME/.local/share/chezmoi/.git" ]]; then
+        info "Applying existing chezmoi source directory..."
+        chezmoi apply
+    else
+        info "Initialising chezmoi from $CHEZMOI_REPO..."
+        chezmoi init --apply "$CHEZMOI_REPO"
+    fi
+    success "Dotfiles applied"
+}
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if ! command -v brew &>/dev/null; then
+        info "Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        success "Homebrew installed"
+    fi
+
+    # Get the source directory (and its Brewfile) before bundling
+    brew list chezmoi &>/dev/null || brew install chezmoi
+    apply_dotfiles
+
+    info "Installing Homebrew packages..."
+    brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
+    success "Homebrew packages installed"
+
+    if [[ "$SHELL" != "$(command -v zsh)" ]]; then
+        info "Setting default shell to zsh..."
+        chsh -s "$(command -v zsh)"
+        success "Default shell set to zsh"
+    fi
+
+    echo
+    success "Installation complete!"
+    exit 0
+fi
 
 # ── pacman packages ───────────────────────────────────────────────────────────
 
@@ -177,14 +217,7 @@ fi
 # ── step 7: apply chezmoi dotfiles ────────────────────────────────────────────
 
 if command -v chezmoi &>/dev/null; then
-    if [[ -d "$HOME/.local/share/chezmoi/.git" ]]; then
-        info "Applying existing chezmoi source directory..."
-        chezmoi apply
-    else
-        info "Initialising chezmoi from $CHEZMOI_REPO..."
-        chezmoi init --apply "$CHEZMOI_REPO"
-    fi
-    success "Dotfiles applied"
+    apply_dotfiles
 else
     die "chezmoi not found even after install — something went wrong"
 fi
