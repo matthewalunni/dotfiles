@@ -1,0 +1,15 @@
+[user]
+	email = matthew.alunni@gmail.com
+	name = matthewalunni
+[core]
+	editor = nvim
+[http]
+	postBuffer = 524288000
+[pull]
+	rebase = true
+[credential "https://github.com"]
+	helper = 
+	helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !gh auth git-credential
