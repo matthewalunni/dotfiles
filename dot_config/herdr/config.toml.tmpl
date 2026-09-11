@@ -18,6 +18,9 @@ auto_switch = false
 
 [theme.custom]
 accent = "{{ $t.tmux_active }}"
+# Keep highlighted rows dark so light text stays readable on them
+active_row_bg = "{{ $t.selected_bg }}"
+selection_bg = "{{ $t.selected_bg }}"
 
 # ============================
 # General
