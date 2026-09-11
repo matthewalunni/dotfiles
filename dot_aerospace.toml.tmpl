@@ -1,0 +1,137 @@
+{{- $t := index .themes .theme -}}
+# AeroSpace config, modelled on dot_config/hypr/hyprland.conf.tmpl.
+# Hyprland's SUPER maps to alt (Option) here. Reload with alt-shift-c.
+# Reference: https://nikitabobko.github.io/AeroSpace/guide
+
+config-version = 2
+start-at-login = true
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+default-root-container-layout = 'tiles'
+# Split along the longer side of the monitor, like dwindle's first split
+default-root-container-orientation = 'auto'
+
+accordion-padding = 30
+
+# Theme-green border on the focused window (JankyBorders)
+after-startup-command = [
+  'exec-and-forget {{ lookPath "borders" | default "borders" }} style=round width=5.0 hidpi=on active_color=0xee{{ trimPrefix "#" $t.green }} inactive_color=0xaa{{ trimPrefix "#" $t.border_inactive }}',
+]
+
+# Keep the mouse on the focused monitor
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+[key-mapping]
+preset = 'qwerty'
+
+# Hyprland: gaps_in = 5, gaps_out = 10
+[gaps]
+inner.horizontal = 5
+inner.vertical = 5
+outer.left = 10
+outer.bottom = 10
+outer.top = 10
+outer.right = 10
+
+[mode.main.binding]
+# Apps
+alt-t = 'exec-and-forget open -na Ghostty'
+alt-enter = 'exec-and-forget open -na Ghostty'
+alt-b = 'exec-and-forget open -a Firefox'
+alt-e = 'exec-and-forget open ~'
+
+# Windows
+alt-q = 'close'
+alt-shift-v = 'layout floating tiling'
+alt-f = 'fullscreen'
+# Hyprland togglesplit
+alt-g = 'layout tiles horizontal vertical'
+alt-comma = 'layout accordion horizontal vertical'
+
+# Focus
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
+
+# Move
+alt-shift-h = 'move left'
+alt-shift-j = 'move down'
+alt-shift-k = 'move up'
+alt-shift-l = 'move right'
+
+# Nest the focused window with a neighbour (manual dwindle)
+alt-ctrl-h = 'join-with left'
+alt-ctrl-j = 'join-with down'
+alt-ctrl-k = 'join-with up'
+alt-ctrl-l = 'join-with right'
+
+# Resize (Hyprland used SUPER+ALT+hjkl; alt is the modifier here)
+alt-ctrl-shift-h = 'resize width -50'
+alt-ctrl-shift-l = 'resize width +50'
+alt-ctrl-shift-k = 'resize height -50'
+alt-ctrl-shift-j = 'resize height +50'
+alt-minus = 'resize smart -50'
+alt-equal = 'resize smart +50'
+alt-shift-equal = 'balance-sizes'
+
+# Workspaces
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-4 = 'workspace 4'
+alt-5 = 'workspace 5'
+alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+alt-9 = 'workspace 9'
+alt-0 = 'workspace 10'
+# Hyprland special:magic scratchpad
+alt-s = 'workspace S'
+
+alt-shift-1 = 'move-node-to-workspace 1'
+alt-shift-2 = 'move-node-to-workspace 2'
+alt-shift-3 = 'move-node-to-workspace 3'
+alt-shift-4 = 'move-node-to-workspace 4'
+alt-shift-5 = 'move-node-to-workspace 5'
+alt-shift-6 = 'move-node-to-workspace 6'
+alt-shift-7 = 'move-node-to-workspace 7'
+alt-shift-8 = 'move-node-to-workspace 8'
+alt-shift-9 = 'move-node-to-workspace 9'
+alt-shift-0 = 'move-node-to-workspace 10'
+alt-shift-s = 'move-node-to-workspace S'
+
+alt-tab = 'workspace-back-and-forth'
+alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+
+alt-shift-c = 'reload-config'
+alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+f = ['layout floating tiling', 'mode main']
+backspace = ['close-all-windows-but-current', 'mode main']
+
+# Float dialogs and utility apps instead of tiling them
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.finder'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.calculator'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.ActivityMonitor'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.archiveutility'
+run = 'layout floating'
