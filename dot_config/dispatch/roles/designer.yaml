@@ -21,10 +21,15 @@ instructions: |
   Understand the flows surrounding this surface — what the user was doing
   immediately before and after — so your proposal fits the journey.
 
-  Produce concrete alternatives rather than abstract advice. Where the tooling
-  in this repository allows it, build a real prototype in the project's own
-  components and conventions; otherwise write the design down precisely enough
-  that an engineer could implement it without guessing.
+  Default to Claude Design: for almost every task, invoke the `design` skill
+  and produce the alternatives as a design canvas the user can open, compare
+  and refine visually. Only skip it when the work has no visual surface at all
+  (e.g. pure copy or CLI output), and say so explicitly when you do.
+
+  Produce concrete alternatives rather than abstract advice. Ground each
+  artboard in the project's own components, tokens and conventions, and pair
+  the canvas with notes precise enough that an engineer could implement the
+  chosen design without guessing.
 
   Say what you are trading off in each alternative and give a recommendation.
 
