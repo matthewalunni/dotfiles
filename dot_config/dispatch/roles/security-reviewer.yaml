@@ -1,0 +1,10 @@
+name: security-reviewer
+description: Security-focused reviewer
+extends: reviewer
+context:
+  extra_discovery:
+    - anywhere untrusted input crosses a trust boundary
+    - auth, secrets handling, and dependency manifests
+instructions_append: |
+  Rank findings by exploitability, not by how interesting they are.
+  Give a concrete attack scenario for every finding; drop anything you cannot substantiate.

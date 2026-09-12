@@ -1,6 +1,7 @@
 [[ -d /snap/bin ]] && export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
+[[ -d "$HOME/go/bin" ]] && export PATH="$HOME/go/bin:$PATH"
 # opencode
 [[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
 [[ -d "$HOME/.local/share/bob/nvim-bin" ]] && export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
