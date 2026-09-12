@@ -232,6 +232,7 @@ reclaim-disk              # audit and report; changes nothing
 reclaim-disk --apply      # delete, with a confirmation prompt
 reclaim-disk --apply -y   # same, skipping the prompt
 reclaim-disk --keep 10    # keep 10 newest runs per workspace (default 5)
+reclaim-disk --all --keep-sim <udid>   # also simulators, DeviceSupport, all DerivedData
 ```
 
 XcodeBuildMCP has no retention logic of its own: every `test_sim` run leaves a
@@ -244,8 +245,17 @@ fortnight, and prunes the npm and pnpm caches. A workspace with a non-empty
 
 It refuses to run against any root outside `~/Library/Developer`, so a mistyped
 override can't point it at `$HOME`. Simulators, iOS DeviceSupport and
-`~/Downloads` are deliberately left alone — those are judgment calls, not
-garbage.
+`~/Downloads` are left alone unless you opt in — those are judgment calls, not
+garbage:
+
+- `--simulators` deletes devices shut down and not booted for `--stale-days`
+  (default 7), unavailable devices, then runtimes no surviving device uses and
+  nothing has used in that window (so the CI runner's runtimes survive). Booted
+  devices and any `--keep-sim <udid>` (or `RECLAIM_KEEP_SIMS`) are never touched.
+  Everything goes through `simctl`, never `rm`.
+- `--device-support` keeps only the newest OS per device model.
+- `--derived-age N` changes the DerivedData threshold; `0` clears it all.
+- `--all` is all three at their most aggressive.
 
 Run the test suite with `zsh tests/reclaim-disk.test.zsh`.
 
