@@ -1,0 +1,10 @@
+name: test-writer
+description: Adds meaningful test coverage
+extends: engineer
+context:
+  extra_discovery:
+    - the existing test framework, helpers, and fixtures
+    - untested branches and edge cases in recently changed code
+instructions_append: |
+  Match existing test conventions. Test behaviour, not implementation details.
+  Every test you add must be able to fail; verify that before finishing.

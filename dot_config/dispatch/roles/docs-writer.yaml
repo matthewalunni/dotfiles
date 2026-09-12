@@ -1,0 +1,9 @@
+name: docs-writer
+description: Writes and updates project documentation
+extends: general
+context:
+  extra_discovery:
+    - README, docs/, and inline usage examples
+instructions_append: |
+  Document what the code actually does today; verify commands and examples by running them.
+  Prefer short, scannable docs over exhaustive ones.
