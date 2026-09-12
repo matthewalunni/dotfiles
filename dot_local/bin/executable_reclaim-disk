@@ -2,39 +2,59 @@
 #
 # reclaim-disk — reclaim developer cache space that nothing else garbage-collects.
 #
-# Reports by default; only deletes when asked. Touches caches that rebuild
-# themselves, never source, simulators, device support, or Downloads.
+# Reports by default; only deletes when asked. By default touches caches that
+# rebuild themselves; simulators and device support are opt-in.
 #
-#   reclaim-disk              audit and report (no changes)
-#   reclaim-disk --apply      delete
-#   reclaim-disk --apply -y   same, without the confirmation prompt
-#   reclaim-disk --keep N     keep N newest runs per workspace (default 5)
+#   reclaim-disk                 audit and report (no changes)
+#   reclaim-disk --apply         delete
+#   reclaim-disk --apply -y      same, without the confirmation prompt
+#   reclaim-disk --keep N        keep N newest runs per workspace (default 5)
+#   reclaim-disk --derived-age N drop DerivedData untouched N+ days (default 14, 0 = all)
+#   reclaim-disk --simulators    also drop simulators idle STALE_DAYS+ and unused runtimes
+#   reclaim-disk --stale-days N  idle threshold for --simulators (default 7)
+#   reclaim-disk --keep-sim UDID never delete this simulator (repeatable)
+#   reclaim-disk --device-support also drop all but the newest iOS DeviceSupport per model
+#   reclaim-disk --all           --simulators --device-support --derived-age 0
 #
 set -uo pipefail
 
 APPLY=0
 ASSUME_YES=0
 KEEP=5
+DERIVED_AGE_DAYS=14
+SIMULATORS=0
+STALE_DAYS=7
+DEVICE_SUPPORT=0
+KEEP_SIMS=(${RECLAIM_KEEP_SIMS:-})
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --apply) APPLY=1 ;;
         -y|--yes) ASSUME_YES=1 ;;
         --keep) KEEP="${2:-}"; shift ;;
+        --derived-age) DERIVED_AGE_DAYS="${2:-}"; shift ;;
+        --simulators) SIMULATORS=1 ;;
+        --stale-days) STALE_DAYS="${2:-}"; shift ;;
+        --keep-sim) KEEP_SIMS+=("${2:-}"); shift ;;
+        --device-support) DEVICE_SUPPORT=1 ;;
+        --all) SIMULATORS=1; DEVICE_SUPPORT=1; DERIVED_AGE_DAYS=0 ;;
         -h|--help)
-            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) printf 'reclaim-disk: unknown option %s\n' "$1" >&2; exit 2 ;;
     esac
     shift
 done
 
-case "$KEEP" in ''|*[!0-9]*) echo "reclaim-disk: --keep needs a number" >&2; exit 2 ;; esac
+for pair in "keep:$KEEP" "derived-age:$DERIVED_AGE_DAYS" "stale-days:$STALE_DAYS"; do
+    case "${pair#*:}" in ''|*[!0-9]*) echo "reclaim-disk: --${pair%%:*} needs a number" >&2; exit 2 ;; esac
+done
 
 # Overridable so the test suite can point at a throwaway tree.
 XCBMCP_ROOT="${RECLAIM_XCBMCP_ROOT:-$HOME/Library/Developer/XcodeBuildMCP}"
 DERIVED_ROOT="${RECLAIM_DERIVED_ROOT:-$HOME/Library/Developer/Xcode/DerivedData}"
-DERIVED_AGE_DAYS=14
+DEVSUPPORT_ROOT="${RECLAIM_DEVSUPPORT_ROOT:-$HOME/Library/Developer/Xcode/iOS DeviceSupport}"
+SIMCTL="${RECLAIM_SIMCTL:-xcrun simctl}"
 
 bold=$(tput bold 2>/dev/null || true)
 dim=$(tput dim 2>/dev/null || true)
@@ -56,8 +76,11 @@ assert_safe_root() {
 }
 
 # Everything we would delete, one path per line, accumulated before any removal
-# so the report and the deletion can never disagree.
+# so the report and the deletion can never disagree. Simulators and runtimes
+# are owned by CoreSimulator, so they are queued as simctl commands instead of
+# paths — rm'ing their directories leaves CoreSimulator's registry dangling.
 DOOMED=()
+SIM_CMDS=()
 declare -a CATEGORY_NAME=() CATEGORY_COUNT=() CATEGORY_SIZE=()
 
 size_of() { du -sk "$@" 2>/dev/null | awk '{t+=$1} END {print t+0}'; }
@@ -120,8 +143,77 @@ if [ -d "$DERIVED_ROOT" ]; then
     stale=()
     while IFS= read -r entry; do
         [ -n "$entry" ] && stale+=("$entry")
-    done < <(find "$DERIVED_ROOT" -mindepth 1 -maxdepth 1 -mtime "+$DERIVED_AGE_DAYS" 2>/dev/null)
-    [ ${#stale[@]} -gt 0 ] && note_category "Xcode DerivedData (${DERIVED_AGE_DAYS}d+ untouched)" "${stale[@]}"
+    done < <(if [ "$DERIVED_AGE_DAYS" = 0 ]; then
+                 find "$DERIVED_ROOT" -mindepth 1 -maxdepth 1 2>/dev/null
+             else
+                 find "$DERIVED_ROOT" -mindepth 1 -maxdepth 1 -mtime "+$DERIVED_AGE_DAYS" 2>/dev/null
+             fi)
+    label="${DERIVED_AGE_DAYS}d+ untouched"; [ "$DERIVED_AGE_DAYS" = 0 ] && label="all"
+    [ ${#stale[@]} -gt 0 ] && note_category "Xcode DerivedData ($label)" "${stale[@]}"
+fi
+
+# --- iOS DeviceSupport (opt-in): keep the newest OS per device model ---------
+# Xcode re-copies symbols the next time that phone is plugged in, so only the
+# older OS versions for a model are dead weight.
+if [ "$DEVICE_SUPPORT" = 1 ]; then
+    assert_safe_root "$DEVSUPPORT_ROOT" DeviceSupport
+    if [ -d "$DEVSUPPORT_ROOT" ]; then
+        old=()
+        while IFS= read -r entry; do
+            [ -n "$entry" ] && old+=("$DEVSUPPORT_ROOT/$entry")
+        done < <(cd "$DEVSUPPORT_ROOT" && ls -1 2>/dev/null \
+                 | sort -t' ' -k1,1 -k2,2Vr | awk '{ if ($1 == last) print; last = $1 }')
+        [ ${#old[@]} -gt 0 ] && note_category "iOS DeviceSupport (older OS per model)" "${old[@]}"
+    fi
+fi
+
+# --- Simulators (opt-in): idle devices, then runtimes nothing is left using ---
+# A device is idle if it is shut down and has not booted in STALE_DAYS (or
+# never has). Booted and --keep-sim devices always survive. A runtime goes only
+# if no surviving device uses it *and* nothing has used it in STALE_DAYS — the
+# CI runner boots its own devices, and lastUsedAt is how we see that.
+SIM_KB=0; SIM_ITEMS=0
+if [ "$SIMULATORS" = 1 ]; then
+    if ! command -v jq >/dev/null; then
+        echo "reclaim-disk: --simulators needs jq" >&2; exit 2
+    fi
+    cutoff=$(( $(date +%s) - STALE_DAYS * 86400 ))
+    keep_json=$(printf '%s\n' ${KEEP_SIMS[@]+"${KEEP_SIMS[@]}"} | jq -R . | jq -sc 'map(select(length > 0))')
+    devices=$($SIMCTL list devices -j 2>/dev/null) || devices='{"devices":{}}'
+    runtimes=$($SIMCTL runtime list -j 2>/dev/null) || runtimes='{}'
+
+    doomed_devs=$(jq -c --argjson cutoff "$cutoff" --argjson keep "$keep_json" '
+        [.devices | to_entries[] | .key as $rt | .value[]
+         | select((.isAvailable | not)
+                  or (.state == "Shutdown"
+                      and ((.udid | IN($keep[])) | not)
+                      and ((.lastBootedAt // "1970-01-01T00:00:00Z")
+                           | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) < $cutoff))
+         | {udid, name, rt: $rt, kb: ((.dataPathSize // 0) / 1024 | floor)}]' <<<"$devices")
+
+    doomed_rts=$(jq -c --argjson cutoff "$cutoff" --argjson gone "$doomed_devs" --argjson devs "$devices" '
+        ([$devs.devices | to_entries[] | .key as $rt | .value[]
+          | select(.udid | IN($gone[].udid) | not) | $rt] | unique) as $used
+        | [to_entries[] | .value
+           | select(.deletable != false)
+           | select(.runtimeIdentifier | IN($used[]) | not)
+           | select(((.lastUsedAt // "1970-01-01T00:00:00Z")
+                     | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) < $cutoff)
+           | {id: .identifier, name: "\(.runtimeIdentifier) \(.version)", kb: ((.sizeBytes // 0) / 1024 | floor)}]' <<<"$runtimes")
+
+    while IFS=$'\t' read -r udid name kb; do
+        [ -z "$udid" ] && continue
+        SIM_CMDS+=("delete $udid"); SIM_KB=$((SIM_KB + kb)); SIM_ITEMS=$((SIM_ITEMS + 1))
+    done < <(jq -r '.[] | [.udid, .name, .kb] | @tsv' <<<"$doomed_devs")
+    n_devs=$SIM_ITEMS; devs_kb=$SIM_KB
+    [ "$n_devs" -gt 0 ] && { CATEGORY_NAME+=("Simulators idle ${STALE_DAYS}d+ ($(jq -r 'map(.name) | join(", ")' <<<"$doomed_devs"))"); CATEGORY_COUNT+=("$n_devs"); CATEGORY_SIZE+=("$devs_kb"); }
+
+    while IFS=$'\t' read -r id name kb; do
+        [ -z "$id" ] && continue
+        SIM_CMDS+=("runtime delete $id"); SIM_KB=$((SIM_KB + kb)); SIM_ITEMS=$((SIM_ITEMS + 1))
+    done < <(jq -r '.[] | [.id, .name, .kb] | @tsv' <<<"$doomed_rts")
+    n_rts=$((SIM_ITEMS - n_devs))
+    [ "$n_rts" -gt 0 ] && { CATEGORY_NAME+=("Simulator runtimes unused ($(jq -r 'map(.name) | join(", ")' <<<"$doomed_rts"))"); CATEGORY_COUNT+=("$n_rts"); CATEGORY_SIZE+=("$((SIM_KB - devs_kb))"); }
 fi
 
 # --- Report ------------------------------------------------------------------
@@ -157,7 +249,7 @@ if [ "$APPLY" != 1 ]; then
     exit 0
 fi
 
-[ ${#DOOMED[@]} -eq 0 ] && [ "${RECLAIM_SKIP_PACKAGES:-0}" = 1 ] && exit 0
+[ ${#DOOMED[@]} -eq 0 ] && [ ${#SIM_CMDS[@]} -eq 0 ] && [ "${RECLAIM_SKIP_PACKAGES:-0}" = 1 ] && exit 0
 
 if [ "$ASSUME_YES" != 1 ]; then
     echo
@@ -170,8 +262,15 @@ echo
 for path in ${DOOMED[@]+"${DOOMED[@]}"}; do
     [ -n "$path" ] && rm -rf "$path"
 done
-[ ${#DOOMED[@]} -gt 0 ] && printf '%sremoved%s %d cache item(s), %s\n' \
-    "$green" "$reset" "${#DOOMED[@]}" "$(human "$TOTAL_KB")"
+[ ${#DOOMED[@]} -gt 0 ] && printf '%sremoved%s %d cache item(s)\n' "$green" "$reset" "${#DOOMED[@]}"
+
+# Devices before runtimes: a runtime still referenced by a device won't delete.
+for cmd in ${SIM_CMDS[@]+"${SIM_CMDS[@]}"}; do
+    # shellcheck disable=SC2086
+    $SIMCTL $cmd >/dev/null 2>&1 || printf '%sfailed%s simctl %s\n' "$yellow" "$reset" "$cmd"
+done
+[ ${#SIM_CMDS[@]} -gt 0 ] && printf '%sremoved%s %d simulator item(s)\n' "$green" "$reset" "${#SIM_CMDS[@]}"
+[ "$TOTAL_KB" -gt 0 ] && printf 'up to %s reclaimed (APFS clones share blocks, so df may move less)\n' "$(human "$TOTAL_KB")"
 
 if [ "${RECLAIM_SKIP_PACKAGES:-0}" != 1 ]; then
     command -v npm  >/dev/null && { npm cache verify >/dev/null 2>&1 && echo "${green}pruned${reset} npm cache"; }
