@@ -47,6 +47,11 @@ hide_tab_bar_when_single_tab = true
 prompt_new_tab_name = false
 status_indicators = "symbols"
 
+[experimental]
+# Let agents launch herdr from inside a herdr pane. The outer session
+# swallows Ctrl+a, so nested sessions aren't keyboard-drivable
+allow_nested = true
+
 [ui.toast]
 delivery = "herdr"
 
