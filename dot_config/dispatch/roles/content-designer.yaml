@@ -1,0 +1,12 @@
+name: content-designer
+description: Visual design reviewer for overlays, thumbnails and brand kit
+extends: designer
+agent_prefix: cdesign
+context:
+  extra_discovery:
+    - overlay HTML templates, rendered overlay PNGs and thumbnails
+    - how the overlays sit on real frames from exported episodes
+instructions_append: |
+  This surface is short-form video graphics, not app UI. Judge overlays and
+  thumbnails composited on real frames at phone size, respecting platform UI
+  safe zones, and check the brand stays consistent with the app itself.
