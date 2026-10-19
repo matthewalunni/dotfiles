@@ -1,0 +1,40 @@
+#!/usr/bin/env zsh
+# Flip the focused herdr tab's two-pane split between side by side and stacked.
+#
+# Bound to prefix+space in herdr's config.toml. Tabs with any other pane count
+# are left alone.
+#
+# herdr ignores a pane move whose source and destination are the same tab, so
+# the second pane hops out to a scratch tab and back with the other direction.
+# The scratch tab closes itself once it's empty, and the pane keeps its id and
+# running process.
+emulate -L zsh
+setopt err_return pipe_fail
+
+local layout
+layout=$(herdr pane layout --current | jq -c .result.layout)
+
+local -a panes
+panes=(${(f)"$(jq -r '.panes[].pane_id' <<<"$layout")"})
+(( ${#panes} == 2 )) || exit 0
+
+local tab first second direction ratio focused
+tab=$(jq -r .tab_id <<<"$layout")
+focused=$(jq -r .focused_pane_id <<<"$layout")
+direction=$(jq -r '.splits[0].direction' <<<"$layout")
+ratio=$(jq -r '.splits[0].ratio' <<<"$layout")
+# panes[] runs left-to-right / top-to-bottom, so the first pane stays put
+first=$panes[1]
+second=$panes[2]
+
+local new_direction=down
+[[ $direction == down ]] && new_direction=right
+
+local moved
+moved=$(herdr pane move "$second" --new-tab --no-focus \
+  | jq -r .result.move_result.pane.pane_id)
+
+local focus=--no-focus
+[[ $focused == $second ]] && focus=--focus
+herdr pane move "$moved" --tab "$tab" --target-pane "$first" \
+  --split "$new_direction" --ratio "$ratio" "$focus" >/dev/null
