@@ -291,3 +291,6 @@ if [[ -n "$TMUX" ]]; then
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _reset_mouse_tracking
 fi
+
+# Device-local overrides (not managed by chezmoi). Keep last so it wins.
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
