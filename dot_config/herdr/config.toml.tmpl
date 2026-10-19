@@ -32,10 +32,10 @@ selection_bg = "{{ $t.selected_bg }}"
 [terminal]
 # New panes, tabs and workspaces open in the current pane's directory
 new_cwd = "follow"
+kitty_graphics = false
 
 [advanced]
-# ~50k lines of scrollback, like tmux's history-limit
-scrollback_limit_bytes = 20000000
+scrollback_limit_bytes = 8000000
 
 [ui]
 accent = "{{ $t.tmux_active }}"
@@ -46,6 +46,8 @@ show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
 prompt_new_tab_name = false
 status_indicators = "symbols"
+redraw_on_focus_gained = false
+mouse_scroll_lines = 12
 
 [experimental]
 # Let agents launch herdr from inside a herdr pane. The outer session
@@ -106,3 +108,9 @@ type = "popup"
 command = "lazygit"
 width = "90%"
 height = "90%"
+
+# Flip a two-pane split between side by side and stacked
+[[keys.command]]
+key = "prefix+space"
+type = "shell"
+command = "herdr-rotate-split"
