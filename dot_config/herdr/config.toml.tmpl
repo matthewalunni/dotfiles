@@ -78,12 +78,6 @@ focus_pane_down = "prefix+j"
 focus_pane_up = "prefix+k"
 focus_pane_right = "prefix+l"
 
-# Vim-style pane resizing without entering resize mode
-resize_pane_left = "prefix+shift+h"
-resize_pane_down = "prefix+shift+j"
-resize_pane_up = "prefix+shift+k"
-resize_pane_right = "prefix+shift+l"
-
 # Kill pane / tab
 close_pane = "prefix+x"
 close_tab = "prefix+shift+x"
@@ -108,6 +102,53 @@ type = "popup"
 command = "lazygit"
 width = "90%"
 height = "90%"
+
+# Swap the focused pane with its neighbor; focus follows the pane
+[[keys.command]]
+key = "prefix+shift+h"
+type = "shell"
+command = "herdr pane swap --current --direction left"
+
+[[keys.command]]
+key = "prefix+left"
+type = "shell"
+command = "herdr pane swap --current --direction left"
+
+[[keys.command]]
+key = "prefix+shift+j"
+type = "shell"
+command = "herdr pane swap --current --direction down"
+
+[[keys.command]]
+key = "prefix+down"
+type = "shell"
+command = "herdr pane swap --current --direction down"
+
+[[keys.command]]
+key = "prefix+shift+k"
+type = "shell"
+command = "herdr pane swap --current --direction up"
+
+[[keys.command]]
+key = "prefix+up"
+type = "shell"
+command = "herdr pane swap --current --direction up"
+
+[[keys.command]]
+key = "prefix+shift+l"
+type = "shell"
+command = "herdr pane swap --current --direction right"
+
+[[keys.command]]
+key = "prefix+right"
+type = "shell"
+command = "herdr pane swap --current --direction right"
+
+# Break the focused pane out into its own tab (tmux break-pane)
+[[keys.command]]
+key = "prefix+!"
+type = "shell"
+command = "herdr pane move \"$(herdr pane current | jq -r .result.pane.pane_id)\" --new-tab --focus"
 
 # Flip a two-pane split between side by side and stacked
 [[keys.command]]
