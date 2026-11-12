@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parsePrompt } from "../../dot_config/herdr-app/mods/deck/lib/prompt.js";
+import { parsePrompt, samePrompt } from "../../dot_config/herdr-app/mods/deck/lib/prompt.js";
 
 const fx = (n) => readFileSync(new URL(`./fixtures/screen-${n}.txt`, import.meta.url), "utf8");
 
@@ -73,4 +73,54 @@ test("strips ANSI escapes and handles empty input", () => {
   assert.equal(p.options[0].label, "Yes");
   assert.equal(parsePrompt("", "blocked").kind, "none");
   assert.equal(parsePrompt("", "idle").kind, "none");
+});
+
+const composer = "\n" + "─".repeat(60) + "\n❯ \n" + "─".repeat(60) + "\n  ctx:6%\n";
+
+test("done agent: trailing numbered list is a question with typed replies, never digit keys", () => {
+  const p = parsePrompt("⏺ Pick one:\n  1. Yes\n  2. No\n" + composer, "done");
+  assert.equal(p.kind, "question");
+  assert.deepEqual(p.options, [
+    { label: "Yes", keys: [], reply: "1" },
+    { label: "No", keys: [], reply: "2" },
+  ]);
+  assert.match(p.text, /Pick one/);
+  assert.equal(parsePrompt("1. foo\n2. bar\n" + composer, "idle").kind, "none");
+  assert.equal(parsePrompt(fx("permission"), "done").kind === "permission", false);
+});
+
+test("arrow keys are relative to the cursor row", () => {
+  const screen = (sel) =>
+    ["", " Pick a thing", "", ...["alpha", "beta", "gamma"].map((l, i) => (i === sel ? " ❯ " : "   ") + l), "", " Enter to confirm · Esc to cancel"].join("\n");
+  assert.deepEqual(parsePrompt(screen(1), "blocked").options.map((o) => o.keys), [["up", "enter"], ["enter"], ["down", "enter"]]);
+  assert.deepEqual(parsePrompt(screen(0), "blocked").options.map((o) => o.keys), [["enter"], ["down", "enter"], ["down", "down", "enter"]]);
+});
+
+test("samePrompt compares kind, text and labels only", () => {
+  const a = parsePrompt(fx("permission"), "blocked");
+  assert.ok(samePrompt(a, parsePrompt(fx("permission"), "blocked")));
+  assert.ok(!samePrompt(a, parsePrompt(fx("menu"), "blocked")));
+  assert.ok(!samePrompt(a, { ...a, text: "other" }));
+  assert.ok(!samePrompt(a, { ...a, options: a.options.slice(1) }));
+  assert.ok(samePrompt(a, { ...a, options: a.options.map((o) => ({ ...o, keys: ["x"] })) }));
+});
+
+test("wrapped permission labels are rejoined; menu descriptions are not", () => {
+  const screen = ` Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for commands that start with
+   npm run build in /x
+   3. No
+
+ Esc to cancel · Tab to amend`;
+  const p = parsePrompt(screen, "blocked");
+  assert.equal(p.options[1].label, "Yes, and don't ask again for commands that start with npm run build in /x");
+  assert.deepEqual(p.options.map((o) => o.label).length, 3);
+  assert.deepEqual(parsePrompt(fx("menu"), "blocked").options.map((o) => o.label).slice(0, 2), ["Red", "Green"]);
+});
+
+test("only ❯ marks a selection; a markdown blockquote list is not a menu", () => {
+  const p = parsePrompt("⏺ Options\n> 1. a\n> 2. b\n" + composer, "blocked");
+  assert.deepEqual(p.options, []);
+  assert.notEqual(p.kind, "menu");
 });
