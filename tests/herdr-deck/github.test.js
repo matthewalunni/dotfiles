@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  GIT_CMDS, PR_FIELDS, parseGitState, parsePr, parseDiff, headCheck,
+  GIT_CMDS, PR_FIELDS, parseGitState, parsePr, parseDiff, headCheck, needsReviewGate,
 } from "../../dot_config/herdr-app/mods/deck/lib/github.js";
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), "utf8");
@@ -136,4 +136,15 @@ test("headCheck: merge only the head that was shown", () => {
   assert.deepEqual(headCheck(null, a), { ok: false, error: "unknown head commit" });
   assert.deepEqual(headCheck(a, null), { ok: false, error: "unknown head commit" });
   assert.deepEqual(headCheck("abc", "abc"), { ok: false, error: "unknown head commit" });
+});
+
+test("needsReviewGate: merge waits until the diff for this head was opened", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  assert.equal(needsReviewGate({ pr: { headSha: a }, reviewedSha: null }), true, "unreviewed");
+  assert.equal(needsReviewGate({ pr: { headSha: a } }), true, "no field yet");
+  assert.equal(needsReviewGate({ pr: { headSha: a }, reviewedSha: a }), false, "reviewed this head");
+  assert.equal(needsReviewGate({ pr: { headSha: b }, reviewedSha: a }), true, "pushed since review");
+  assert.equal(needsReviewGate({ pr: { headSha: null }, reviewedSha: null }), true, "unknown head");
+  assert.equal(needsReviewGate(null), true);
 });

@@ -16,7 +16,7 @@ import { samePrompt } from "./prompt.js";
  *   commitsAhead: number|null, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
  *   stage: Stage, holdingSince: number|null, awaitingAck: boolean,
- *   answered: Prompt|null, repliedAt: number|null, quiet: boolean,
+ *   answered: Prompt|null, repliedAt: number|null, quiet: boolean, reviewedSha: string|null,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number
  * }} Issue
@@ -185,6 +185,7 @@ export function reconcile(store, obs, now) {
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
       answered: stillAck ? prev?.answered ?? null : null, repliedAt: stillAck ? prev?.repliedAt ?? null : null,
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
+      reviewedSha: prev?.reviewedSha ?? null,
       observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
     };
@@ -299,4 +300,18 @@ export function updatePr(store, key, fresh, now) {
   if (next.stage !== "landed") next.landedAt = null;
   const log = [...store.log, ...diffEvents(prev, next, now)];
   return finish({ ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log }, now);
+}
+
+/**
+ * The person saw the PR diff for head `sha` (the Changes view drew it).
+ * Unchanged store when already recorded or `sha` is not a full SHA.
+ * @param {Store} store @param {string} key @param {string} sha
+ * @returns {Store}
+ */
+export function markReviewed(store, key, sha) {
+  if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) return store;
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || prev.reviewedSha === sha) return store;
+  const next = { ...prev, reviewedSha: sha };
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
 }

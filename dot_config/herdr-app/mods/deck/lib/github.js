@@ -172,3 +172,15 @@ export function headCheck(shown, fresh) {
   }
   return shown === fresh ? { ok: true, error: null } : { ok: false, error: "Branch moved — review again" };
 }
+
+/**
+ * Review soft gate: true unless the person has opened the diff for the PR's
+ * current head (`issue.reviewedSha === issue.pr.headSha`). A push changes the
+ * head, so an old review no longer counts.
+ * @param {{ pr?: { headSha?: string|null }|null, reviewedSha?: string|null }|null} issue
+ */
+export function needsReviewGate(issue) {
+  const head = issue?.pr?.headSha;
+  if (typeof head !== "string" || !SHA.test(head)) return true;
+  return issue?.reviewedSha !== head;
+}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -294,4 +294,16 @@ test("updatePr: a merge seen there clears holding at the transition", () => {
   s = reconcile(s, [ob({ status: "done", pr: pr({ state: "MERGED" }) })], 3);
   assert.equal(get(s, "t7|fix/x").stage, "landed");
   assert.equal(get(s, "t7|fix/x").holdingSince, null);
+});
+
+test("G1: reviewedSha is recorded per issue and survives polls", () => {
+  const a = "a".repeat(40);
+  let s = reconcile(emptyStore(), [ob({ pr: pr({ headSha: a }) })], 1);
+  assert.equal(get(s, "t7|fix/x").reviewedSha, null);
+  s = markReviewed(s, "t7|fix/x", a);
+  assert.equal(get(s, "t7|fix/x").reviewedSha, a);
+  s = reconcile(JSON.parse(JSON.stringify(s)), [ob({ pr: pr({ headSha: a }) })], 2);
+  assert.equal(get(s, "t7|fix/x").reviewedSha, a);
+  assert.equal(markReviewed(s, "t7|fix/x", a), s, "no-op when unchanged");
+  assert.equal(markReviewed(s, "t7|fix/x", "nope"), s, "only a full sha");
 });
