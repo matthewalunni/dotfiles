@@ -1,0 +1,8 @@
+{{- $t := index .themes .theme -}}
+# Generated from .chezmoidata.toml (theme: {{ .theme }}). Edit there, not here.
+
+# zsh-autosuggestions ghost text. The default, fg=8, is the theme's
+# br_black, which in some themes (earthcode: {{ $t.br_black }}) is nearly as
+# bright as normal text, so suggested text looked typed. Use the theme's
+# dimmest "ignored" color instead.
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg={{ $t.ignored_color }}'

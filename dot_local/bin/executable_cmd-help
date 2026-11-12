@@ -1,0 +1,285 @@
+#!/usr/bin/env zsh
+# cmd-help — show the docs for a command, subcommand, or flag.
+#
+# Used by the fzf-tab preview pane (see ~/.config/zsh/completion.zsh) and by
+# the Alt-H widget, so the help you see while completing is the same help you
+# get when you open the full page.
+#
+#   cmd-help preview WORD GROUP REALPATH DESC -- WORDS...
+#       Preview one completion candidate. WORDS is the command line so far.
+#   cmd-help open WORD -- WORDS...
+#       Open the full page for a candidate (flag → jumped to it, subcommand →
+#       its own page). Used by ctrl-o in the menu and Alt-H on the prompt.
+#   cmd-help page [--flag FLAG] WORDS...
+#       Open the full man page / --help in a pager, jumped to FLAG if given.
+#   cmd-help text WORDS...
+#       Print the help text for WORDS (cmd, or cmd + subcommand) to stdout.
+#
+# Help text resolution for `cmd sub`: man cmd-sub → `cmd sub --help` (only if
+# `sub` is listed as a subcommand in `cmd --help`) → man cmd → `cmd --help`.
+# Commands are only ever run with --help/-h and no other user arguments, and
+# only if their executable mentions "--help" at all (see _self_help).
+
+emulate -L zsh
+setopt extended_glob no_unset pipe_fail
+
+typeset -g BAT=${commands[bat]:-${commands[batcat]:-}}
+typeset -gi WIDTH=${FZF_PREVIEW_COLUMNS:-${COLUMNS:-100}}
+(( WIDTH > 20 )) || WIDTH=100
+
+# Run a command's own help with stdin closed and a 2s cap, so a tool that
+# waits for input or hangs can't freeze the preview.
+_run_help() {
+  perl -e 'alarm 2; exec @ARGV' -- "$@" </dev/null 2>&1
+}
+
+# ---- Cache ----------------------------------------------------------------
+# Moving through a menu re-runs the preview for every highlighted row, and
+# the slow parts (scanning a 100MB+ binary for "--help", `man -w`, rendering
+# a man page, running the tool) give the same answer until the tool or page
+# changes. So each result is stored under ~/.cache/cmd-help with a stamp
+# (file mtime+size, or the day for `man -w` lookups); a stale stamp reruns it.
+zmodload -F zsh/stat b:zstat
+zmodload zsh/datetime
+typeset -g CACHE=${CMD_HELP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/cmd-help}
+
+_stamp() {
+  local -a st
+  zstat -A st +mtime -L ${1:A} 2>/dev/null || { print -r -- missing; return }
+  local -a sz; zstat -A sz +size ${1:A} 2>/dev/null
+  print -r -- "$st[1]:${sz[1]:-0}"
+}
+
+# _cached KEY STAMP CMD... — print CMD's output, from cache when STAMP
+# matches. The exit status is cached too, so negative answers are cheap.
+_cached() {
+  local key=$1 stamp=$2; shift 2
+  local f=$CACHE/${${key//\//%}//[^[:alnum:]%._:-]/_}
+  if [[ -r $f ]]; then
+    local content=$(<$f)
+    local head=${content%%$'\n'*}
+    if [[ $head == "$stamp "<-> ]]; then
+      [[ $content == *$'\n'* ]] && print -r -- "${content#*$'\n'}"
+      return ${head##* }
+    fi
+  fi
+  local out rc
+  out=$("$@"); rc=$?
+  mkdir -p $CACHE 2>/dev/null
+  if { print -r -- "$stamp $rc"; [[ -z $out ]] || print -r -- "$out" } >| $f.$$ 2>/dev/null; then
+    mv -f $f.$$ $f 2>/dev/null
+  fi
+  rm -f $f.$$ 2>/dev/null
+  [[ -n $out ]] && print -r -- "$out"
+  return rc
+}
+
+# ---- Help sources ---------------------------------------------------------
+_man_path() { MANPAGER=cat man -w "$1" 2>/dev/null }
+_has_man() { _cached "manw:$1" "$(strftime %Y%m%d $EPOCHSECONDS)" _man_path "$1" >/dev/null }
+
+_man_render() { MANWIDTH=$2 MANPAGER=cat man "$1" 2>/dev/null | col -bx }
+_man_text() {
+  local p; p=$(_cached "manw:$1" "$(strftime %Y%m%d $EPOCHSECONDS)" _man_path "$1") || return 1
+  _cached "man:$1:$WIDTH" "$(_stamp ${p%%$'\n'*})" _man_render "$1" $WIDTH
+}
+
+# Help text from running the tool. Tries --help, then -h; keeps whichever
+# output looks like help (more than a couple of lines).
+#
+# Only runs tools whose executable contains the literal "--help": a script
+# that ignores its arguments (e.g. one that just rotates a pane) must never be
+# executed by a preview.
+_self_help() {
+  local exe=${commands[$1]:-}
+  [[ -n $exe ]] || return 1
+  local stamp; stamp=$(_stamp $exe)
+  _cached "safe:$exe" $stamp _mentions_help $exe || return 1
+  _cached "self:$exe:${(j: :)@[2,-1]}" $stamp _self_help_uncached "$@"
+}
+
+_mentions_help() { LC_ALL=C grep -aqF -- --help $1 }
+
+_self_help_uncached() {
+  local out
+  out=$(_run_help "$@" --help)
+  if (( ${#${(f)out}} < 3 )); then
+    local alt; alt=$(_run_help "$@" -h)
+    (( ${#${(f)alt}} > ${#${(f)out}} )) && out=$alt
+  fi
+  [[ -n $out ]] && print -r -- "$out"
+}
+
+# Is SUB listed as a subcommand in CMD's --help? Matches an indented line
+# that starts with SUB, or `cmd SUB` usage lines like hunk's.
+_is_subcommand() {
+  local cmd=$1 sub=$2
+  [[ $sub == [[:alnum:]][[:alnum:]_.:-]# ]] || return 1
+  local text; text=$(_self_help $cmd) || return 1
+  # Here-string, not a pipe: with pipe_fail, `grep -q` exiting early would
+  # make the pipeline fail even on a match.
+  grep -qE "^[[:space:]]+(${cmd:t}[[:space:]]+)?${sub//./\\.}([[:space:],:]|$)" <<< $text
+}
+
+# Print the help text for `cmd` or `cmd sub`. Returns 1 if nothing found.
+_help_text() {
+  local cmd=$1 sub=${2:-}
+  if [[ -n $sub ]]; then
+    if _has_man "${cmd:t}-$sub"; then _man_text "${cmd:t}-$sub"; return; fi
+    if _is_subcommand $cmd $sub; then _self_help $cmd $sub; return; fi
+  fi
+  if _has_man $cmd; then _man_text $cmd; return; fi
+  _self_help $cmd
+}
+
+# From the command-line words, work out the command and (likely) subcommand:
+# the first non-flag word after the command, if it's a known subcommand.
+# Sets REPLY=(cmd [sub]).
+_resolve() {
+  local -a ws=("$@") rest
+  reply=()
+  (( ${#ws} )) || return 1
+  reply=($ws[1])
+  rest=(${ws[2,-1]:#-*})
+  rest=(${rest:#})
+  if (( ${#rest} )) && { _has_man "${ws[1]:t}-$rest[1]" || _is_subcommand $ws[1] $rest[1] }; then
+    reply+=($rest[1])
+  fi
+}
+
+# Line number where FLAG is defined in help text on stdin: a line whose
+# leading tokens are options (`-i, --ignore-case`, `--depth <n>`,
+# `--color[=WHEN]`) and one of them is FLAG.
+_flag_line() {
+  awk -v flag="$1" '
+    {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      n = split(line, tok, /[ \t,]+/)
+      for (i = 1; i <= n && tok[i] ~ /^-/; i++) {
+        t = tok[i]
+        sub(/[=\[<].*$/, "", t)
+        if (t == flag) { print NR; exit }
+      }
+    }'
+}
+
+_colorize() {
+  if [[ -n $BAT ]]; then
+    $BAT --language=man --style=plain --color=always --paging=never
+  else
+    cat
+  fi
+}
+
+# Help text starting at FLAG's definition, so scrolling the preview keeps
+# going through the rest of the page.
+_show_flag() {
+  local flag=$1; shift
+  local text n
+  text=$(_help_text "$@") || { print "No help found for $*"; return }
+  n=$(print -r -- "$text" | _flag_line "$flag")
+  if [[ -z $n ]]; then
+    # --no-foo is usually documented under --foo.
+    [[ $flag == --no-* ]] && n=$(print -r -- "$text" | _flag_line "--${flag#--no-}")
+  fi
+  if [[ -n $n ]]; then
+    print -r -- "$text" | sed -n "${n},\$p" | _colorize
+  else
+    print -P "%F{yellow}$flag isn't described in the help for $*; showing the whole page.%f\n"
+    print -r -- "$text" | _colorize
+  fi
+}
+
+cmd_preview() {
+  local word=$1 group=$2 realpath=$3 desc=$4
+  shift 4; [[ ${1:-} == -- ]] && shift
+  local -a ws=("$@")
+
+  # Files and directories.
+  if [[ -n $realpath && -e ${~realpath} ]]; then
+    local p=${~realpath}
+    if [[ -d $p ]]; then
+      if (( $+commands[eza] )); then eza -1 --color=always --icons -a $p
+      else ls -1 -G $p; fi
+    elif [[ -n $BAT ]]; then
+      $BAT --style=numbers --color=always --line-range :300 $p
+    else
+      head -300 $p
+    fi
+    return
+  fi
+
+  # Completing the command name itself: examples first, then the man page.
+  if (( ${#ws} <= 1 )); then
+    if (( $+commands[tldr] )) && tldr --color always $word 2>/dev/null; then return; fi
+    _help_text $word | _colorize && return
+    print -r -- $desc; return
+  fi
+
+  _resolve "${(@)ws[1,-2]}"
+  local -a ctx=($reply)
+
+  # A flag: jump to where it's defined.
+  if [[ $word == -* ]]; then
+    _show_flag $word $ctx
+    return
+  fi
+
+  # A subcommand candidate (`git cl<Tab>`, `hunk <Tab>`).
+  if (( ${#ctx} == 1 )); then
+    local text
+    if text=$(_help_text $ctx[1] $word) && [[ -n $text ]]; then
+      if _has_man "${ctx[1]:t}-$word" || _is_subcommand $ctx[1] $word; then
+        print -r -- $text | _colorize
+        return
+      fi
+    fi
+  fi
+
+  # Anything else (branches, hosts, values): the completion's own description.
+  print -r -- ${desc:-$word}
+}
+
+cmd_page() {
+  local flag=""
+  if [[ ${1:-} == --flag ]]; then flag=$2; shift 2; fi
+  (( $# )) || { print -u2 "usage: cmd-help page [--flag FLAG] WORDS..."; return 2 }
+  _resolve "$@"
+  local -a ctx=($reply)
+  WIDTH=${COLUMNS:-100}
+  local text
+  text=$(_help_text $ctx) || { print -u2 "cmd-help: no man page or --help for ${ctx[*]}"; return 1 }
+  local -a pager=(less -R)
+  if [[ -n $flag ]]; then
+    local n; n=$(print -r -- $text | _flag_line $flag)
+    [[ -n $n ]] && pager=(less -R "+${n}" -j3)
+  fi
+  print -r -- $text | _colorize | $pager
+}
+
+# Open the page that matches a completion candidate / the word under the
+# cursor: a flag's entry, a subcommand's page, or the command's page.
+cmd_open() {
+  local word=$1; shift; [[ ${1:-} == -- ]] && shift
+  local -a ws=("$@")
+  (( ${#ws} <= 1 )) && { cmd_page ${word:-${ws[1]:-}}; return }
+  local -a before=("${(@)ws[1,-2]}")
+  before=(${before:#})
+  if [[ $word == -* ]]; then
+    cmd_page --flag $word $before
+  elif (( ${#before} == 1 )) && [[ -n $word ]] && \
+       { _has_man "${before[1]:t}-$word" || _is_subcommand $before[1] $word }; then
+    cmd_page $before $word
+  else
+    cmd_page $before
+  fi
+}
+
+case ${1:-} in
+  preview) shift; cmd_preview "$@" ;;
+  open)    shift; cmd_open "$@" ;;
+  page)    shift; cmd_page "$@" ;;
+  text)    shift; _resolve "$@" && _help_text $reply ;;
+  *)       print -u2 "usage: cmd-help {preview|page|text} ..."; exit 2 ;;
+esac
