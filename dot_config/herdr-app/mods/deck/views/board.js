@@ -1,10 +1,10 @@
-// Issue board: five stage columns of cards, and the LIST / BOARD toggle.
+// Issue board: six stage columns of cards (Backlog first), and the LIST / BOARD toggle.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { setShared } from "herdr";
 import { boardColumns, boardNote, repoColor } from "../lib/board.js";
 import { minutesSince, prChip } from "../lib/present.js";
-import { MODE_KEY } from "../data.js";
+import { MODE_KEY, currentStore } from "../data.js";
 import { heading, label, stageColor, dot, keyChip } from "./ui.js";
 
 /** LIST / BOARD toggle; `after` runs on a switch (closes an open detail). */
@@ -44,8 +44,10 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
   const toneColor = { hold: k.hold, work: k.work, fail: k.fail, ok: k.ok, muted: k.muted };
   const card = (i) => {
     const on = selected?.key === i.key;
-    const note = boardNote(i);
-    const pc = prChip(i);
+    const entry = i.kind === "backlog";
+    const note = boardNote(i, currentStore().issues);
+    // A backlog card has no PR: the selected one shows its key.
+    const pc = entry ? { text: on ? "S start" : "—" } : prChip(i);
     return v_flex()
       .id("card-" + i.key)
       .flex_none()
@@ -66,7 +68,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .child(div().text_color(k.muted).child(ago(i, now))),
       )
       .child(div().text_color(k.strong).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled"))
-      .child(div().text_color(toneColor[note.tone]).truncate().child(note.text))
+      .child(div().text_color(entry && on ? k.brand : toneColor[note.tone]).truncate().child(note.text))
       .child(
         h_flex()
           .items_center()
@@ -129,7 +131,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
         )
         .child(div().flex_1())
-        .child(div().text_color(k.muted).child("h j k l move · ↵ or click a card to open")),
+        .child(div().text_color(k.muted).child("h l column · j k card · ↵ open · S start · X discard")),
     )
     .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)))
     .child(
@@ -142,7 +144,11 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .border_t(1)
         .border_color(k.line)
         .text_color(k.muted)
-        .child(div().text_color(k.text).child("Cards move by themselves:"))
+        .child(div().text_color(k.text).child("Backlog"))
+        .child(div().child("→"))
+        .child(h_flex().gap(6).child(div().child("Started")).child(div().text_color(k.text).child("S, S")))
+        .child(div().text_color(k.line).child("|"))
+        .child(div().text_color(k.text).child("Then cards move by themselves:"))
         .child(div().child("Started"))
         .child(div().child("→"))
         .child(h_flex().gap(6).child(div().child("Build")).child(div().text_color(k.text).child("first edit")))

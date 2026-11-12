@@ -4,13 +4,15 @@
 // for the issue page (issuepage.js); ↵ and a board card click open that page.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { shared, setShared, notify } from "herdr";
+import { shared, setShared, notify, home } from "herdr";
 import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
   currentStore, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
-  STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY,
+  discardEntry, restoreEntry, STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY, START_ERR_KEY,
 } from "../data.js";
+import { previewPlan, backlogFiler } from "../lib/backlog.js";
+import { startKey } from "./startconfirm.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
 import { mergeButtons, mergeKey } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
@@ -27,6 +29,7 @@ const VIEWS = [
   { value: "failing", text: "Failing checks" },
   { value: "nodata", text: "No data" },
   { value: "landed", text: "Landed" },
+  { value: "discarded", text: "Discarded" },
 ];
 const REVIEW = {
   APPROVED: ["Review: approved", "ok"],
@@ -143,14 +146,19 @@ export function sendDraft(host, cx) {
 }
 
 /**
- * What the detail's keys see: the tab, the options 1–9 answer, whether R has a box.
+ * What the detail's keys see: the tab, the options 1–9 answer, whether R has a
+ * box, and `backlog` (a live backlog entry: only S and X act on it).
  * @param {any} issue @param {boolean} detail whether the detail is on screen
  */
 export function detailKeys(issue, detail) {
-  const tab = shared(TAB_KEY) === "pr" && issue?.pr ? "pr" : "overview";
+  const entry = issue?.kind === "backlog";
+  const tab = shared(TAB_KEY) === "pr" && issue?.pr && !entry ? "pr" : "overview";
   const p = issue?.prompt;
-  const asks = Boolean(detail && issue && tab === "overview" && issue.observed !== false && p && p.kind !== "none");
-  return { tab, options: asks ? p.options ?? [] : [], canReply: Boolean(asks && p.kind === "question") };
+  const asks = Boolean(detail && issue && !entry && tab === "overview" && issue.observed !== false && p && p.kind !== "none");
+  return {
+    tab, options: asks ? p.options ?? [] : [], canReply: Boolean(asks && p.kind === "question"),
+    backlog: Boolean(entry && !issue.discarded),
+  };
 }
 
 /**
@@ -160,6 +168,13 @@ export function detailKeys(issue, detail) {
  */
 export function detailKey(host, a, issue, st, cx) {
   switch (a.type) {
+    case "start":
+      // Opens the confirm; only its second S starts.
+      return st.backlog && startKey(host, issue);
+    case "discard":
+      if (!st.backlog || host.busy) return false;
+      discardEntry(issue);
+      return true;
     case "answer": {
       const o = st.options[a.n - 1];
       if (!o || host.busy) return false;
@@ -207,6 +222,7 @@ export function detailKey(host, a, issue, st, cx) {
  * @param {{ crumb?: string, back?: {label: string, onClick: Function}|null, hint?: any, stacked?: boolean }} [opts]
  */
 export function issueDetail(host, issue, k, cx, opts = {}) {
+  if (issue.kind === "backlog") return backlogDetail(host, issue, k, opts);
   const tab = shared(TAB_KEY) === "pr" && issue.pr ? "pr" : "overview";
   const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
   const col = v_flex().flex_1().min_w(0).h_full();
@@ -215,6 +231,101 @@ export function issueDetail(host, issue, k, cx, opts = {}) {
   const store = currentStore();
   if (opts.stacked) return col.child(hdr).child(overview(host, issue, store, k, true));
   return col.child(hdr).child(h_flex().flex_1().min_h(0).items_stretch().child(overview(host, issue, store, k, false)).child(rail(host, issue, k)));
+}
+
+/** "12m", "3h", "2d" since `t`. */
+function age(t, now) {
+  const m = minutesSince(t, now);
+  return m < 60 ? m + "m" : m < 1440 ? Math.floor(m / 60) + "h" : Math.floor(m / 1440) + "d";
+}
+
+/** An absolute path under the home folder as "~/…". */
+const tilde = (p) => {
+  const h = String(home() ?? "").replace(/\/+$/, "");
+  return h && p.startsWith(h + "/") ? "~" + p.slice(h.length) : p;
+};
+
+/**
+ * A backlog entry's page (the mock's Backlog card): where it came from, the
+ * brief the agent will be told, what starting it does, and S Start agent /
+ * X Discard (a discarded entry: Restore). Start only opens the confirm.
+ */
+function backlogDetail(host, issue, k, opts) {
+  const now = Date.now();
+  const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
+  const hdr = header(issue, crumb, k, opts.back ?? null, opts.hint ?? null, true);
+  const filer = backlogFiler(issue, currentStore().issues);
+  const plan = previewPlan(issue, home());
+  const err = shared(START_ERR_KEY);
+  const failed = err && err.key === issue.key ? String(err.error) : null;
+  const busy = Boolean(host.busy);
+  const fact = (what, value, rest = "") =>
+    h_flex().flex_wrap().gap(0).child(div().child(what + " ")).child(div().text_color(k.strong).child(value)).when(Boolean(rest), (el) => el.child(div().child(rest)));
+  const section = (title, body) => v_flex().gap(6).child(label(title)).child(body);
+  const buttons = h_flex().flex_none().flex_wrap().items_center().gap(8);
+  if (issue.discarded) {
+    buttons.child(button("bk-restore", "Restore", "ghost", () => restoreEntry(issue), busy));
+  } else {
+    buttons
+      .child(button("bk-start", "Start agent", "brand", () => startKey(host, issue), busy, "S"))
+      .child(button("bk-discard", "Discard", "plain", () => discardEntry(issue), busy, "X"));
+  }
+  const body = v_flex()
+    .id("backlog-body")
+    .flex_1()
+    .min_h(0)
+    .gap(18)
+    .overflow_y_scrollbar()
+    .track_scroll(host.bodyScroll)
+    .child(section("Where it came from",
+      h_flex().flex_wrap().items_center().gap(10)
+        .child(div().flex_none().px(7).py(1).border_1().border_color(k.line).child(String(issue.source || "agent").toUpperCase()))
+        .child(filer
+          ? h_flex().flex_wrap().child(div().child("Filed by ")).child(div().text_color(k.strong).child(`${filer.id} · ${filer.title || "untitled"}`)).child(div().child(" while it worked"))
+          : div().child(`Filed by an ${issue.source || "agent"}`)),
+    ))
+    .child(section("Brief · what the agent will be told",
+      div().border_l(2).border_color(k.brand).pl(12).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
+    ))
+    .child(section("When you start it",
+      "error" in plan
+        ? div().text_color(k.fail).child(plan.error)
+        : v_flex().gap(4)
+          .child(fact("Runs git in", tilde(issue.root ?? "")))
+          .child(fact("Worktree", tilde(plan.path)))
+          .child(fact("Branch", plan.branch, " from the repo's HEAD"))
+          .child(fact("Agent", "claude", ", told to use herdr-proof")),
+    ))
+    .when(Boolean(failed), (el) => el.child(
+      v_flex().gap(4).border_1().border_color(k.fail).p(10)
+        .child(div().text_color(k.fail).child("Could not start. Nothing was marked started."))
+        .child(div().text_color(k.strong).line_height(1.5).child(failed)),
+    ));
+  return v_flex().flex_1().min_w(0).h_full().child(hdr).child(
+    v_flex()
+      .flex_1()
+      .min_h(0)
+      .px(22)
+      .py(18)
+      .gap(18)
+      .child(
+        v_flex()
+          .gap(8)
+          .child(heading(issue.title || issue.id, opts.stacked ? 26 : 30).max_h(66).overflow_hidden())
+          .child(
+            h_flex()
+              .items_center()
+              .gap(10)
+              .text_color(k.muted)
+              .child(div().px(8).py(2).border_1().border_color(issue.discarded ? k.line : k.brand).text_color(issue.discarded ? k.muted : k.brand)
+                .child((issue.discarded ? "DISCARDED · " + age(issue.discardedAt, now) : "BACKLOG · " + age(issue.createdAt, now)).toUpperCase()))
+              .child(div().child(issue.repo ?? "no repo"))
+              .child(div().child(issue.discarded ? "· kept 7 days" : "· not started")),
+          ),
+      )
+      .child(body)
+      .child(buttons),
+  );
 }
 
 function tabs(issue, tab, k) {
@@ -320,7 +431,7 @@ function actions(host, issue, k, stacked) {
   if (live && issue.root) {
     row.child(button("act-proof", "Request proof", "plain", (_e, cx) => runFor(host, cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
   }
-  if (issue.stage !== "landed") row.child(button("act-dismiss", "Dismiss", "plain", () => dismiss(issue), busy));
+  if (issue.stage !== "landed" && issue.kind !== "backlog") row.child(button("act-dismiss", "Dismiss", "plain", () => dismiss(issue), busy));
   row.children(mergeButtons(host, issue, "act"));
   if (stacked && issue.pr?.url) {
     row.child(button("act-github", "GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"), false, "O"));
@@ -558,7 +669,7 @@ export default class IssuesView extends View {
     const typing = this.typing && !this.handle.is_focused();
     const a = keyAction(keyOf(e), {
       view: "issues", mode: board ? "board" : "list", tab: st.tab === "pr" ? "changes" : "overview",
-      typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue),
+      typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue), backlog: st.backlog,
     });
     if (!a) return;
     const visible = groupIssues(currentStore().issues, this.filter).flatMap((g) => g.items);
@@ -666,6 +777,7 @@ export default class IssuesView extends View {
     const viewMark = (v) =>
       v === "holding" ? dot(k.hold, 10, true)
         : v === "landed" ? dot(k.ok, 10, true)
+        : v === "discarded" ? dot(k.muted, 10, false)
         : ring(v === "failing" ? k.fail : k.nodata, 0, 10);
     const repos = repoTelemetry(issues);
     return v_flex()
@@ -681,7 +793,7 @@ export default class IssuesView extends View {
       .gap(2)
       .overflow_y_scrollbar()
       .child(this.sideItem("side-command", null, "Command", null, false, () => goTo("deck-command"), "⌥⌘1"))
-      .child(this.sideItem("side-issues", null, "Issues", issues.length, !this.filter, (_e, cx) => {
+      .child(this.sideItem("side-issues", null, "Issues", issues.filter((i) => matchesView(i, null)).length, !this.filter, (_e, cx) => {
         this.filter = null;
         setShared(TAB_KEY, "overview");
         cx.notify();

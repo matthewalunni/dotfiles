@@ -22,7 +22,7 @@ export function nextHolding(prevSince, status, now, replied) {
 }
 
 /** Display names for stages (ids stay as-is; "survey" is shown as "Started"). */
-export const STAGE_LABEL = { survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" };
+export const STAGE_LABEL = { backlog: "Backlog", survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" };
 
 /**
  * Precedence: holding > landed (merged or dismissed) > verify (open PR) > build (commits ahead or uncommitted edits) > survey.

@@ -5,6 +5,7 @@
 import { openOverlay } from "herdr";
 import { mergeState } from "../lib/proof.js";
 import { needsReviewGate } from "../lib/github.js";
+import { mergeDialogAllowed } from "../lib/dialogkeys.js";
 import { merge, mergeAndShip } from "../data.js";
 import { button, act } from "./ui.js";
 
@@ -15,7 +16,8 @@ import { button, act } from "./ui.js";
 const dialogs = () => (globalThis.__deckMergeDialogs ??= new Map());
 const BEAT_STALE_MS = 2500;
 
-function remember(issue, id) {
+/** Records the dialog `id` opened for `issue` (merge dialogs here; the backlog start confirm too). */
+export function remember(issue, id) {
   if (typeof id === "string" && id) dialogs().set(issue.key, { id, beat: Date.now() });
 }
 
@@ -30,8 +32,8 @@ export function forgetDialog(key, id) {
   if (dialogs().get(key)?.id === id) dialogs().delete(key);
 }
 
-/** Whether a merge dialog for `issue` is still open. */
-function dialogOpen(issue) {
+/** Whether a dialog for `issue` is still open (its heartbeat is fresh). */
+export function dialogOpen(issue) {
   const d = dialogs().get(issue.key);
   if (!d) return false;
   if (Date.now() - d.beat < BEAT_STALE_MS) return true;
@@ -52,6 +54,7 @@ export function lockOf(issue) {
  * @param {"anyway"|"merge"|"ship"} [next]
  */
 export function openConfirm(issue, headSha = issue.pr?.headSha ?? null, next = "anyway") {
+  if (!mergeDialogAllowed(issue)) return; // never for a backlog entry
   remember(issue, openOverlay({
     mod: "deck",
     props: { view: "confirm", key: issue.key, headSha, next },
@@ -62,6 +65,7 @@ export function openConfirm(issue, headSha = issue.pr?.headSha ?? null, next = "
 
 /** Review soft gate (views/review.js), then `next` if the person goes on. */
 function openReviewGate(issue, next) {
+  if (!mergeDialogAllowed(issue)) return; // never for a backlog entry
   remember(issue, openOverlay({
     mod: "deck",
     props: { view: "review", key: issue.key, headSha: issue.pr?.headSha ?? null, next },
@@ -76,6 +80,7 @@ function openReviewGate(issue, next) {
  * @returns {any[]}
  */
 export function mergeButtons(host, issue, idPrefix, { ship = true } = {}) {
+  if (issue?.kind === "backlog") return [];
   const m = lockOf(issue);
   const shown = issue.pr?.headSha ?? null;
   const busy = Boolean(host.busy);
@@ -112,7 +117,7 @@ export function mergeButtons(host, issue, idPrefix, { ship = true } = {}) {
  * @param {any} host @param {any} issue @param {boolean} ship
  */
 export function mergeKey(host, issue, ship) {
-  if (!issue?.pr || host.busy) return false;
+  if (!mergeDialogAllowed(issue) || host.busy) return false;
   // One merge dialog per issue: a second M while one is up does nothing.
   if (dialogOpen(issue)) return false;
   const m = lockOf(issue);

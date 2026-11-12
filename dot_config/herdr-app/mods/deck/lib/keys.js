@@ -3,7 +3,9 @@
 /**
  * @typedef {{ key: string, shift: boolean, cmd: boolean, held?: boolean }} Key  held: a key-repeat event
  * @typedef {{ view: "command"|"issues"|"issue", mode: "list"|"board", tab: "overview"|"changes",
- *   typing: boolean, optionCount: number, hasIssue: boolean }} KeyCtx
+ *   typing: boolean, optionCount: number, hasIssue: boolean, backlog?: boolean }} KeyCtx
+ *   backlog: the selected issue is a (not discarded) backlog entry: only S (start,
+ *   which opens the confirm) and X (discard) act on it; the agent keys are off.
  *   tab "changes": the Pull request tab (its file list and diff)
  *   view "issue": the issue page (overview + live thread). j/k step issues,
  *   esc while typing leaves the reply box ("leave"), then goes back.
@@ -62,6 +64,11 @@ function action(ev, ctx) {
   if (k === "v") return issues ? { type: "toggleMode" } : null;
 
   if (!ctx.hasIssue) return null;
+  if (ctx.backlog) {
+    if (k === "s") return { type: "start" };
+    if (k === "x") return { type: "discard" };
+    return null;
+  }
   switch (k) {
     case "r": return { type: "reply" };
     case "t": return { type: "terminal" };

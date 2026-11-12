@@ -37,7 +37,7 @@ export default class ConfirmView extends View {
 
   confirm(cx) {
     const p = props() ?? {};
-    const issue = currentStore().issues.find((i) => i.key === p.key);
+    const issue = currentStore().issues.find((i) => i.key === p.key && i.kind !== "backlog");
     if (!issue || this.busy) return;
     this.busy = true;
     cx.notify();
@@ -68,7 +68,7 @@ export default class ConfirmView extends View {
   render(cx) {
     const k = tokens();
     const p = props() ?? {};
-    const issue = currentStore().issues.find((i) => i.key === p.key) ?? null;
+    const issue = currentStore().issues.find((i) => i.key === p.key && i.kind !== "backlog") ?? null;
     const lock = issue ? lockOf(issue) : { canMerge: false, reasons: [] };
     const reasons = lock.reasons;
     const sha = typeof p.headSha === "string" ? p.headSha.slice(0, 7) : null;

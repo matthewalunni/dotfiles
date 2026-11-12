@@ -63,5 +63,5 @@ test("dirty after merge stays landed", () => {
   assert.equal(stage({ dirty: true, commitsAhead: 2, pr: pr("MERGED") }), "landed");
 });
 test("labels say Started", () => {
-  assert.deepEqual(STAGE_LABEL, { survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" });
+  assert.deepEqual(STAGE_LABEL, { backlog: "Backlog", survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" });
 });

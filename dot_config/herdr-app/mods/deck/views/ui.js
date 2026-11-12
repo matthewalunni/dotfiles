@@ -32,7 +32,7 @@ export function tone(name, k = tokens()) {
 
 /** Stage -> color. */
 export function stageColor(stage, k = tokens()) {
-  return { survey: k.muted, build: k.work, verify: k.work, holding: k.hold, landed: k.ok }[stage] ?? k.muted;
+  return { backlog: k.brand, survey: k.muted, build: k.work, verify: k.work, holding: k.hold, landed: k.ok }[stage] ?? k.muted;
 }
 
 /** Small uppercase letter-spaced label (Barlow 13). */
@@ -72,7 +72,7 @@ export function keyChip(text, border, color) {
 }
 
 /**
- * kind: "primary" (holding amber, black ink), "ghost" (brand outline), "danger"
+ * kind: "primary" (holding amber, black ink), "brand" (brand fill, black ink: Start agent), "ghost" (brand outline), "danger"
  * (fail outline), "plain" (line outline). Disabled buttons don't click.
  * `key` (optional) shows its shortcut as a hint chip before the label.
  */
@@ -80,6 +80,7 @@ export function button(id, text, kind, onClick, disabled = false, key = null) {
   const k = tokens();
   const look = {
     primary: { bg: k.hold, fg: k.holdInk, border: k.hold },
+    brand: { bg: k.brand, fg: k.holdInk, border: k.brand },
     ghost: { bg: null, fg: k.brand, border: k.brand },
     danger: { bg: null, fg: k.fail, border: k.fail },
     plain: { bg: null, fg: k.text, border: k.line },

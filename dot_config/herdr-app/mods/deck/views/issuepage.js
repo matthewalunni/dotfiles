@@ -71,7 +71,7 @@ export default class IssuePage extends View {
     const typing = this.typing && !this.handle.is_focused();
     const a = keyAction(keyOf(e), {
       view: "issue", mode: "list", tab: st.tab === "pr" ? "changes" : "overview",
-      typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue),
+      typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue), backlog: st.backlog,
     });
     if (!a) return;
     switch (a.type) {
@@ -188,7 +188,7 @@ export class ThreadView extends View {
   }
 }
 
-/** The right side when the issue's terminal is gone. */
+/** The right side when the issue's terminal is gone (a backlog entry: "No agent yet"). */
 export class GoneView extends View {
   init() {}
 
@@ -196,6 +196,22 @@ export class GoneView extends View {
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
+    if (issue?.kind === "backlog") {
+      return v_flex()
+        .size_full()
+        .p(8)
+        .bg(k.bg)
+        .border_l(1)
+        .border_color(k.line)
+        .font_family(MONO)
+        .text_size(12)
+        .text_color(k.muted)
+        .child(
+          v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).border_1().border_dashed().border_color(k.line).rounded(10)
+            .child(label("No agent yet", k.muted))
+            .child(div().child(issue.discarded ? "Discarded. Restore it to start an agent." : "Press S to start one. Its live thread shows up here.")),
+        );
+    }
     return v_flex()
       .size_full()
       .items_center()
@@ -217,12 +233,16 @@ const HINTS = [
   ["T", "type in thread"], ["⌘⇧I", "back to overview"], ["M", "merge"],
 ];
 
+const BACKLOG_HINTS = [["esc", "back"], ["j k", "issue"], ["S", "start agent (S again)"], ["X", "discard"]];
+
 /** The key strip along the page's bottom. */
 export class IssueHints extends View {
   init() {}
 
   render() {
+    shared(STORE_KEY);
     const k = tokens();
+    const entry = selectedIssue()?.kind === "backlog";
     return h_flex()
       .size_full()
       .items_center()
@@ -234,8 +254,8 @@ export class IssueHints extends View {
       .font_family(MONO)
       .text_size(11)
       .text_color(k.muted)
-      .children(HINTS.map(([key, what]) => h_flex().flex_none().items_center().gap(6).child(keyChip(key)).child(what)))
+      .children((entry ? BACKLOG_HINTS : HINTS).map(([key, what]) => h_flex().flex_none().items_center().gap(6).child(keyChip(key)).child(what)))
       .child(div().flex_1())
-      .child(div().flex_none().child("Keys go to the overview until you press T"));
+      .child(div().flex_none().child(entry ? "Nothing starts until you press S twice" : "Keys go to the overview until you press T"));
   }
 }

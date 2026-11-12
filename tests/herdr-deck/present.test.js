@@ -16,7 +16,7 @@ const issue = (over = {}) => ({
 
 test("stage order and ring percentages", () => {
   assert.deepEqual(STAGES, ["survey", "build", "verify", "holding", "landed"]);
-  assert.deepEqual(LIST_ORDER, ["holding", "verify", "build", "survey", "landed"]);
+  assert.deepEqual(LIST_ORDER, ["backlog", "holding", "verify", "build", "survey", "landed"]);
   assert.deepEqual(STAGES.map(stagePct), [15, 50, 75, 100, 100]);
   assert.equal(stagePct("nope"), 0);
 });

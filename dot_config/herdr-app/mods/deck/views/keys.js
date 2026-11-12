@@ -16,6 +16,7 @@ const COLS = [
     ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["↵", "Open issue"],
     ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
+    ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"],
   ] },
   { title: "Pull request", tone: "work", rows: [
     ["⇧1 ⇧2", "Overview / Pull request"], ["n  p", "Next / previous file"],
@@ -27,8 +28,9 @@ const COLS = [
 const NOTE =
   "Letter keys only work when Deck has focus. In the Terminal view, typing goes to the agent, " +
   "so only ⌘ shortcuts work there. Merge keys open the review gate and confirm; press the same key " +
-  "again to go on (↵ in the gate reviews the diff). A key never merges on its own.";
-const MOUSE_ONLY = "Dismiss and sidebar filters: mouse only.";
+  "again to go on (↵ in the gate reviews the diff). A key never merges on its own. S on a Backlog card " +
+  "opens the start confirm; only a second S starts an agent.";
+const MOUSE_ONLY = "Dismiss, Restore and sidebar filters: mouse only.";
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {
