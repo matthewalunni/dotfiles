@@ -307,3 +307,35 @@ test("G1: reviewedSha is recorded per issue and survives polls", () => {
   assert.equal(markReviewed(s, "t7|fix/x", a), s, "no-op when unchanged");
   assert.equal(markReviewed(s, "t7|fix/x", "nope"), s, "only a full sha");
 });
+
+const doneQ = { kind: "question", text: "All done. Merge?", options: [] };
+
+test("N1: merge quiets only the done screen showing at merge time", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ, pr: pr() })], 1);
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 2);
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 3);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run git push?"), pr: pr({ state: "MERGED" }) })], 4);
+  assert.equal(get(s, "t7|fix/x").holdingSince, 4);
+  assert.equal(get(s, "t7|fix/x").stage, "holding");
+});
+
+test("N1: merge quiet ends on a different prompt or after 15 s", () => {
+  const start = () => {
+    let s = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ, pr: pr() })], 1);
+    return reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000);
+  };
+  let s = reconcile(start(), [ob({ status: "done", prompt: { kind: "question", text: "Shipped.", options: [] }, pr: pr({ state: "MERGED" }) })], 2000);
+  assert.equal(get(s, "t7|fix/x").holdingSince, 2000);
+  s = reconcile(start(), [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000 + 14999);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000 + 15000);
+  assert.equal(get(s, "t7|fix/x").holdingSince, 16000);
+});
+
+test("N4: same terminal, different root is a new issue", () => {
+  let s = reconcile(emptyStore(), [ob({ terminal: "t1", branch: "main", root: "/a", repo: "taskflow" })], 1);
+  s = reconcile(s, [ob({ terminal: "t1", branch: "feat-x", root: "/b", repo: "taskflow" })], 2);
+  assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2"]);
+});

@@ -16,7 +16,8 @@ import { samePrompt } from "./prompt.js";
  *   commitsAhead: number|null, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
  *   stage: Stage, holdingSince: number|null, awaitingAck: boolean,
- *   answered: Prompt|null, repliedAt: number|null, quiet: boolean, reviewedSha: string|null,
+ *   answered: Prompt|null, repliedAt: number|null, reviewedSha: string|null,
+ *   quiet: boolean, quietPrompt: Prompt|null, quietAt: number|null,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number
  * }} Issue
@@ -148,7 +149,7 @@ export function reconcile(store, obs, now) {
       // Same terminal, new branch: an issue that never got a PR (and has not
       // landed) follows the terminal to the new key instead of leaving a ghost.
       const moved = issues
-        .filter((i) => i.terminal === o.terminal && !seen.has(i.key) && i.stage !== "landed" && !i.pr)
+        .filter((i) => i.terminal === o.terminal && i.root === o.root && !seen.has(i.key) && i.stage !== "landed" && !i.pr)
         .sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))[0];
       if (moved) {
         byKey.delete(moved.key);
@@ -166,11 +167,11 @@ export function reconcile(store, obs, now) {
     const wasLanded = prev?.stage === "landed";
     // A failed gh call keeps the last known PR rather than dropping it.
     const pr = o.pr ?? (o.ghError ? prev?.pr ?? null : null);
-    // Landing (merge seen now, or dismiss) quiets holding until the agent works
-    // again; after that a new blocked/done flags it as usual.
+    // Landing quiets holding. A merge seen now quiets only the done screen that
+    // was showing then (see quietEnds); a dismiss lasts until the agent works.
     const mergedNow = pr?.state === "MERGED" && prev?.pr?.state !== "MERGED";
     const prevQuiet = prev ? prev.quiet ?? wasLanded : false;
-    const quietHeld = prevQuiet && o.status !== "working";
+    const quietHeld = prevQuiet && o.status !== "working" && !quietEnds(prev, o, now);
     const sticky = wasLanded && quietHeld;
     const dismissed = wasLanded && !sticky ? false : prev?.dismissed ?? false;
     const landing = sticky || dismissed || mergedNow;
@@ -183,6 +184,8 @@ export function reconcile(store, obs, now) {
       repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, pr,
       ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
+      quietPrompt: mergedNow ? o.prompt ?? null : quietHeld ? prev?.quietPrompt ?? null : null,
+      quietAt: mergedNow ? now : quietHeld ? prev?.quietAt ?? null : null,
       answered: stillAck ? prev?.answered ?? null : null, repliedAt: stillAck ? prev?.repliedAt ?? null : null,
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
       reviewedSha: prev?.reviewedSha ?? null,
@@ -226,6 +229,19 @@ function ackHeld(prev, o, now) {
 }
 
 /**
+ * Whether a merge's quiet ends now: the agent is blocked, shows a prompt other
+ * than the one showing at merge time, or ACK_MS has passed since the merge.
+ * A dismiss's quiet (no quietAt) never ends here.
+ * @param {Issue|null} prev @param {Observation} o @param {number} now
+ */
+function quietEnds(prev, o, now) {
+  if (typeof prev?.quietAt !== "number") return false;
+  if (o.status === "blocked") return true;
+  if (now - prev.quietAt >= ACK_MS) return true;
+  return Boolean(o.prompt && !samePrompt(prev.quietPrompt ?? NO_PROMPT, o.prompt));
+}
+
+/**
  * Drop expired issues (landed 7 days ago, or unobserved for 7 days) and retire
  * their keys so a still-open terminal does not resurrect them; prune retired.
  * Log events stay; the log is capped.
@@ -255,7 +271,7 @@ function finish(store, now) {
 export function dismiss(store, key, now) {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev) return store;
-  const next = { ...prev, dismissed: true, quiet: true, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null };
+  const next = { ...prev, dismissed: true, quiet: true, quietPrompt: null, quietAt: null, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null };
   next.stage = deriveStage(next);
   if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
   const log = [...store.log, ...diffEvents(prev, next, now)];
@@ -293,7 +309,7 @@ export function updatePr(store, key, fresh, now) {
   const pr = fresh.pr ?? (fresh.ghError ? prev.pr ?? null : null);
   const mergedNow = pr?.state === "MERGED" && prev.pr?.state !== "MERGED";
   const next = { ...prev, pr, ghError: fresh.ghError, claims: fresh.claims };
-  if (mergedNow) Object.assign(next, { holdingSince: null, quiet: true });
+  if (mergedNow) Object.assign(next, { holdingSince: null, quiet: true, quietPrompt: prev.prompt ?? null, quietAt: now });
   const sticky = prev.stage === "landed" && (prev.quiet ?? true);
   next.stage = sticky ? "landed" : deriveStage(next);
   if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
