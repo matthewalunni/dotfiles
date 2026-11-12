@@ -13,7 +13,7 @@ import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
-import { submitTask } from "./lib/newtask.js";
+import { submitTask, backlogExec } from "./lib/newtask.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -726,8 +726,9 @@ export function restoreEntry(entry) {
 }
 
 /**
- * The New task dialog's ⌘↵: runs ~/.local/bin/herdr-backlog (by absolute path:
- * Herdr's exec PATH has no ~/.local/bin) with argv only, timed, source "you".
+ * The New task dialog's ⌘↵: runs ~/.local/bin/herdr-backlog through a login
+ * shell (lib/newtask.js backlogExec: a fixed shell string, the text only as
+ * positional arguments), timed, source "you".
  * On success the inbox is re-read and merged at once and the new card is
  * selected. Returns the dialog's next state (lib/newtask.js submitTask): done,
  * or the script's error with the text kept.
@@ -735,7 +736,10 @@ export function restoreEntry(entry) {
  */
 export function fileTask(form) {
   return submitTask(form, {
-    run: (argv) => sh(home() + "/.local/bin/herdr-backlog", argv, { timeout: T_BACKLOG }),
+    run: (argv) => {
+      const ex = backlogExec(argv);
+      return sh(ex.cmd, ex.args, { timeout: T_BACKLOG });
+    },
     reread: async () => {
       const inbox = await readInbox();
       const prev = currentStore();

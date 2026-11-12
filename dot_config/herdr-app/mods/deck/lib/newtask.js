@@ -82,6 +82,18 @@ export function newTaskArgs(f) {
 }
 
 /**
+ * The script runs through a login shell, so its PATH has node and $HOME is the
+ * user's (Herdr's exec PATH has neither ~/.local/bin nor, reliably, Homebrew).
+ * The shell string is fixed: the text travels only as positional arguments ("$@").
+ */
+export const BACKLOG_SH = 'exec "$HOME/.local/bin/herdr-backlog" "$@"';
+
+/** exec(cmd, args) for herdr-backlog with `argv` (from newTaskArgs). @param {string[]} argv */
+export function backlogExec(argv) {
+  return { cmd: "/bin/zsh", args: ["-lc", BACKLOG_SH, "herdr-backlog", ...argv] };
+}
+
+/**
  * What a key does in the dialog. `field` is the input that has the keyboard
  * ("title" | "brief"), or null. Everything not listed is text for the input:
  * no Deck shortcut ever runs from here. ⌘↵ adds (a held key never does), esc

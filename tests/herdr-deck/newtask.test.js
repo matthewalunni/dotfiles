@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  repoChoices, defaultRepo, newTaskArgs, dialogKeyNewTask, submitTask, findFiled, REQUIRED,
+  repoChoices, defaultRepo, newTaskArgs, dialogKeyNewTask, submitTask, findFiled, REQUIRED, backlogExec, BACKLOG_SH,
 } from "../../dot_config/herdr-app/mods/deck/lib/newtask.js";
 import { keyAction } from "../../dot_config/herdr-app/mods/deck/lib/keys.js";
 import { boardNote } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
@@ -74,6 +74,18 @@ test("newTaskArgs: empty title or brief is the required error", () => {
   assert.deepEqual(newTaskArgs({ title: "t", brief: "b", root: "" }), { error: "Choose a repo" });
   assert.deepEqual(newTaskArgs({ title: "t", brief: "b", root: "rel" }), { error: "Choose a repo" });
   assert.match(newTaskArgs({ title: "t\0", brief: "b", root: "/r" }).error, /NUL/);
+});
+
+test("backlogExec: a login shell runs the script; the text is only positional args", () => {
+  const argv = newTaskArgs({ title: "$(touch /tmp/x)", brief: "b `id` \"q\"", root: "/u/p/taskflow" });
+  const ex = backlogExec(argv);
+  assert.equal(BACKLOG_SH, 'exec "$HOME/.local/bin/herdr-backlog" "$@"');
+  assert.deepEqual(ex, {
+    cmd: "/bin/zsh",
+    args: ["-lc", BACKLOG_SH, "herdr-backlog", "--title", "$(touch /tmp/x)", "--brief", "b `id` \"q\"", "--repo", "/u/p/taskflow", "--source", "you"],
+  });
+  assert.equal(ex.args[4], "$(touch /tmp/x)"); // its own element, never in the shell string
+  assert.ok(!ex.args[1].includes("touch"));
 });
 
 // ------------------------------------------------------------ dialog keys

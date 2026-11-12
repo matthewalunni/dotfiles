@@ -19,6 +19,8 @@ import { MONO, tokens, label, heading, button, keyChip, keyOf } from "./ui.js";
 // Its slot in the dialog registry (merge.js): one New task at a time, and N stays off while it is up.
 const KEY = "deck:newtask";
 const BRIEF_HINT = "What's wrong or wanted, where it lives, what done looks like, and what proof to attach.";
+// The dialog may draw only on the next frame: focus Title once it has (focus.js does the same).
+const SETTLE_MS = 40;
 
 const baseName = (p) => String(p).replace(/\/+$/, "").split("/").pop() || p;
 
@@ -65,7 +67,9 @@ export default class NewTaskView extends View {
     this.field = "title";
     this.handle = cx.focus_handle();
     this.title = InputState.new({ placeholder: "Short title" });
-    this.brief = TextareaState.new({ placeholder: BRIEF_HINT, rows: 5 });
+    // Its placeholder is drawn by the view, so it wraps (the state's own stays on one line).
+    this.brief = TextareaState.new({ rows: 5 });
+    this.brief.on("change", (_e, cx) => cx.notify());
     this.brief.set_soft_wrap(true);
     const on = (state, name) => {
       state.on("focus", (_e, cx) => {
@@ -81,7 +85,22 @@ export default class NewTaskView extends View {
     on(this.brief, "brief");
     // Enter in Title (should the key reach the input): on to Brief.
     this.title.on("submit", () => this.brief.focus());
-    this.title.focus();
+    // The keyboard is in Title at once: now, and again a beat later once the dialog has drawn.
+    const takeTitle = () => {
+      try {
+        if (this.field !== "brief") {
+          this.title.focus();
+          this.field = "title";
+        }
+      } catch {
+        // closed meanwhile
+      }
+    };
+    takeTitle();
+    cx.timer.after(SETTLE_MS, (cx) => {
+      takeTitle();
+      cx.notify();
+    });
     dialogBeat(KEY, p.overlay);
     cx.timer.every(1000, () => dialogBeat(KEY, p.overlay));
   }
@@ -228,13 +247,20 @@ export default class NewTaskView extends View {
           .child(div().text_color(k.muted).truncate().child(this.root ? tilde(this.root) : "No repo yet: choose a folder")),
       )
       .child(field("Title", this.field === "title", Input.new(this.title).w_full().text_size(12).text_color(k.strong)))
-      .child(field("Brief · what the agent will be told", this.field === "brief", Textarea.new(this.brief).w_full().h(96).text_size(12).text_color(k.strong)))
+      .child(field("Brief · what the agent will be told", this.field === "brief",
+        div()
+          .relative()
+          .w_full()
+          .h(96)
+          .when(!this.brief.value(), (el) =>
+            el.child(div().absolute().top(0).left(0).right(0).whitespace_normal().line_height(1.55).text_color(k.muted).child(BRIEF_HINT)))
+          .child(Textarea.new(this.brief).w_full().h(96).text_size(12).text_color(k.strong))))
       .when(Boolean(this.error), (el) => el.child(div().px(10).py(8).border_1().border_color(k.fail).text_color(k.fail).child(String(this.error))))
       .child(
         h_flex()
           .items_center()
           .gap(8)
-          .child(div().flex_1().min_w(0).truncate().text_color(k.muted).child("tab next field · typing never triggers shortcuts"))
+          .child(div().flex_1().min_w(0).text_color(k.muted).child("tab next field · ⌘↵ add · esc cancel"))
           .child(button("nt-cancel", "Cancel", "plain", () => this.shut(), false, "esc"))
           .child(button("nt-add", this.busy ? "Adding…" : "Add to Backlog", "brand", (_e, cx) => this.submit(cx), this.busy, "⌘↵")),
       );
