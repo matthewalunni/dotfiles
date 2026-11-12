@@ -254,10 +254,12 @@ export async function runStart(entry, home, io) {
       return { ok: false, error: "git worktree add failed: " + String(g?.stderr || g?.stdout || "unknown error").trim() };
     }
   }
-  const what = entry.terminal ? "terminal" : "agent";
+  // Only the New task dialog sets terminal: true; a store issue's terminal id never counts.
+  const shell = entry.terminal === true;
+  const what = shell ? "terminal" : "agent";
   const lost = "Worktree created at " + plan.path + ", but the " + what + " didn't start — open it from Herdr or " + (io.again ?? "press S again");
   try {
-    await io.spaceNew(spaceNewArgs(plan, Boolean(entry.terminal)));
+    await io.spaceNew(spaceNewArgs(plan, shell));
   } catch (e) {
     io.pending?.(plan);
     return { ok: false, error: lost + " (" + errText(e) + ")" };

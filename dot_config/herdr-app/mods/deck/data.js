@@ -774,8 +774,13 @@ export async function startNow(form) {
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
       select: (plan) => {
         const at = (p) => typeof p === "string" && (p === plan.path || p.startsWith(plan.path + "/"));
-        const sp = (spaces() ?? []).find((s) => at(s.folder));
-        if (sp) run("space.select", { id: sp.id });
+        // Best effort: the agent has started; a failed switch must not read as a failed start.
+        try {
+          const sp = (spaces() ?? []).find((s) => at(s.folder));
+          if (sp) run("space.select", { id: sp.id });
+        } catch {
+          // stay where we are
+        }
       },
     });
   } finally {
