@@ -113,7 +113,7 @@ test("parseDiff tolerates binary and rename headers", () => {
   const d = [
     "diff --git a/img.png b/img.png", "index 1..2 100644", "Binary files a/img.png and b/img.png differ",
     "diff --git a/old name.js b/new name.js", "similarity index 90%", "rename from old name.js", "rename to new name.js",
-    "index 1..2 100644", "--- a/old name.js", "+++ b/new name.js", "@@ -1,2 +1,2 @@", " a", "-b", "+c", "\\ No newline at end of file",
+    "index 1..2 100644", "--- a/old name.js", "+++ b/new name.js\t", "@@ -1,2 +1,2 @@", " a", "-b", "+c", "\\ No newline at end of file",
     "diff --git a/gone.txt b/gone.txt", "deleted file mode 100644", "--- a/gone.txt", "+++ /dev/null", "@@ -1 +0,0 @@", "--- starts with dashes",
   ].join("\n");
   const f = parseDiff(d);

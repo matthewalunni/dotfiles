@@ -127,7 +127,7 @@ export function parseDiff(text) {
     if (!hunk) {
       // File header section: only the new path matters.
       if (line.startsWith("rename to ")) file.path = line.slice(10);
-      else if (line.startsWith("+++ b/")) file.path = line.slice(6);
+      else if (line.startsWith("+++ b/")) file.path = line.slice(6).replace(/\t$/, "");
       continue;
     }
     const sign = line[0];
