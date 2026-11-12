@@ -457,14 +457,15 @@ async function doMerge(issue, sha, recheck) {
 /**
  * Merge only when the lock is open (open PR, every claim PASS), both on the
  * store's copy and on a fresh read right before merging, and only the head
- * shown on screen (`shownSha`, the issue's pr.headSha the view drew).
- * @param {Issue} issue @param {string|null} [shownSha]
+ * shown on screen (`shownSha`, the issue's pr.headSha the view drew; required).
+ * @param {Issue} issue @param {string|null} shownSha
  * @returns {Promise<{ok: boolean, error: string|null}>}
  */
 export async function merge(issue, shownSha) {
   const it = latest(issue);
-  const shown = shownSha ?? it.pr?.headSha ?? null;
-  if (!shown) return { ok: false, error: "unknown head commit" };
+  // Only the head the screen showed; no fallback to the store's.
+  if (!shownSha) return { ok: false, error: "Branch moved — review again" };
+  const shown = shownSha;
   const head = headCheck(shown, it.pr?.headSha ?? null);
   if (!head.ok) return { ok: false, error: head.error };
   if (!mergeState(it.pr, it.ghError, it.claims ?? []).canMerge) return { ok: false, error: "proof incomplete" };
@@ -489,7 +490,7 @@ export async function mergeAnyway(issue, headSha) {
 
 /**
  * Merge (same lock and shown head as merge) and, only if it succeeded, tell the agent to ship.
- * @param {Issue} issue @param {string|null} [shownSha]
+ * @param {Issue} issue @param {string|null} shownSha
  */
 export async function mergeAndShip(issue, shownSha) {
   const m = await merge(issue, shownSha);

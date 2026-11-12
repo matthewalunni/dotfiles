@@ -43,7 +43,7 @@ export default class ReviewGateView extends View {
     const ship = p.next === "ship";
     this.busy = true;
     cx.notify();
-    act(cx, () => (ship ? mergeAndShip(issue, p.headSha ?? null) : merge(issue, p.headSha ?? null)), ship ? "Merge + ship failed" : "Merge failed", (_r, cx) => {
+    act(cx, () => (ship ? mergeAndShip(issue, p.headSha) : merge(issue, p.headSha)), ship ? "Merge + ship failed" : "Merge failed", (_r, cx) => {
       this.busy = false;
       this.shut();
       cx.notify();

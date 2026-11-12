@@ -14,7 +14,7 @@ const DIFF_TIMEOUT = 15_000;
 const LINE_CAP = 1500;
 const CACHE_MAX = 8;
 
-/** diff key -> { rows, sizes, fileRow, paths, truncated } | { error } */
+/** diff key -> { rows, sizes, fileRow, paths, truncated, sha } | { error } */
 const cache = new Map();
 /** diff keys being fetched (one fetch per key across copies). */
 const loading = new Set();
@@ -32,14 +32,25 @@ function fetchDiff(issue, key, cx) {
   loading.add(key);
   const n = String(issue.pr.number);
   const root = issue.root;
+  // GitHub's head right now, or null. Read before and after the diff so the
+  // diff is tied to one sha (a push mid-fetch discards it).
+  const head = async () => {
+    const r = await exec("gh", ["pr", "view", n, "--json", "headRefOid", "-q", ".headRefOid"], { cwd: root, timeout: DIFF_TIMEOUT });
+    const sha = r.code === 0 ? String(r.stdout ?? "").trim() : "";
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  };
   cx.spawn(async (cx) => {
     try {
+      const before = await head();
       const r = await exec("gh", ["pr", "diff", n], { cwd: root, timeout: DIFF_TIMEOUT });
+      const after = r.code === 0 ? await head() : null;
       if (r.code !== 0) {
         remember(key, { error: String(r.stderr || r.stdout || "gh pr diff failed").trim().split("\n")[0] });
+      } else if (!before || before !== after) {
+        remember(key, { error: "the branch moved while loading" });
       } else {
         const files = parseDiff(String(r.stdout ?? ""));
-        remember(key, { ...diffRows(files, LINE_CAP), paths: files.map((f) => f.path) });
+        remember(key, { ...diffRows(files, LINE_CAP), paths: files.map((f) => f.path), sha: before });
       }
     } catch (e) {
       remember(key, { error: String(e?.message ?? e) });
@@ -251,10 +262,10 @@ export function prTab(host, issue, k, cx, withTabs) {
           .size_full(),
       )
       .child(Scrollbar.vertical("pr-diff-" + pr.number).absolute().inset_0());
-    // The diff for this head is on screen now (the cache key carries headSha):
-    // record it for the review soft gate. Deferred, so render doesn't write state.
+    // The diff on screen was fetched at diff.sha; record it for the review soft
+    // gate only when that is the head shown. Deferred, so render doesn't write state.
     const head = pr.headSha;
-    if (head && issue.reviewedSha !== head) cx.spawn(async () => markDiffReviewed(issue, head));
+    if (head && diff.sha === head && issue.reviewedSha !== head) cx.spawn(async () => markDiffReviewed(issue, head));
   }
 
   // Merge bar.
