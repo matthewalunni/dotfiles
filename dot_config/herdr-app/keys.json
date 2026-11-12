@@ -130,7 +130,8 @@
     "cmd-alt-2": "deck.go:issues",
     "cmd-alt-3": "deck.go:terminal",
     "cmd-shift-j": "deck.next-holding",
-    "cmd-shift-i": "deck.agent-issue"
+    "cmd-shift-i": "deck.agent-issue",
+    "cmd-shift-l": "layout.switch:main"
   },
   "terminal": {
     "cmd-f": "terminal.search",

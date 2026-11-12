@@ -36,8 +36,14 @@ test("n/p only on the changes tab", () => {
 });
 test("shift digits pick tabs in both spellings", () => {
   assert.deepEqual(keyAction(k("1", { shift: true }), ctx()), { type: "tab", tab: "overview" });
+  assert.deepEqual(keyAction(k("!"), ctx()), { type: "tab", tab: "overview" });
   assert.deepEqual(keyAction(k("@"), ctx()), { type: "tab", tab: "pr" });
-  assert.deepEqual(keyAction(k("#", { shift: true }), ctx()), { type: "tab", tab: "changes" });
+  assert.deepEqual(keyAction(k("2", { shift: true }), ctx()), { type: "tab", tab: "pr" });
+});
+test("two tabs: shift-3 picks nothing", () => {
+  assert.equal(keyAction(k("#"), ctx()), null);
+  assert.equal(keyAction(k("#", { shift: true }), ctx()), null);
+  assert.equal(keyAction(k("3", { shift: true }), ctx({ tab: "changes" })), null);
 });
 test("action letters and merge", () => {
   assert.deepEqual(keyAction(k("r"), ctx()), { type: "reply" });

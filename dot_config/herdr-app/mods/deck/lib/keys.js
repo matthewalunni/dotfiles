@@ -2,12 +2,14 @@
 
 /**
  * @typedef {{ key: string, shift: boolean, cmd: boolean, held?: boolean }} Key  held: a key-repeat event
- * @typedef {{ view: "command"|"issues", mode: "list"|"board", tab: "overview"|"pr"|"changes",
+ * @typedef {{ view: "command"|"issues", mode: "list"|"board", tab: "overview"|"changes",
  *   typing: boolean, optionCount: number, hasIssue: boolean }} KeyCtx
+ *   tab "changes": the Pull request tab (its file list and diff)
  */
 
-const SHIFT_DIGIT = { "!": 1, "@": 2, "#": 3 };
-const TABS = { 1: "overview", 2: "pr", 3: "changes" };
+// Two tabs: ⇧1 Overview, ⇧2 Pull request.
+const SHIFT_DIGIT = { "!": 1, "@": 2 };
+const TABS = { 1: "overview", 2: "pr" };
 
 // Key repeat (a held key) only navigates.
 const REPEATS = new Set(["move", "col", "file"]);

@@ -1,6 +1,6 @@
 // The "?" keyboard map, opened as a dialog with props { view: "keys" }:
-// three columns (Anywhere / Issues & Command / Pull request) and the safety
-// note, as on the canvas Keyboard map board. Esc closes it (confirm.js pattern).
+// three columns (Anywhere / Issues & Command / Pull request), the safety
+// note and what stays mouse-only, as on the canvas Keyboard map board. Esc closes it (confirm.js pattern).
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, openOverlay, closeOverlay } from "herdr";
@@ -14,12 +14,12 @@ const COLS = [
   ] },
   { title: "Issues & Command", tone: "hold", rows: [
     ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["↵", "Open issue"],
-    ["/", "Filter: next view"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
+    ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
   ] },
   { title: "Pull request", tone: "work", rows: [
-    ["⇧1 ⇧2 ⇧3", "Overview / PR / Changes"], ["n  p", "Next / previous file"],
-    ["P", "Request proof"], ["M", "Merge (gate + confirm, M again)"], ["⇧M", "Merge + ship"],
+    ["⇧1 ⇧2", "Overview / Pull request"], ["n  p", "Next / previous file"],
+    ["P", "Request proof (⇧P on the PR tab)"], ["M", "Merge (gate + confirm, M again)"], ["⇧M", "Merge + ship"],
     ["O", "Open on GitHub"],
   ] },
 ];
@@ -28,6 +28,7 @@ const NOTE =
   "Letter keys only work when Deck has focus. In the Terminal view, typing goes to the agent, " +
   "so only ⌘ shortcuts work there. Merge keys open the review gate and confirm; press the same key " +
   "again to go on (↵ in the gate reviews the diff). A key never merges on its own.";
+const MOUSE_ONLY = "Dismiss and sidebar filters: mouse only.";
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {
@@ -99,6 +100,16 @@ export default class KeysView extends View {
       )
       .child(h_flex().flex_none().items_start().gap(26).children(COLS.map(column)))
       .child(div().flex_1())
-      .child(div().pt(14).border_t(1).border_color(k.line).text_color(k.muted).line_height(1.6).child(NOTE));
+      .child(
+        v_flex()
+          .pt(14)
+          .gap(6)
+          .border_t(1)
+          .border_color(k.line)
+          .text_color(k.muted)
+          .line_height(1.6)
+          .child(div().child(NOTE))
+          .child(div().child(MOUSE_ONLY)),
+      );
   }
 }
