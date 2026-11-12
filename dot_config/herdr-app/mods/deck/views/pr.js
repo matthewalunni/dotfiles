@@ -27,6 +27,16 @@ function remember(key, value) {
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
+/**
+ * The loaded diff's files for `issue` (for n / p), or null while it loads or failed.
+ * @returns {{paths: string[], fileRow: number[]}|null}
+ */
+export function diffFiles(issue) {
+  if (!issue?.pr || !issue.root) return null;
+  const d = cache.get(diffKey(issue));
+  return d && !d.error && d.paths?.length ? { paths: d.paths, fileRow: d.fileRow } : null;
+}
+
 function fetchDiff(issue, key, cx) {
   if (loading.has(key)) return;
   loading.add(key);
@@ -188,6 +198,7 @@ export function prTab(host, issue, k, cx, withTabs) {
     .py(12)
     .gap(2)
     .overflow_y_scrollbar()
+    .child(h_flex().flex_none().px(16).pb(6).gap(4).text_size(11).text_color(k.muted).child(div().text_color(k.text).child("n p")).child("next / previous file"))
     .children(
       files.map((f) => {
         const at = fileRowOf(f.path);
@@ -198,7 +209,11 @@ export function prTab(host, issue, k, cx, withTabs) {
           .gap(8)
           .px(16)
           .py(7)
-          .when(at >= 0, (el) => el.cursor_pointer().hover((s) => s.bg(k.raised)).on_click(() => host.diffScroll.scroll_to_item(at, "top")))
+          .when(host.filePath === f.path, (el) => el.bg(k.raised))
+          .when(at >= 0, (el) => el.cursor_pointer().hover((s) => s.bg(k.raised)).on_click(() => {
+            host.filePath = f.path;
+            host.diffScroll.scroll_to_item(at, "top");
+          }))
           .child(dot(f.add && !f.del ? k.ok : f.del && !f.add ? k.fail : k.brand, 6))
           .child(div().flex_1().min_w(0).truncate().text_color(k.text).child(f.path.split("/").pop()))
           .child(div().flex_none().text_color(k.ok).child("+" + f.add))

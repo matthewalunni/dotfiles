@@ -119,6 +119,13 @@
     "ctrl-a shift-g": "mod.open:old-new-worktree",
     "ctrl-a space": "mod.open:old-rotate-split"
   },
+  "layout:deck": {
+    "cmd-alt-1": "deck.go:command",
+    "cmd-alt-2": "deck.go:issues",
+    "cmd-alt-3": "deck.go:terminal",
+    "cmd-shift-j": "deck.next-holding",
+    "cmd-shift-i": "deck.agent-issue"
+  },
   "terminal": {
     "cmd-f": "terminal.search",
     "cmd-c": "terminal.copy",

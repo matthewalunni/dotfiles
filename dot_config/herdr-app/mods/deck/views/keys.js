@@ -1,0 +1,104 @@
+// The "?" keyboard map, opened as a dialog with props { view: "keys" }:
+// three columns (Anywhere / Issues & Command / Pull request) and the safety
+// note, as on the canvas Keyboard map board. Esc closes it (confirm.js pattern).
+import { View, div } from "gpui-kit";
+import { h_flex, v_flex } from "gpui-base";
+import { props, openOverlay, closeOverlay } from "herdr";
+import { BARLOW, MONO, tokens, spaced } from "./ui.js";
+
+const COLS = [
+  { title: "Anywhere", tone: "brand", rows: [
+    ["⌥⌘1", "Command Center"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"],
+    ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"],
+    ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
+  ] },
+  { title: "Issues & Command", tone: "hold", rows: [
+    ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["↵", "Open issue"],
+    ["/", "Filter: next view"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
+    ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
+  ] },
+  { title: "Pull request", tone: "work", rows: [
+    ["⇧1 ⇧2 ⇧3", "Overview / PR / Changes"], ["n  p", "Next / previous file"],
+    ["P", "Request proof"], ["M", "Merge (gate + confirm)"], ["⇧M", "Merge + ship"],
+    ["O", "Open on GitHub"],
+  ] },
+];
+
+const NOTE =
+  "Letter keys only work when Deck has focus. In the Terminal view, typing goes to the agent, " +
+  "so only ⌘ shortcuts work there. Merge keys still open the review gate and confirm. " +
+  "A key never merges on its own.";
+
+/** Opens the keyboard map over the window. */
+export function openKeys() {
+  openOverlay({ mod: "deck", props: { view: "keys" }, kind: "dialog", width: 1000, height: 600 });
+}
+
+export default class KeysView extends View {
+  init(_p, cx) {
+    this.handle = cx.focus_handle();
+    this.handle.focus();
+  }
+
+  shut() {
+    const id = (props() ?? {}).overlay;
+    if (id) closeOverlay(id);
+  }
+
+  render(_cx) {
+    const k = tokens();
+    const color = { brand: k.brand, hold: k.hold, work: k.work };
+    const column = (c) =>
+      v_flex()
+        .flex_1()
+        .min_w(0)
+        .gap(9)
+        .child(
+          div()
+            .pb(6)
+            .border_b(1)
+            .border_color(k.line)
+            .font_family(BARLOW)
+            .font_weight(600)
+            .text_size(13)
+            .text_color(color[c.tone])
+            .child(spaced(c.title)),
+        )
+        .children(
+          c.rows.map(([key, what]) =>
+            h_flex()
+              .items_center()
+              .gap(12)
+              .child(div().flex_none().min_w(74).px(7).py(2).border_1().border_color(k.line).bg(k.bg).text_color(k.strong).text_center().whitespace_nowrap().child(key))
+              .child(div().flex_1().min_w(0).truncate().child(what)),
+          ),
+        );
+    return v_flex()
+      .id("deck-keys")
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => {
+        if (e.key !== "escape" && e.key !== "?" && e.key_char !== "?") return;
+        cx.stop_propagation();
+        this.shut();
+      })
+      .size_full()
+      .min_h(0)
+      .px(30)
+      .py(26)
+      .gap(22)
+      .bg(k.panel)
+      .font_family(MONO)
+      .text_size(12)
+      .text_color(k.text)
+      .child(
+        h_flex()
+          .items_baseline()
+          .gap(14)
+          .child(div().font_family(BARLOW).font_weight(700).text_size(26).text_color(k.strong).child(spaced("Keyboard")))
+          .child(div().text_color(k.muted).child("Press ? anywhere in Deck · esc closes")),
+      )
+      .child(h_flex().flex_none().items_start().gap(26).children(COLS.map(column)))
+      .child(div().flex_1())
+      .child(div().pt(14).border_t(1).border_color(k.line).text_color(k.muted).line_height(1.6).child(NOTE));
+  }
+}

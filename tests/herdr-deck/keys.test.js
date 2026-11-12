@@ -68,3 +68,8 @@ test("shift-j/k/r/t/o behave like the plain keys", () => {
     assert.notEqual(keyAction(k(key, { shift: true }), ctx()), null);
   }
 });
+test("shift with a digit past 3 is not an answer", () => {
+  // GPUI may report shift-4 as key "4" + shift: that is "$", never option 4.
+  for (const key of ["4", "5", "9"]) assert.equal(keyAction(k(key, { shift: true }), ctx({ optionCount: 9 })), null);
+  assert.equal(keyAction(k("$"), ctx({ optionCount: 9 })), null);
+});

@@ -9,7 +9,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, setShared } from "herdr";
 import { currentStore, merge, mergeAndShip, showView, SEL_KEY, TAB_KEY } from "../data.js";
 import { openConfirm } from "./merge.js";
-import { MONO, tokens, heading, button, act } from "./ui.js";
+import { MONO, tokens, heading, button, act, keyChip } from "./ui.js";
 
 export default class ReviewGateView extends View {
   init(_p, cx) {
@@ -76,7 +76,7 @@ export default class ReviewGateView extends View {
         h_flex()
           .items_center()
           .child(div().flex_1().child(heading("You haven't opened this diff yet", 22)))
-          .child(div().text_size(11).text_color(k.muted).child("Esc")),
+          .child(keyChip("esc")),
       )
       .child(
         div()
@@ -89,7 +89,7 @@ export default class ReviewGateView extends View {
         h_flex()
           .justify_end()
           .gap(8)
-          .child(button("review-cancel", "Cancel", "plain", () => this.shut()))
+          .child(button("review-cancel", "Cancel", "plain", () => this.shut(), false, "esc"))
           .child(button("review-skip", this.busy ? "Merging…" : "Merge without reviewing", "ghost", (_e, cx) => this.proceed(cx), this.busy || !issue))
           .child(button("review-open", "Review diff", "primary", () => this.review(), this.busy || !issue)),
       );

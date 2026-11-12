@@ -54,11 +54,29 @@ export function heading(text, size = 18, color) {
     .child(size >= 22 ? s.toUpperCase() : spaced(s));
 }
 
+/** A key hint chip: 10 px mono, bordered (the canvas's keyboard boards). */
+export function keyChip(text, border, color) {
+  const k = tokens();
+  return div()
+    .flex_none()
+    .px(4)
+    .border_1()
+    .border_color(border ?? k.line)
+    .font_family(MONO)
+    .font_weight(400)
+    .text_size(10)
+    .line_height(1.3)
+    .text_color(color ?? k.muted)
+    .whitespace_nowrap()
+    .child(String(text));
+}
+
 /**
  * kind: "primary" (holding amber, black ink), "ghost" (brand outline), "danger"
  * (fail outline), "plain" (line outline). Disabled buttons don't click.
+ * `key` (optional) shows its shortcut as a hint chip before the label.
  */
-export function button(id, text, kind, onClick, disabled = false) {
+export function button(id, text, kind, onClick, disabled = false, key = null) {
   const k = tokens();
   const look = {
     primary: { bg: k.hold, fg: k.holdInk, border: k.hold },
@@ -81,6 +99,7 @@ export function button(id, text, kind, onClick, disabled = false) {
     .text_size(14)
     .text_color(look.fg)
     .whitespace_nowrap()
+    .when(Boolean(key), (b) => b.gap(7).child(keyChip(key, look.bg ? look.fg : null, look.bg ? look.fg : null)))
     .child(spaced(text));
   if (look.bg) el = el.bg(look.bg);
   if (disabled) return el.opacity(0.4);
@@ -153,4 +172,13 @@ export function act(cx, fn, failTitle, onDone) {
     else if (r && r.ok && r.error) notify({ title: r.error, level: "warning" });
     onDone?.(r, cx);
   });
+}
+
+/**
+ * A gpui KeyEvent as lib/keys.js reads it. Any of cmd / ctrl / alt counts as
+ * "cmd": those chords belong to keys.json or to typing, never to a Deck key.
+ */
+export function keyOf(e) {
+  const m = e?.modifiers ?? {};
+  return { key: String(e?.key ?? ""), shift: Boolean(m.shift), cmd: Boolean(m.platform || m.control || m.alt) };
 }

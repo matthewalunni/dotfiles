@@ -5,18 +5,22 @@ import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared, setShared } from "herdr";
 import { pickDecision } from "../lib/stage.js";
 import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm } from "../lib/present.js";
-import { currentStore, showView, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
-import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced } from "./ui.js";
-import { mergeButtons } from "./merge.js";
+import { keyAction } from "../lib/keys.js";
+import { currentStore, showView, focusTerminal, openUrl, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
+import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
+import { mergeButtons, mergeKey } from "./merge.js";
+import { openKeys } from "./keys.js";
+import { registerFocus, focusView } from "./focus.js";
 
 const STAGE_LABEL = { survey: "Survey", build: "Build", verify: "Verify", holding: "Holding · you", landed: "Landed" };
 const pad2 = (n) => String(n).padStart(2, "0");
 
-/** Open an issue in the Issues view. */
+/** Open an issue in the Issues view (and give that view the keyboard). */
 function inspect(issue) {
   setShared(SEL_KEY, issue.key);
   setShared(TAB_KEY, "overview");
   showView("deck-issues");
+  focusView("deck-issues");
 }
 
 /** One claim as a readout: "NAME PASS". */
@@ -35,8 +39,50 @@ export default class CommandView extends View {
   init(_p, cx) {
     this.scroll = ScrollHandle.new();
     this.busy = null;
+    this.cur = null; // the row j/k moves (an issue key); default: the decision
+    this.order = []; // the list's issues, top to bottom (set in render)
+    this.rowAt = new Map(); // issue key -> child index in the list (for scrolling)
+    this.handle = cx.focus_handle();
+    registerFocus("deck-command", this.handle);
     // Redraw each minute so T+ minutes move.
     cx.timer.every(60_000, (cx) => cx.notify());
+  }
+
+  /** The row the keys act on: the cursor, else the decision, else the first. */
+  cursor() {
+    return this.order.find((i) => i.key === this.cur) ?? this.order.find((i) => i.key === this.decisionKey) ?? this.order[0] ?? null;
+  }
+
+  onKey(e, cx) {
+    const issue = this.cursor();
+    // 1–9 and P send to an agent; Command shows no options, so they stay off here.
+    const a = keyAction(keyOf(e), { view: "command", mode: "list", tab: "overview", typing: false, optionCount: 0, hasIssue: Boolean(issue) });
+    if (!a) return;
+    switch (a.type) {
+      case "move": {
+        if (!issue) return;
+        const at = this.order.indexOf(issue);
+        const next = this.order[Math.max(0, Math.min(this.order.length - 1, at + a.dy))];
+        this.cur = next.key;
+        const row = this.rowAt.get(next.key);
+        if (row != null) this.scroll.scroll_to_item(row);
+        break;
+      }
+      case "open": inspect(issue); break;
+      case "reply":
+        // Opens the issue with its reply box focused (when it has one).
+        globalThis.__deckReplyFocus = issue.key;
+        inspect(issue);
+        break;
+      case "terminal": if (issue.observed !== false) focusTerminal(issue); break;
+      case "github": if (issue.pr?.url) act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"); break;
+      case "merge": mergeKey(this, issue, false); break;
+      case "mergeShip": mergeKey(this, issue, true); break;
+      case "help": openKeys(); break;
+      default: return;
+    }
+    cx.stop_propagation();
+    cx.notify();
   }
 
   band(issue, k) {
@@ -87,7 +133,7 @@ export default class CommandView extends View {
               .items_center()
               .gap(10)
               .child(readouts)
-              .child(button("band-inspect", "Inspect", "ghost", () => inspect(issue)))
+              .child(button("band-inspect", "Inspect", "ghost", () => inspect(issue), false, "↵"))
               .children(mergeButtons(this, issue, "band")),
           ),
       );
@@ -118,7 +164,7 @@ export default class CommandView extends View {
       );
   }
 
-  row(issue, k) {
+  row(issue, k, on) {
     const c = stageColor(issue.stage, k);
     return h_flex()
       .id("cmd-row-" + issue.key)
@@ -130,8 +176,10 @@ export default class CommandView extends View {
       .border_t(1)
       .border_color(k.line)
       .cursor_pointer()
+      .when(on, (el) => el.bg(k.raised))
       .hover((s) => s.bg(k.raised))
       .on_click(() => inspect(issue))
+      .child(div().flex_none().w(2).h(16).when(on, (el) => el.bg(k.brand)))
       .child(ring(c, stagePct(issue.stage)))
       .child(div().w(52).flex_none().text_color(k.muted).truncate().child(issue.id))
       .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(issue.title || "untitled"))
@@ -142,8 +190,15 @@ export default class CommandView extends View {
   list(issues, k) {
     const holding = issues.filter((i) => i.stage === "holding").sort((a, b) => (a.holdingSince ?? 0) - (b.holdingSince ?? 0));
     const flying = issues.filter((i) => i.stage !== "holding" && i.stage !== "landed");
+    this.order = [...holding, ...flying];
+    const curKey = this.cursor()?.key ?? null;
+    this.rowAt = new Map();
     const rows = [];
-    if (holding.length) for (const i of holding) rows.push(this.row(i, k));
+    const add = (i) => {
+      this.rowAt.set(i.key, rows.length);
+      rows.push(this.row(i, k, i.key === curKey));
+    };
+    if (holding.length) for (const i of holding) add(i);
     else rows.push(div().flex_none().px(14).py(10).border_t(1).border_color(k.line).text_color(k.muted).child("Nothing is waiting on you."));
     if (flying.length) {
       rows.push(
@@ -159,7 +214,7 @@ export default class CommandView extends View {
           .child(label("In flight", k.work))
           .child(div().text_color(k.muted).child(pad2(flying.length))),
       );
-      for (const i of flying) rows.push(this.row(i, k));
+      for (const i of flying) add(i);
     }
     return panel(
       v_flex()
@@ -175,6 +230,7 @@ export default class CommandView extends View {
             .child(label("Holding for you", k.hold))
             .child(div().text_color(k.muted).child(pad2(holding.length)))
             .child(div().flex_1())
+            .child(h_flex().gap(4).text_color(k.muted).child(div().text_color(k.text).child("j k")).child("move ·").child(div().text_color(k.text).child("↵")).child("open ·").child(div().text_color(k.text).child("?")).child("keys"))
             .child(div().text_color(k.muted).child(`IN FLIGHT ${pad2(flying.length)}`)),
         )
         .child(v_flex().id("cmd-list").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).children(rows)),
@@ -238,6 +294,8 @@ export default class CommandView extends View {
     const store = currentStore();
     const issues = store.issues;
     const decision = pickDecision(issues.filter((i) => i.stage === "holding"));
+    this.decisionKey = decision?.key ?? null;
+    if (!issues.length) this.order = [];
 
     const left = v_flex().flex_1().min_w(0).min_h(0).gap(16);
     if (decision) left.child(this.band(decision, k));
@@ -257,6 +315,8 @@ export default class CommandView extends View {
 
     return h_flex()
       .id("deck-command")
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.onKey(e, cx))
       .size_full()
       .items_stretch()
       .min_h(0)

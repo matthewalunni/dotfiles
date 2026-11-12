@@ -32,6 +32,7 @@ export function keyAction(ev, ctx) {
   if (tabN) return issues && ctx.hasIssue ? { type: "tab", tab: TABS[tabN] } : null;
 
   if (/^[1-9]$/.test(k)) {
+    if (shift) return null; // shift-4… is "$"…, never an option
     const n = Number(k);
     return ctx.hasIssue && n <= ctx.optionCount ? { type: "answer", n } : null;
   }

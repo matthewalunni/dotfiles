@@ -10,11 +10,14 @@ import {
   currentStore, showView, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
   STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY,
 } from "../data.js";
-import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act } from "./ui.js";
-import { mergeButtons } from "./merge.js";
-import { prTab } from "./pr.js";
+import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
+import { mergeButtons, mergeKey } from "./merge.js";
+import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
-import { boardColumns, cardClick } from "../lib/board.js";
+import { boardColumns, cardClick, moveBoard } from "../lib/board.js";
+import { keyAction } from "../lib/keys.js";
+import { openKeys } from "./keys.js";
+import { registerFocus } from "./focus.js";
 
 const STAGE_LABEL = { holding: "Holding for you", verify: "Verify", build: "Build", survey: "Survey", landed: "Landed" };
 const VIEWS = [
@@ -34,19 +37,25 @@ const MAX_QUESTION = 400;
 const sameFilter = (a, b) => (a?.kind ?? null) === (b?.kind ?? null) && (a?.value ?? null) === (b?.value ?? null);
 const clip = (s, n) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
 
-/** Text button that keeps its label exactly as the agent wrote it (prompt options, quick replies). */
-function optionButton(id, text, primary, onClick, disabled) {
+/**
+ * Text button that keeps its label exactly as the agent wrote it (prompt options,
+ * quick replies). `key` (1–9 for options) shows as a hint chip before it.
+ */
+function optionButton(id, text, primary, onClick, disabled, key = null) {
   const k = tokens();
-  let el = div()
+  let el = h_flex()
     .id(id)
     .flex_none()
+    .items_center()
+    .gap(8)
     .px(12)
     .py(6)
     .border_1()
     .border_color(primary ? k.hold : k.line)
     .text_color(primary ? k.hold : k.strong)
     .whitespace_normal()
-    .child(text);
+    .when(key != null, (el) => el.child(keyChip(key, primary ? k.hold : k.line)))
+    .child(div().flex_1().min_w(0).child(text));
   if (disabled) return el.opacity(0.4);
   return el.cursor_pointer().hover((s) => s.bg(k.raised)).on_click((e, cx) => {
     cx.stop_propagation();
@@ -70,6 +79,136 @@ export default class IssuesView extends View {
       this.draftKey = this.input.value() ? this.shown?.key ?? null : null;
     });
     this.input.on("submit", (_e, cx) => this.sendDraft(cx));
+    // Letter keys are text while the reply box has the keyboard.
+    this.typing = false;
+    this.input.on("focus", (_e, cx) => {
+      this.typing = true;
+      cx.notify();
+    });
+    this.input.on("blur", (_e, cx) => {
+      this.typing = false;
+      cx.notify();
+    });
+    this.filePath = null; // the diff file n / p is on
+    this.fileFor = null; // the issue filePath belongs to
+    this.rowAt = new Map(); // issue key -> child index in the list (for scrolling)
+    this.handle = cx.focus_handle();
+    registerFocus("deck-issues", this.handle);
+  }
+
+  // ------------------------------------------------------------ keys
+
+  /** The issues in on-screen order (list, or the board's columns) and the view state keys see. */
+  keyState() {
+    const issue = this.shown;
+    const board = shared(MODE_KEY) === "board";
+    const tab = shared(TAB_KEY) === "pr" && issue?.pr ? "pr" : "overview";
+    const detail = Boolean(issue) && (tab === "pr" || !board || this.boardOpen);
+    const p = issue?.prompt;
+    const asks = detail && tab === "overview" && issue.observed !== false && p && p.kind !== "none";
+    return { issue, board, tab, detail, options: asks ? p.options ?? [] : [], canReply: Boolean(asks && p.kind === "question") };
+  }
+
+  onKey(e, cx) {
+    const st = this.keyState();
+    const { issue, board } = st;
+    const typing = this.typing && !this.handle.is_focused();
+    const a = keyAction(keyOf(e), {
+      view: "issues", mode: board ? "board" : "list", tab: st.tab === "pr" ? "changes" : "overview",
+      typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue),
+    });
+    if (!a) return;
+    const visible = groupIssues(currentStore().issues, this.filter).flatMap((g) => g.items);
+    switch (a.type) {
+      case "move":
+      case "col": {
+        if (board) {
+          const cols = boardColumns(visible);
+          let col = cols.findIndex((c) => c.items.some((i) => i.key === issue?.key));
+          const row = col < 0 ? 0 : cols[col].items.findIndex((i) => i.key === issue.key);
+          if (col < 0) col = Math.max(0, cols.findIndex((c) => c.items.length));
+          const at = moveBoard(cols, { col, row }, a.type === "col" ? { dx: a.dx } : { dy: a.dy });
+          const next = cols[at.col]?.items[at.row];
+          if (next) this.select(next);
+        } else if (a.type === "move" && visible.length) {
+          const at = visible.findIndex((i) => i.key === issue?.key);
+          const next = visible[Math.max(0, Math.min(visible.length - 1, (at < 0 ? -1 : at) + a.dy))] ?? visible[0];
+          this.select(next);
+          const r = this.rowAt.get(next.key);
+          if (r != null) this.listScroll.scroll_to_item(r);
+        } else return;
+        break;
+      }
+      case "open":
+        if (!board || this.boardOpen) return;
+        this.boardOpen = true;
+        break;
+      case "filter": {
+        // "/" steps through the sidebar views: all → Holding → Failing → No data → Landed → all.
+        const at = this.filter?.kind === "view" ? VIEWS.findIndex((v) => v.value === this.filter.value) : -1;
+        const v = VIEWS[at + 1];
+        this.filter = v ? { kind: "view", value: v.value } : null;
+        setShared(TAB_KEY, "overview");
+        break;
+      }
+      case "answer": {
+        const o = st.options[a.n - 1];
+        if (!o || this.busy) return;
+        this.run(cx, issue, () => pressOption(issue, o), "Could not answer");
+        break;
+      }
+      case "reply":
+        if (!st.canReply) return;
+        this.input.focus();
+        break;
+      case "terminal":
+        if (issue.observed === false) return;
+        focusTerminal(issue);
+        break;
+      case "proof":
+        if (issue.observed === false || !issue.root || this.busy) return;
+        this.run(cx, issue, () => requestProof(issue), "Request proof failed");
+        break;
+      case "merge":
+      case "mergeShip":
+        if (!mergeKey(this, issue, a.type === "mergeShip")) return;
+        break;
+      case "github":
+        if (!issue.pr?.url) return;
+        act(cx, () => openUrl(issue.pr.url), "Could not open GitHub");
+        break;
+      case "tab":
+        if (a.tab !== "overview" && !issue.pr) return;
+        setShared(TAB_KEY, a.tab === "overview" ? "overview" : "pr");
+        break;
+      case "file": {
+        const d = diffFiles(issue);
+        if (!d) return;
+        const at = d.paths.indexOf(this.filePath);
+        const n = at < 0 ? (a.d > 0 ? 0 : d.paths.length - 1) : Math.max(0, Math.min(d.paths.length - 1, at + a.d));
+        this.filePath = d.paths[n];
+        this.diffScroll.scroll_to_item(d.fileRow[n], "top");
+        break;
+      }
+      case "back":
+        if (typing) this.handle.focus();
+        else if (st.tab === "pr") setShared(TAB_KEY, "overview");
+        else if (board && this.boardOpen) this.boardOpen = false;
+        else if (this.filter) this.filter = null;
+        else return;
+        break;
+      case "help":
+        openKeys();
+        break;
+      case "toggleMode":
+        setShared(MODE_KEY, board ? "list" : "board");
+        this.boardOpen = false;
+        break;
+      default:
+        return;
+    }
+    cx.stop_propagation();
+    cx.notify();
   }
 
   select(issue) {
@@ -114,7 +253,7 @@ export default class IssuesView extends View {
 
   // ------------------------------------------------------------ sidebar
 
-  sideItem(id, mark, text, count, active, onClick) {
+  sideItem(id, mark, text, count, active, onClick, key = null) {
     const k = tokens();
     return h_flex()
       .id(id)
@@ -130,6 +269,7 @@ export default class IssuesView extends View {
       .on_click(onClick)
       .when(Boolean(mark), (el) => el.child(mark))
       .child(div().flex_1().min_w(0).truncate().child(text))
+      .when(Boolean(key), (el) => el.child(keyChip(key)))
       .when(count != null, (el) => el.child(div().flex_none().text_color(k.muted).child(String(count))));
   }
 
@@ -156,7 +296,7 @@ export default class IssuesView extends View {
       .py(14)
       .gap(2)
       .overflow_y_scrollbar()
-      .child(this.sideItem("side-command", null, "Command", null, false, () => showView("deck-command")))
+      .child(this.sideItem("side-command", null, "Command", null, false, () => showView("deck-command"), "⌥⌘1"))
       .child(this.sideItem("side-issues", null, "Issues", issues.length, !this.filter, (_e, cx) => {
         this.filter = null;
         setShared(TAB_KEY, "overview");
@@ -185,6 +325,7 @@ export default class IssuesView extends View {
   list(issues, selected, k) {
     const groups = groupIssues(issues, this.filter);
     const rows = [];
+    this.rowAt = new Map();
     for (const g of groups) {
       const c = stageColor(g.stage, k);
       rows.push(
@@ -204,6 +345,7 @@ export default class IssuesView extends View {
       for (const i of g.items) {
         const pc = prChip(i);
         const on = selected?.key === i.key;
+        this.rowAt.set(i.key, rows.length);
         rows.push(
           h_flex()
             .id("row-" + i.key)
@@ -252,6 +394,7 @@ export default class IssuesView extends View {
             el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(filterName).toUpperCase())),
           )
           .child(div().flex_1())
+          .child(h_flex().gap(4).text_color(k.muted).child(div().text_color(k.text).child("j k")).child("move ·").child(div().text_color(k.text).child("/")).child("filter"))
           .child(div().text_color(k.muted).child(String(groups.reduce((n, g) => n + g.items.length, 0)))),
       )
       .child(v_flex().id("issues-list").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.listScroll).children(rows));
@@ -260,7 +403,7 @@ export default class IssuesView extends View {
   // ------------------------------------------------------------ detail
 
   tabs(issue, tab, k) {
-    const t = (name, text) =>
+    const t = (name, text, key) =>
       div()
         .id("tab-" + name)
         .pb(8)
@@ -270,14 +413,14 @@ export default class IssuesView extends View {
         .cursor_pointer()
         .hover((s) => s.text_color(k.strong))
         .on_click(() => setShared(TAB_KEY, name))
-        .child(text);
+        .child(h_flex().items_center().gap(6).child(text).child(div().text_size(10).text_color(k.muted).child(key)));
     return h_flex()
       .flex_none()
       .gap(18)
       .border_b(1)
       .border_color(k.line)
-      .child(t("overview", "Overview"))
-      .when(Boolean(issue.pr), (el) => el.child(t("pr", `Pull request #${issue.pr.number}`)));
+      .child(t("overview", "Overview", "⇧1"))
+      .when(Boolean(issue.pr), (el) => el.child(t("pr", `Pull request #${issue.pr.number}`, "⇧2")));
   }
 
   header(issue, crumb, k, back) {
@@ -289,11 +432,11 @@ export default class IssuesView extends View {
       .px(20)
       .border_b(1)
       .border_color(k.line)
-      .when(Boolean(back), (el) => el.child(button("hdr-back", "← Board", "plain", back)))
+      .when(Boolean(back), (el) => el.child(button("hdr-back", "← Board", "plain", back, false, "esc")))
       .child(div().flex_1().min_w(0).truncate().text_color(k.muted).child(crumb))
-      .when(issue.observed !== false, (el) => el.child(button("hdr-terminal", "Terminal", "plain", () => focusTerminal(issue))))
+      .when(issue.observed !== false, (el) => el.child(button("hdr-terminal", "Terminal", "plain", () => focusTerminal(issue), false, "T")))
       .when(Boolean(issue.pr?.url), (el) =>
-        el.child(button("hdr-github", "Open in GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"))),
+        el.child(button("hdr-github", "Open in GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"), false, "O")),
       );
   }
 
@@ -318,7 +461,7 @@ export default class IssuesView extends View {
           .children(
             options.map((o, n) =>
               optionButton(`opt-${issue.key}-${n}`, o.label, false, (_e, cx) =>
-                this.run(cx, issue, () => pressOption(issue, o), "Could not answer"), busy).w_full(),
+                this.run(cx, issue, () => pressOption(issue, o), "Could not answer"), busy, n < 9 ? String(n + 1) : null).w_full(),
             ),
           ),
       );
@@ -342,10 +485,12 @@ export default class IssuesView extends View {
               .border_color(k.line)
               .bg(k.bg)
               .cursor_text()
-              .child(Input.new(this.input).h_full().w_full().text_size(12).text_color(k.strong)),
+              .when(this.typing, (el) => el.border_color(k.brand))
+              .child(div().flex_1().min_w(0).h_full().child(Input.new(this.input).h_full().w_full().text_size(12).text_color(k.strong)))
+              .child(div().flex_none().text_size(11).text_color(k.muted).child(this.typing ? "↵ send · esc leave" : "R reply")),
           )
           .children(quick.map((q) => optionButton(`quick-${issue.key}-${q}`, q, false, (_e, cx) => this.run(cx, issue, () => reply(issue, q), "Reply failed"), busy)))
-          .child(button("reply-send", busy ? "Sending…" : "Send", "primary", (_e, cx) => this.sendDraft(cx), busy)),
+          .child(button("reply-send", busy ? "Sending…" : "Send", "primary", (_e, cx) => this.sendDraft(cx), busy, "↵")),
       );
     }
     return box;
@@ -356,7 +501,7 @@ export default class IssuesView extends View {
     const live = issue.observed !== false;
     const row = h_flex().flex_none().flex_wrap().items_center().justify_end().gap(8);
     if (live && issue.root) {
-      row.child(button("act-proof", "Request proof", "plain", (_e, cx) => this.run(cx, issue, () => requestProof(issue), "Request proof failed"), busy));
+      row.child(button("act-proof", "Request proof", "plain", (_e, cx) => this.run(cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
     }
     if (issue.stage !== "landed") row.child(button("act-dismiss", "Dismiss", "plain", () => dismiss(issue), busy));
     row.children(mergeButtons(this, issue, "act"));
@@ -535,8 +680,8 @@ export default class IssuesView extends View {
           .gap(6)
           .p(16)
           .pt(0)
-          .child(button("rail-diff", "View diff", "plain", () => setShared(TAB_KEY, "pr")).flex_1())
-          .child(button("rail-github", "GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(pr.url), "Could not open GitHub")).flex_1()),
+          .child(button("rail-diff", "View diff", "plain", () => setShared(TAB_KEY, "pr"), false, "⇧2").flex_1())
+          .child(button("rail-github", "GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(pr.url), "Could not open GitHub"), false, "O").flex_1()),
       );
   }
 
@@ -554,10 +699,23 @@ export default class IssuesView extends View {
     const order = board ? boardColumns(visible).flatMap((c) => c.items) : visible;
     const issue = order.find((i) => i.key === selKey) ?? order[0] ?? null;
     this.shown = issue;
+    if (this.fileFor !== (issue?.key ?? null)) {
+      this.fileFor = issue?.key ?? null;
+      this.filePath = null;
+    }
+    // R on the Command Center: open this issue with the reply box focused.
+    if (issue && globalThis.__deckReplyFocus === issue.key) {
+      globalThis.__deckReplyFocus = null;
+      if (this.keyState().canReply) cx.timer.after(40, () => this.input.focus());
+    }
     const back = board && this.boardOpen ? (_e, cx) => { this.boardOpen = false; cx.notify(); } : null;
     const tab = shared(TAB_KEY) === "pr" && issue?.pr ? "pr" : "overview";
 
-    const root = h_flex().id("deck-issues").size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
+    const root = h_flex()
+      .id("deck-issues")
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.onKey(e, cx))
+      .size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
     root.child(this.sidebar(issues, k));
 
     if (issue && tab === "pr") {

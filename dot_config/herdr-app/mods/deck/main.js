@@ -12,10 +12,11 @@ import Confirm from "./views/confirm.js";
 import Review from "./views/review.js";
 import Machines from "./views/machines.js";
 import TermHints from "./views/termhints.js";
+import Keys from "./views/keys.js";
 
 const VIEWS = {
   bar: Bar, command: Command, issues: Issues, confirm: Confirm, review: Review,
-  machines: Machines, termhints: TermHints,
+  machines: Machines, termhints: TermHints, keys: Keys,
 };
 
 export default class Deck extends View {
