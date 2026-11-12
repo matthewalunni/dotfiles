@@ -75,6 +75,10 @@ export default class StartConfirmView extends View {
     const entry = liveEntry(p.key);
     const plan = entry ? previewPlan(entry, home()) : null;
     const branch = plan && "branch" in plan ? plan.branch : null;
+    const tilde = (x) => {
+      const hm = String(home() ?? "").replace(/\/+$/, "");
+      return hm && String(x).startsWith(hm + "/") ? "~" + String(x).slice(hm.length) : String(x);
+    };
     return v_flex()
       .id("deck-start-confirm")
       .track_focus(this.handle)
@@ -105,12 +109,20 @@ export default class StartConfirmView extends View {
       .child(
         !entry
           ? div().text_color(k.muted).child("This task is no longer in the Backlog.")
-          : h_flex()
-            .flex_wrap()
-            .line_height(1.55)
-            .child(div().child("Creates the worktree "))
-            .child(div().text_color(k.strong).child(branch ?? "(branch)"))
-            .child(div().child(` in ${entry.repo ?? "the repo"} and starts claude with the brief. Nothing is merged or pushed.`)),
+          : v_flex()
+            .gap(8)
+            .child(
+              h_flex()
+                .flex_wrap()
+                .line_height(1.55)
+                .child(div().child("Creates the worktree "))
+                .child(div().text_color(k.strong).child(branch ?? "(branch)"))
+                .child(div().child(" and starts claude with the brief. Nothing is merged or pushed.")),
+            )
+            .child(h_flex().flex_wrap().child(div().child("Runs git in: ")).child(div().text_color(k.strong).child(tilde(entry.root ?? ""))))
+            .child(
+              h_flex().flex_wrap().child(div().child("Worktree: ")).child(div().text_color(k.strong).child(plan && "path" in plan ? tilde(plan.path) : "(unknown)")),
+            ),
       )
       .child(
         h_flex()

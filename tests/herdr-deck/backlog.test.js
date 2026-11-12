@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  parseBacklog, mergeBacklog, branchSlug, startPlan, discardBacklog, restoreBacklog, markStarted,
+  parseBacklog, mergeBacklog, branchSlug, startPlan, safeRepo, discardBacklog, restoreBacklog, markStarted,
 } from "../../dot_config/herdr-app/mods/deck/lib/backlog.js";
 import { emptyStore, reconcile } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 import { boardColumns } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
@@ -131,4 +131,34 @@ test("columns start with Backlog", () => {
   assert.equal(cols[0].label, "Backlog");
   assert.deepEqual(cols[0].items.map((i) => i.id), ["B-1"]);
   assert.equal(cols[3].items.length, 1);
+});
+
+test(".. in repo is rejected", () => {
+  for (const repo of ["/x/proj/..", "/x/./proj", "/x/../y", "rel/proj", "/", "/x//y", "/x/proj/."]) {
+    assert.equal(safeRepo(repo), false, repo);
+    assert.deepEqual(parseBacklog(line(ent("a", { repo }))), [], repo);
+    assert.match(startPlan({ id: "a", title: "bin", brief: "b", root: repo }, "/h", () => true).error, /^Bad repo path/);
+  }
+  assert.equal(safeRepo("/x/proj/"), true);
+  assert.equal(parseBacklog(line(ent("a"))).length, 1);
+});
+
+test("path stays inside worktrees", () => {
+  const p = startPlan({ id: "a", title: "../../bin", brief: "b", root: "/x/proj" }, "/h", () => false);
+  assert.match(p.error, /Repo not found/);
+  const q = startPlan({ id: "a", title: "../../bin", brief: "b", root: "/x/proj" }, "/h", (n) => n === "/x/proj" || n === "/x/proj/.git");
+  assert.equal(q.path, "/h/.herdr/worktrees/proj/bin");
+  assert.ok(q.path.startsWith("/h/.herdr/worktrees/proj/"));
+  assert.ok(!q.path.includes(".."));
+});
+
+test("tomb cap keeps old ids from coming back", () => {
+  const tombs = {};
+  for (let i = 0; i < 20000; i++) tombs["t" + i] = { state: "started", at: 1000 + i };
+  const s = { ...emptyStore(), backlogTombs: tombs };
+  const out = mergeBacklog(s, [ent("old", { createdAt: 500 }), ent("t5"), ent("fresh", { createdAt: 5000 })], 9000);
+  assert.deepEqual(backlog(out).map((i) => i.entryId), ["fresh"]);
+  // below the cap an old entry is still accepted
+  const small = mergeBacklog({ ...emptyStore(), backlogTombs: { x: { state: "started", at: 1000 } } }, [ent("old", { createdAt: 500 })], 9000);
+  assert.equal(backlog(small).length, 1);
 });

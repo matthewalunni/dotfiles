@@ -6,9 +6,20 @@
 /** @typedef {import("./store.js").Store} Store */
 
 export const DISCARD_TTL = 7 * 24 * 60 * 60 * 1000;
-const TOMB_CAP = 2000;
+const TOMB_CAP = 20000;
 const SLUG_MAX = 40;
 const TASK_SUFFIX = "\n\nWhen you finish, use the herdr-proof skill.";
+
+/**
+ * A repo path that is safe to derive a worktree folder from: absolute, no empty, "." or ".." segment,
+ * and a real basename. @param {unknown} repo @returns {boolean}
+ */
+export function safeRepo(repo) {
+  if (typeof repo !== "string" || !repo.startsWith("/")) return false;
+  const segs = repo.replace(/\/+$/, "").split("/").slice(1);
+  if (!segs.length) return false;
+  return segs.every((s) => s !== "" && s !== "." && s !== "..");
+}
 
 /** @param {string|null|undefined} text JSON lines. Bad or partial lines are skipped; the first of a duplicate id wins. @returns {Entry[]} */
 export function parseBacklog(text) {
@@ -22,7 +33,7 @@ export function parseBacklog(text) {
     if (!o || typeof o !== "object" || Array.isArray(o)) continue;
     const { id, title, brief, repo } = o;
     if (typeof id !== "string" || !id || typeof title !== "string" || !title.trim()) continue;
-    if (typeof brief !== "string" || typeof repo !== "string" || !repo) continue;
+    if (typeof brief !== "string" || typeof repo !== "string" || !safeRepo(repo)) continue;
     if (seen.has(id)) continue;
     seen.add(id);
     out.push({
@@ -61,15 +72,20 @@ export function mergeBacklog(store, entries, now) {
   const known = new Set(store.issues.filter(isBacklog).map((i) => i.entryId));
   let issues = store.issues.filter((i) => !(isBacklog(i) && i.discarded && i.discardedAt != null && now - i.discardedAt > DISCARD_TTL));
   const fresh = [];
+  // Once the cap is reached the oldest tombs are gone, so an entry older than the oldest kept tomb could come back.
+  const kept = capTombs(tombs);
+  const keptAts = Object.values(kept).map((t) => t.at);
+  const floor = keptAts.length >= TOMB_CAP ? Math.min(...keptAts) : null;
   for (const e of entries) {
     if (known.has(e.id) || e.id in tombs) continue;
+    if (floor != null && e.createdAt < floor) continue;
     known.add(e.id);
     counters.B = (counters.B ?? 0) + 1;
     fresh.push(toIssue(e, "B-" + counters.B, now));
   }
   issues = [...issues, ...fresh];
   if (!fresh.length && issues.length === store.issues.length) return store;
-  return { ...store, issues, counters, backlogTombs: capTombs(tombs) };
+  return { ...store, issues, counters, backlogTombs: kept };
 }
 
 function capTombs(tombs) {
@@ -91,14 +107,17 @@ export function branchSlug(title, id) {
 
 /**
  * Plan a start. `exists(p)` is asked about the repo, its ".git", each candidate branch name
- * (a bare name) and each candidate worktree path (absolute). On a bad repo returns {error}.
+ * (a bare name) and each candidate worktree path (absolute). When both a branch and its path exist it also asks
+ * `exists("@" + path + "=" + branch)`: is that path a worktree on that branch? If so the plan reuses it (argv null),
+ * so a retry after a failed agent start does not make a -2. On a bad repo returns {error}.
  * @param {{ id: string, title: string, brief: string, root?: string, repo?: string }} entry
  * @param {string} home @param {(pathOrBranch: string) => boolean} exists
- * @returns {{ branch: string, path: string, argv: string[], task: string, repo: string } | { error: string }}
+ * @returns {{ branch: string, path: string, argv: string[]|null, reuse: boolean, task: string, repo: string } | { error: string }}
  */
 export function startPlan(entry, home, exists) {
   const repo = String(entry.root ?? entry.repo ?? "");
-  if (!repo.startsWith("/") || !exists(repo)) return { error: "Repo not found: " + repo };
+  if (!safeRepo(repo)) return { error: "Bad repo path: " + repo };
+  if (!exists(repo)) return { error: "Repo not found: " + repo };
   if (!exists(repo + "/.git")) return { error: "Not a git repo: " + repo };
   const slug = branchSlug(entry.title, entry.id);
   const dir = home.replace(/\/+$/, "") + "/.herdr/worktrees/" + baseName(repo) + "/";
@@ -106,9 +125,15 @@ export function startPlan(entry, home, exists) {
     const suffix = n === 1 ? "" : "-" + n;
     const branch = slug.slice(0, SLUG_MAX - suffix.length).replace(/-+$/, "") + suffix;
     const path = dir + branch;
-    if (exists(branch) || exists(path)) continue;
+    if (!path.startsWith(dir) || path.slice(dir.length).includes("/")) return { error: "Worktree path leaves " + dir };
+    const hasBranch = exists(branch);
+    const hasPath = exists(path);
+    if (hasBranch && hasPath && exists("@" + path + "=" + branch)) {
+      return { branch, path, repo, argv: null, reuse: true, task: entry.brief + TASK_SUFFIX };
+    }
+    if (hasBranch || hasPath) continue;
     return {
-      branch, path, repo,
+      branch, path, repo, reuse: false,
       argv: ["git", "-C", repo, "worktree", "add", "-b", branch, path, "HEAD"],
       task: entry.brief + TASK_SUFFIX,
     };
@@ -189,6 +214,8 @@ export async function resolvePlan(entry, home, exists) {
  * @param {any} entry the store's backlog issue
  * @param {string} home
  * @param {{ exists: (name: string) => Promise<boolean>,
+ *   toplevel: (repo: string) => Promise<string|null>,
+ *   appeared: (folder: string) => Promise<boolean>,
  *   git: (argv: string[]) => Promise<{code: number, stdout?: string, stderr?: string}>,
  *   spaceNew: (args: {folder: string, argv: string[], task: string}) => unknown,
  *   done: (plan: any) => void }} io
@@ -203,15 +230,28 @@ export async function runStart(entry, home, io) {
     return { ok: false, error: errText(e) };
   }
   if ("error" in plan) return { ok: false, error: plan.error };
-  const g = await io.git(plan.argv);
-  if (!g || g.code !== 0) {
-    return { ok: false, error: "git worktree add failed: " + String(g?.stderr || g?.stdout || "unknown error").trim() };
+  let top;
+  try {
+    top = await io.toplevel(plan.repo);
+  } catch (e) {
+    return { ok: false, error: "Could not check " + plan.repo + ": " + errText(e) };
   }
+  if (top !== plan.repo) return { ok: false, error: "Not a repo's main folder: " + plan.repo };
+  if (plan.argv) {
+    const g = await io.git(plan.argv);
+    if (!g || g.code !== 0) {
+      return { ok: false, error: "git worktree add failed: " + String(g?.stderr || g?.stdout || "unknown error").trim() };
+    }
+  }
+  const lost = "Worktree created at " + plan.path + ", but the agent didn't start — open it from Herdr or press S again";
   try {
     await io.spaceNew({ folder: plan.path, argv: ["claude"], task: plan.task });
   } catch (e) {
-    return { ok: false, error: "The worktree " + plan.path + " was made, but the agent did not start: " + errText(e) };
+    return { ok: false, error: lost + " (" + errText(e) + ")" };
   }
+  let up = false;
+  try { up = await io.appeared(plan.path); } catch { up = false; }
+  if (!up) return { ok: false, error: lost };
   io.done(plan);
   return { ok: true, error: null, plan };
 }

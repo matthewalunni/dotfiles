@@ -291,6 +291,7 @@ function backlogDetail(host, issue, k, opts) {
       "error" in plan
         ? div().text_color(k.fail).child(plan.error)
         : v_flex().gap(4)
+          .child(fact("Runs git in", tilde(issue.root ?? "")))
           .child(fact("Worktree", tilde(plan.path)))
           .child(fact("Branch", plan.branch, " from the repo's HEAD"))
           .child(fact("Agent", "claude", ", told to use herdr-proof")),

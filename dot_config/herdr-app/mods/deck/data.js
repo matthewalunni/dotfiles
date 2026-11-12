@@ -5,7 +5,7 @@
 // Actions are async; call them from a view inside `cx.spawn(async (cx) => ...)`.
 // Nothing here runs on its own except the collector, which the bar starts.
 
-import { agents, terminals, panes, exec, home, shared, setShared, run, notify } from "herdr";
+import { agents, terminals, panes, spaces, exec, home, shared, setShared, run, notify } from "herdr";
 import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/github.js";
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
@@ -643,6 +643,16 @@ function liveBacklog(entry) {
  */
 function backlogExists(repo) {
   return async (name) => {
+    if (name.startsWith("@")) {
+      // "@<path>=<branch>": is that path a worktree of this repo on that branch?
+      const i = name.lastIndexOf("=");
+      const path = name.slice(1, i), branch = name.slice(i + 1);
+      const r = await sh("git", ["-C", repo, "worktree", "list", "--porcelain"], { timeout: T_GIT });
+      if (r.rejected) throw new Error(r.stderr || "timed out");
+      if (r.code !== 0) throw new Error(String(r.stderr || "git worktree list failed").trim());
+      const blocks = String(r.stdout ?? "").split("\n\n");
+      return blocks.some((b) => b.split("\n").includes("worktree " + path) && b.split("\n").includes("branch refs/heads/" + branch));
+    }
     if (name.startsWith("/")) {
       const r = await sh("test", ["-e", name], { timeout: T_GIT });
       if (r.rejected) throw new Error(r.stderr || "timed out");
@@ -653,6 +663,23 @@ function backlogExists(repo) {
     if (r.code !== 0 && r.code !== 1) throw new Error(String(r.stderr || "git show-ref failed").trim());
     return r.code === 0;
   };
+}
+
+/** `git rev-parse --show-toplevel` of the repo, timed; null when it is not a work tree. */
+async function repoToplevel(repo) {
+  const r = await sh("git", ["-C", repo, "rev-parse", "--show-toplevel"], { timeout: T_GIT });
+  if (r.rejected) throw new Error(r.stderr || "timed out");
+  return r.code === 0 ? String(r.stdout ?? "").trim() : null;
+}
+
+/** After space.new: for up to ~3 s, wait for a space or terminal at `folder` to show up. */
+async function folderAppeared(folder) {
+  const at = (p) => typeof p === "string" && (p === folder || p.startsWith(folder + "/"));
+  for (let n = 0; n < 6; n++) {
+    if ((spaces() ?? []).some((s) => at(s.folder)) || (terminals() ?? []).some((t) => at(t.cwd) || at(t.folder))) return true;
+    await sh("sleep", ["0.5"], { timeout: T_GIT });
+  }
+  return false;
 }
 
 /** Keys with a start in flight: one confirm, one start. */
@@ -673,6 +700,8 @@ export async function startBacklog(entry) {
   try {
     const r = await runStart(it, home(), {
       exists: backlogExists(it.root),
+      toplevel: repoToplevel,
+      appeared: folderAppeared,
       git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
       done: () => save(markStarted(currentStore(), it.key, Date.now())),

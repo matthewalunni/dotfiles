@@ -106,9 +106,14 @@ test("merge dialogs never open for a backlog entry", () => {
 // ------------------------------------------------------------ start flow (fake runner)
 
 /** A fake runner: `have` is the set of names exists() says yes to; calls are recorded in order. */
-function fake({ have = ["/r/promptr", "/r/promptr/.git"], git = { code: 0, stdout: "", stderr: "" }, spaceThrows = null, existsThrows = null } = {}) {
+function fake({ have = ["/r/promptr", "/r/promptr/.git"], git = { code: 0, stdout: "", stderr: "" }, spaceThrows = null, existsThrows = null, top = undefined, appeared = true } = {}) {
   const calls = [];
   const io = {
+    toplevel: async (repo) => (top === undefined ? repo : top),
+    appeared: async (folder) => {
+      calls.push(["appeared", folder]);
+      return appeared;
+    },
     exists: async (name) => {
       calls.push(["exists", name]);
       if (existsThrows && name === existsThrows) throw new Error("timed out");
@@ -133,7 +138,7 @@ test("start: worktree, then space.new with claude and the task, then marked", as
   const r = await runStart(s.issues[0], "/home/m", f.io);
   assert.equal(r.ok, true);
   assert.equal(r.error, null);
-  const order = f.calls.filter((c) => c[0] !== "exists").map((c) => c[0]);
+  const order = f.calls.filter((c) => c[0] !== "exists" && c[0] !== "appeared").map((c) => c[0]);
   assert.deepEqual(order, ["git", "space.new", "done"]);
   assert.deepEqual(f.did("git")[0][1], ["git", "-C", "/r/promptr", "worktree", "add", "-b", "paywall-a-b-copy-2", "/home/m/.herdr/worktrees/promptr/paywall-a-b-copy-2", "HEAD"]);
   assert.deepEqual(f.did("space.new")[0][1], {
@@ -219,4 +224,38 @@ test("inboxTail keeps a short read whole and drops a cut-off first line", () => 
   // bytes, not characters: multi-byte characters count by their bytes
   const wide = "é".repeat(4) + "\n" + b;
   assert.equal(inboxTail(wide, Buffer.byteLength(wide)), b);
+});
+
+test("start: a toplevel that differs from the repo stops before git", async () => {
+  const s = withBacklog(ent("a"));
+  for (const top of ["/r", null]) {
+    const f = fake({ top });
+    const r = await runStart(s.issues[0], "/home/m", f.io);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "Not a repo's main folder: /r/promptr");
+    assert.deepEqual(f.did("git"), []);
+    assert.deepEqual(f.did("space.new"), []);
+  }
+});
+
+test("start: no space appearing means no tombstone and a clear error", async () => {
+  const f = fake({ appeared: false });
+  const r = await runStart(withBacklog(ent("a")).issues[0], "/home/m", f.io);
+  assert.equal(r.ok, false);
+  assert.equal(r.error, "Worktree created at /home/m/.herdr/worktrees/promptr/paywall-a-b-copy, but the agent didn't start — open it from Herdr or press S again");
+  assert.deepEqual(f.did("done"), []);
+});
+
+test("retry reuses the existing worktree and branch (no -2, no git)", async () => {
+  const wt = "/home/m/.herdr/worktrees/promptr/paywall-a-b-copy";
+  const f = fake({ have: ["/r/promptr", "/r/promptr/.git", "paywall-a-b-copy", wt, "@" + wt + "=paywall-a-b-copy"] });
+  const r = await runStart(withBacklog(ent("a")).issues[0], "/home/m", f.io);
+  assert.equal(r.ok, true);
+  assert.equal(r.plan.path, wt);
+  assert.equal(r.plan.reuse, true);
+  assert.deepEqual(f.did("git"), []);
+  assert.equal(f.did("space.new")[0][1].folder, wt);
+  // path exists but is not a worktree on that branch: a new -2
+  const g = fake({ have: ["/r/promptr", "/r/promptr/.git", "paywall-a-b-copy", wt] });
+  assert.equal((await runStart(withBacklog(ent("a")).issues[0], "/home/m", g.io)).plan.branch, "paywall-a-b-copy-2");
 });
