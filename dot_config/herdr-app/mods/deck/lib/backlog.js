@@ -107,10 +107,10 @@ export function branchSlug(title, id) {
 
 /**
  * Plan a start. `exists(p)` is asked about the repo, its ".git", each candidate branch name
- * (a bare name) and each candidate worktree path (absolute). When both a branch and its path exist it also asks
- * `exists("@" + path + "=" + branch)`: is that path a worktree on that branch? If so the plan reuses it (argv null),
- * so a retry after a failed agent start does not make a -2. On a bad repo returns {error}.
- * @param {{ id: string, title: string, brief: string, root?: string, repo?: string }} entry
+ * (a bare name) and each candidate worktree path (absolute). A candidate is reused (argv null) only when its path
+ * exists and path and branch equal entry.pendingWorktree (left by a start that failed after the worktree was made);
+ * every other collision gets -2, -3, ... On a bad repo returns {error}.
+ * @param {{ id: string, title: string, brief: string, root?: string, repo?: string, pendingWorktree?: {path: string, branch: string}|null }} entry
  * @param {string} home @param {(pathOrBranch: string) => boolean} exists
  * @returns {{ branch: string, path: string, argv: string[]|null, reuse: boolean, task: string, repo: string } | { error: string }}
  */
@@ -126,12 +126,11 @@ export function startPlan(entry, home, exists) {
     const branch = slug.slice(0, SLUG_MAX - suffix.length).replace(/-+$/, "") + suffix;
     const path = dir + branch;
     if (!path.startsWith(dir) || path.slice(dir.length).includes("/")) return { error: "Worktree path leaves " + dir };
-    const hasBranch = exists(branch);
-    const hasPath = exists(path);
-    if (hasBranch && hasPath && exists("@" + path + "=" + branch)) {
+    const pw = entry.pendingWorktree;
+    if (pw && pw.path === path && pw.branch === branch && exists(path)) {
       return { branch, path, repo, argv: null, reuse: true, task: entry.brief + TASK_SUFFIX };
     }
-    if (hasBranch || hasPath) continue;
+    if (exists(branch) || exists(path)) continue;
     return {
       branch, path, repo, reuse: false,
       argv: ["git", "-C", repo, "worktree", "add", "-b", branch, path, "HEAD"],
@@ -151,6 +150,14 @@ export function discardBacklog(store, ref, now) {
     ...store, issues: store.issues.map((i) => (i === prev ? next : i)),
     backlogTombs: capTombs(tomb(store, prev.entryId, "discarded", now)),
   };
+}
+
+/** Remember the worktree a failed start left, so a retry reuses it. @param {Store} store @param {string} ref @param {{path: string, branch: string}} wt @returns {Store} */
+export function setPendingWorktree(store, ref, wt) {
+  const prev = find(store, ref);
+  if (!prev) return store;
+  const next = { ...prev, pendingWorktree: { path: wt.path, branch: wt.branch } };
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
 }
 
 /** @param {Store} store @param {string} ref key or B-n @returns {Store} */
@@ -215,6 +222,7 @@ export async function resolvePlan(entry, home, exists) {
  * @param {string} home
  * @param {{ exists: (name: string) => Promise<boolean>,
  *   toplevel: (repo: string) => Promise<string|null>,
+ *   pending?: (plan: any) => void,
  *   appeared: (folder: string) => Promise<boolean>,
  *   git: (argv: string[]) => Promise<{code: number, stdout?: string, stderr?: string}>,
  *   spaceNew: (args: {folder: string, argv: string[], task: string}) => unknown,
@@ -247,11 +255,15 @@ export async function runStart(entry, home, io) {
   try {
     await io.spaceNew({ folder: plan.path, argv: ["claude"], task: plan.task });
   } catch (e) {
+    io.pending?.(plan);
     return { ok: false, error: lost + " (" + errText(e) + ")" };
   }
   let up = false;
   try { up = await io.appeared(plan.path); } catch { up = false; }
-  if (!up) return { ok: false, error: lost };
+  if (!up) {
+    io.pending?.(plan);
+    return { ok: false, error: lost };
+  }
   io.done(plan);
   return { ok: true, error: null, plan };
 }

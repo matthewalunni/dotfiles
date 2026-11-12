@@ -10,7 +10,7 @@ import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/gi
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
-import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted } from "./lib/backlog.js";
+import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 
@@ -643,16 +643,6 @@ function liveBacklog(entry) {
  */
 function backlogExists(repo) {
   return async (name) => {
-    if (name.startsWith("@")) {
-      // "@<path>=<branch>": is that path a worktree of this repo on that branch?
-      const i = name.lastIndexOf("=");
-      const path = name.slice(1, i), branch = name.slice(i + 1);
-      const r = await sh("git", ["-C", repo, "worktree", "list", "--porcelain"], { timeout: T_GIT });
-      if (r.rejected) throw new Error(r.stderr || "timed out");
-      if (r.code !== 0) throw new Error(String(r.stderr || "git worktree list failed").trim());
-      const blocks = String(r.stdout ?? "").split("\n\n");
-      return blocks.some((b) => b.split("\n").includes("worktree " + path) && b.split("\n").includes("branch refs/heads/" + branch));
-    }
     if (name.startsWith("/")) {
       const r = await sh("test", ["-e", name], { timeout: T_GIT });
       if (r.rejected) throw new Error(r.stderr || "timed out");
@@ -700,6 +690,7 @@ export async function startBacklog(entry) {
   try {
     const r = await runStart(it, home(), {
       exists: backlogExists(it.root),
+      pending: (plan) => save(setPendingWorktree(currentStore(), it.key, plan)),
       toplevel: repoToplevel,
       appeared: folderAppeared,
       git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),

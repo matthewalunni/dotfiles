@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  mergeBacklog, discardBacklog, resolvePlan, runStart, inboxTail, previewPlan, backlogFiler,
+  mergeBacklog, setPendingWorktree, discardBacklog, resolvePlan, runStart, inboxTail, previewPlan, backlogFiler,
 } from "../../dot_config/herdr-app/mods/deck/lib/backlog.js";
 import { emptyStore, dismiss, markReplied, updatePr, markReviewed } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 import { groupIssues, matchesView, repoTelemetry, liveIssues, LIST_ORDER } from "../../dot_config/herdr-app/mods/deck/lib/present.js";
@@ -246,16 +246,27 @@ test("start: no space appearing means no tombstone and a clear error", async () 
   assert.deepEqual(f.did("done"), []);
 });
 
-test("retry reuses the existing worktree and branch (no -2, no git)", async () => {
+test("retry reuses only the worktree this entry left (pendingWorktree)", async () => {
   const wt = "/home/m/.herdr/worktrees/promptr/paywall-a-b-copy";
-  const f = fake({ have: ["/r/promptr", "/r/promptr/.git", "paywall-a-b-copy", wt, "@" + wt + "=paywall-a-b-copy"] });
-  const r = await runStart(withBacklog(ent("a")).issues[0], "/home/m", f.io);
+  const have = ["/r/promptr", "/r/promptr/.git", "paywall-a-b-copy", wt];
+  const mine = { ...withBacklog(ent("a")).issues[0], pendingWorktree: { path: wt, branch: "paywall-a-b-copy" } };
+  const f = fake({ have });
+  const r = await runStart(mine, "/home/m", f.io);
   assert.equal(r.ok, true);
   assert.equal(r.plan.path, wt);
   assert.equal(r.plan.reuse, true);
   assert.deepEqual(f.did("git"), []);
-  assert.equal(f.did("space.new")[0][1].folder, wt);
-  // path exists but is not a worktree on that branch: a new -2
-  const g = fake({ have: ["/r/promptr", "/r/promptr/.git", "paywall-a-b-copy", wt] });
-  assert.equal((await runStart(withBacklog(ent("a")).issues[0], "/home/m", g.io)).plan.branch, "paywall-a-b-copy-2");
+  // a different entry with the same slug gets -2
+  const g = fake({ have });
+  const other = await runStart(withBacklog(ent("b")).issues[0], "/home/m", g.io);
+  assert.equal(other.plan.branch, "paywall-a-b-copy-2");
+  assert.equal(other.plan.reuse, false);
+  // a failed start records the worktree
+  const h = fake({ appeared: false });
+  let rec = null;
+  h.io.pending = (plan) => { rec = [plan.path, plan.branch]; };
+  await runStart(withBacklog(ent("a")).issues[0], "/home/m", h.io);
+  assert.deepEqual(rec, [wt, "paywall-a-b-copy"]);
+  const st = setPendingWorktree(withBacklog(ent("a")), "B-1", { path: wt, branch: "x" });
+  assert.deepEqual(st.issues[0].pendingWorktree, { path: wt, branch: "x" });
 });
