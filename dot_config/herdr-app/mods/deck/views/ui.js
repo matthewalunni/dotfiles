@@ -133,6 +133,8 @@ export function segments(colors, h = 8) {
 
 // data.js already posts a toast for these.
 const QUIET = new Set(["prompt changed", "agent is working"]);
+// Errors that say it all: shown as the toast's title.
+const PLAIN = new Set(["Agent has a draft — not sent", "Branch moved — review again"]);
 
 /**
  * Runs an async action (one of data.js's) from a click; a failure shows as a toast.
@@ -146,7 +148,8 @@ export function act(cx, fn, failTitle, onDone) {
     } catch (e) {
       r = { ok: false, error: String(e?.message ?? e) };
     }
-    if (r && r.ok === false && r.error && !QUIET.has(r.error)) notify({ title: failTitle, body: r.error, level: "error" });
+    if (r && r.ok === false && PLAIN.has(r.error)) notify({ title: r.error, level: "warning" });
+    else if (r && r.ok === false && r.error && !QUIET.has(r.error)) notify({ title: failTitle, body: r.error, level: "error" });
     else if (r && r.ok && r.error) notify({ title: r.error, level: "warning" });
     onDone?.(r, cx);
   });

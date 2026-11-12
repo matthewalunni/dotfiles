@@ -1,11 +1,13 @@
 // "Merge anyway" confirmation, opened as a dialog with props
-// { view: "confirm", key, headSha, reasons }. It lists what is missing and,
+// { view: "confirm", key, headSha }. It lists what is missing (from the lock
+// state each time it draws) and,
 // on confirm, merges pinned to `headSha` (the head shown when it opened), so a
 // push since then makes GitHub refuse. Esc / Cancel close it; Enter does nothing.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, notify } from "herdr";
 import { currentStore, mergeAnyway } from "../data.js";
+import { lockOf } from "./merge.js";
 import { MONO, tokens, label, heading, button, dot } from "./ui.js";
 
 export default class ConfirmView extends View {
@@ -45,7 +47,7 @@ export default class ConfirmView extends View {
     const k = tokens();
     const p = props() ?? {};
     const issue = currentStore().issues.find((i) => i.key === p.key) ?? null;
-    const reasons = Array.isArray(p.reasons) ? p.reasons : [];
+    const reasons = issue ? lockOf(issue).reasons : [];
     const sha = typeof p.headSha === "string" ? p.headSha.slice(0, 7) : null;
     const ready = Boolean(issue?.pr && sha);
     return v_flex()

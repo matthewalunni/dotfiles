@@ -6,7 +6,7 @@ import { h_flex, v_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec } from "herdr";
 import { parseDiff } from "../lib/github.js";
 import { diffRows, checkTally } from "../lib/present.js";
-import { openUrl } from "../data.js";
+import { openUrl, markDiffReviewed } from "../data.js";
 import { tokens, label, heading, chip, dot, segments, act } from "./ui.js";
 import { lockOf, mergeButtons } from "./merge.js";
 
@@ -251,6 +251,10 @@ export function prTab(host, issue, k, cx, withTabs) {
           .size_full(),
       )
       .child(Scrollbar.vertical("pr-diff-" + pr.number).absolute().inset_0());
+    // The diff for this head is on screen now (the cache key carries headSha):
+    // record it for the review soft gate. Deferred, so render doesn't write state.
+    const head = pr.headSha;
+    if (head && issue.reviewedSha !== head) cx.spawn(async () => markDiffReviewed(issue, head));
   }
 
   // Merge bar.
