@@ -216,11 +216,13 @@ let lastWrite = 0;
 let lastMachines = 0;
 let machinesBusy = false;
 
-/** Refresh MACHINES_KEY from a timed `hc machine ls --json`; any failure is "no machines". */
+/** Refresh MACHINES_KEY from a timed `hc machine ls --json`; a failure keeps the previous list. */
 async function machinesCycle() {
   machinesBusy = true;
   try {
     const r = await hcRead(["machine", "ls", "--json"]);
+    // A failed or timed-out poll keeps the last good list; only a clean run replaces it.
+    if (!r || r.code !== 0) return;
     const list = parseMachines(String(r.stdout ?? ""), r.code);
     const prev = shared(MACHINES_KEY);
     if (JSON.stringify(prev ?? null) !== JSON.stringify(list)) setShared(MACHINES_KEY, list);

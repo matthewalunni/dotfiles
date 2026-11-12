@@ -69,7 +69,9 @@ export default class BarView extends View {
 
   render(cx) {
     const k = deckTokens(theme());
-    const active = shared(VIEW_KEY) ?? "deck-command";
+    // A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
+    const stored = shared(VIEW_KEY);
+    const active = NAV.some((n) => n.child === stored) ? stored : "deck-command";
     const issues = currentStore().issues;
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;
     // "next" is the holding issue after the focused agent's (wrapping).
