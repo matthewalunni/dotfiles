@@ -502,7 +502,7 @@ function overview(host, issue, store, k, stacked) {
                   .items_start()
                   .child(div().mt(4).child(dot(toneColor(e.tone), 8)))
                   .child(div().w(40).flex_none().text_color(k.muted).child(hhmm(e.t)))
-                  .child(div().flex_1().min_w(0).child(e.what)),
+                  .child(div().flex_1().min_w(0).child(String(e.what ?? "").replace(/^moved to Survey$/, "moved to Started"))),
               ),
             ),
         ),
@@ -889,15 +889,16 @@ export default class IssuesView extends View {
           .px(16)
           .border_b(1)
           .border_color(k.line)
+          .overflow_hidden()
           .child(heading("Issues", 18))
           .child(modeToggle("list", k))
           .child(newTaskButton(k))
           .when(Boolean(filterName), (el) =>
             el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(filterName).toUpperCase())),
           )
-          .child(div().flex_1())
-          .child(h_flex().gap(4).text_color(k.muted).child(div().text_color(k.text).child("j k")).child("move ·").child(div().text_color(k.text).child("/")).child("filter"))
-          .child(div().text_color(k.muted).child(String(groups.reduce((n, g) => n + g.items.length, 0)))),
+          .child(div().flex_1().min_w(0))
+          .child(h_flex().min_w(0).flex_shrink(1).overflow_hidden().gap(4).text_color(k.muted).child(div().flex_none().text_color(k.text).child("j k")).child(div().flex_none().child("move ·")).child(div().flex_none().text_color(k.text).child("/")).child(div().flex_none().child("filter")))
+          .child(div().flex_none().text_color(k.muted).child(String(groups.reduce((n, g) => n + g.items.length, 0)))),
       )
       .child(v_flex().id("issues-list").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.listScroll).children(rows));
   }
