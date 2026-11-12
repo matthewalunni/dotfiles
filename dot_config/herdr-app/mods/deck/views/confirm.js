@@ -3,14 +3,16 @@
 // anyway" — it lists what is missing (from the lock state each time it draws).
 // next "merge" / "ship": the M / ⇧M keys' confirm (a key never merges on its
 // own). On confirm it merges pinned to `headSha` (the head shown when it
-// opened), so a push since then makes GitHub refuse. Esc / Cancel close it;
-// Enter does nothing.
+// opened), so a push since then makes GitHub refuse. Pressing the opening key
+// again (M, or ⇧M for ship) confirms (lib/dialogkeys.js); Esc / Cancel close
+// it; Enter does nothing.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, notify } from "herdr";
 import { currentStore, mergeAnyway, merge, mergeAndShip } from "../data.js";
 import { lockOf } from "./merge.js";
-import { MONO, tokens, label, heading, button, dot, act, keyChip } from "./ui.js";
+import { MONO, tokens, label, heading, button, dot, act, keyChip, keyOf } from "./ui.js";
+import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
 
 export default class ConfirmView extends View {
   init(_p, cx) {
@@ -67,9 +69,11 @@ export default class ConfirmView extends View {
       .id("deck-confirm")
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
-        if (e.key !== "escape") return;
+        const d = dialogKey(keyOf(e), { kind: "confirm", next: p.next });
+        if (!d) return;
         cx.stop_propagation();
-        this.shut();
+        if (d === "cancel") this.shut();
+        else if (d === "confirm" && ready && !this.busy) this.confirm(cx);
       })
       .size_full()
       .min_h(0)
@@ -122,7 +126,7 @@ export default class ConfirmView extends View {
           .justify_end()
           .gap(8)
           .child(button("confirm-cancel", "Cancel", "plain", () => this.shut(), false, "esc"))
-          .child(button("confirm-merge", this.busy ? "Merging…" : plain ? what : "Merge anyway", plain ? "primary" : "danger", (_e, cx) => this.confirm(cx), this.busy || !ready)),
+          .child(button("confirm-merge", this.busy ? "Merging…" : plain ? what : "Merge anyway", plain ? "primary" : "danger", (_e, cx) => this.confirm(cx), this.busy || !ready, confirmKeyLabel(p.next))),
       );
   }
 }

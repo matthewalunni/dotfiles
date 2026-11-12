@@ -76,7 +76,7 @@ export function mergeButtons(host, issue, idPrefix, { ship = true } = {}) {
 
 /**
  * M / ⇧M: the buttons' path, except that where a click would merge at once
- * the key opens the confirm first. Only offers what a button on screen offers
+ * the key opens the confirm first; the same key again confirms (lib/dialogkeys.js). Only offers what a button on screen offers
  * (⇧M needs Merge + ship). Returns whether a dialog opened.
  * @param {any} host @param {any} issue @param {boolean} ship
  */

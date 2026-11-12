@@ -19,15 +19,15 @@ const COLS = [
   ] },
   { title: "Pull request", tone: "work", rows: [
     ["⇧1 ⇧2 ⇧3", "Overview / PR / Changes"], ["n  p", "Next / previous file"],
-    ["P", "Request proof"], ["M", "Merge (gate + confirm)"], ["⇧M", "Merge + ship"],
+    ["P", "Request proof"], ["M", "Merge (gate + confirm, M again)"], ["⇧M", "Merge + ship"],
     ["O", "Open on GitHub"],
   ] },
 ];
 
 const NOTE =
   "Letter keys only work when Deck has focus. In the Terminal view, typing goes to the agent, " +
-  "so only ⌘ shortcuts work there. Merge keys still open the review gate and confirm. " +
-  "A key never merges on its own.";
+  "so only ⌘ shortcuts work there. Merge keys open the review gate and confirm; press the same key " +
+  "again to go on (↵ in the gate reviews the diff). A key never merges on its own.";
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {

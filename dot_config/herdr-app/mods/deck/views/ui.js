@@ -180,5 +180,5 @@ export function act(cx, fn, failTitle, onDone) {
  */
 export function keyOf(e) {
   const m = e?.modifiers ?? {};
-  return { key: String(e?.key ?? ""), shift: Boolean(m.shift), cmd: Boolean(m.platform || m.control || m.alt) };
+  return { key: String(e?.key ?? ""), shift: Boolean(m.shift), cmd: Boolean(m.platform || m.control || m.alt), held: Boolean(e?.is_held) };
 }
