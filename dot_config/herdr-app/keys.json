@@ -106,7 +106,18 @@
     "ctrl-a 6": "tab.select:6",
     "ctrl-a 7": "tab.select:7",
     "ctrl-a 8": "tab.select:8",
-    "ctrl-a 9": "tab.select:9"
+    "ctrl-a 9": "tab.select:9",
+    "ctrl-a q": "window.close",
+    "ctrl-a g": "mod.open:picker",
+    "ctrl-a shift-,": "mod.open:old-tab-move-left",
+    "ctrl-a shift-.": "mod.open:old-tab-move-right",
+    "ctrl-a tab": "mod.open:old-pane-next",
+    "ctrl-a shift-tab": "mod.open:old-pane-prev",
+    "ctrl-a shift-1": "mod.open:old-break-pane",
+    "ctrl-a o": "mod.open:old-notification",
+    "ctrl-a e": "mod.open:old-edit-scrollback",
+    "ctrl-a shift-g": "mod.open:old-new-worktree",
+    "ctrl-a space": "mod.open:old-rotate-split"
   },
   "terminal": {
     "cmd-f": "terminal.search",

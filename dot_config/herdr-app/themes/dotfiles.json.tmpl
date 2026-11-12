@@ -1,0 +1,17 @@
+{{- $t := index .themes .theme -}}
+{
+  "background": "{{ $t.bg }}",
+  "foreground": "{{ $t.fg }}",
+  "selection": "{{ $t.selected_bg | default "#2a2a2a" }}",
+  "cursor": "{{ $t.fg }}",
+  "ansi": [
+    "{{ $t.black }}", "{{ $t.red }}", "{{ $t.green }}", "{{ $t.yellow }}",
+    "{{ $t.blue }}", "{{ $t.magenta }}", "{{ $t.cyan }}", "{{ $t.white }}",
+    "{{ $t.br_black }}", "{{ $t.br_red }}", "{{ $t.br_green }}", "{{ $t.br_yellow }}",
+    "{{ $t.br_blue }}", "{{ $t.br_magenta }}", "{{ $t.br_cyan }}", "{{ $t.br_white }}"
+  ],
+  "colors": {
+    "accent": "{{ $t.fg }}",
+    "selected": "{{ $t.selected_bg | default "#2a2a2a" }}"
+  }
+}

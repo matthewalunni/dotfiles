@@ -18,3 +18,7 @@ README.md
 Brewfile
 install.sh
 install-minimal.sh
+
+# herdr-app writes these into every mod folder itself
+.config/herdr-app/mods/*/gpui-kit.d.ts
+.config/herdr-app/mods/*/jsconfig.json
