@@ -11,9 +11,9 @@ import { nextHolding } from "../lib/board.js";
 const BARLOW = "Barlow Condensed";
 const MONO = "JetBrains Mono";
 const NAV = [
-  { label: "COMMAND", key: "⌘⇧1", child: "deck-command" },
-  { label: "ISSUES", key: "⌘⇧2", child: "deck-issues" },
-  { label: "TERMINAL", key: "⌘⇧3", child: "deck-terminal" },
+  { label: "COMMAND", key: "⌥⌘1", child: "deck-command" },
+  { label: "ISSUES", key: "⌥⌘2", child: "deck-issues" },
+  { label: "TERMINAL", key: "⌥⌘3", child: "deck-terminal" },
 ];
 // macOS draws the traffic lights over the bar's left edge.
 const LEFT_ROOM = 84;
