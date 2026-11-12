@@ -69,3 +69,23 @@ test("stampText counts PASS over total", () => {
   const c = (verdict) => ({ claim: "x", verdict, source: "ci", path: null, detail: null });
   assert.equal(stampText([c("PASS"), c("PASS"), c("FAIL")]), "2 of 3");
 });
+
+test("prototype-key paths never count as existing evidence", () => {
+  for (const path of ["constructor", "toString", "__proto__"]) {
+    const claims = buildClaims([], [{ claim: "x", path }], {});
+    assert.equal(claims[0].verdict, "NO DATA");
+    assert.equal(mergeState(openPr, null, claims).canMerge, false);
+  }
+});
+
+test("parseProofFile drops unsafe paths but keeps the claim", () => {
+  for (const path of ["/etc/passwd", "../x", "a/../../b", "~/x", "a\\..\\b", "a\nb", "a\0b"]) {
+    const r = parseProofFile(JSON.stringify({ claims: [{ claim: "c", path }] }));
+    assert.deepEqual(r, [{ claim: "c", path: null }], path);
+  }
+  assert.deepEqual(parseProofFile('{"claims":[{"claim":"c","path":"proof/a..b.png"}]}'), [{ claim: "c", path: "proof/a..b.png" }]);
+});
+
+test("parseProofFile drops empty or whitespace claims", () => {
+  assert.deepEqual(parseProofFile('{"claims":[{"claim":""},{"claim":"  \\t"}]}'), []);
+});

@@ -4,6 +4,14 @@
 /** @typedef {{ number: number, title: string, state: "OPEN"|"MERGED"|"CLOSED", checks: Check[] }} Pr */
 /** @typedef {{ claim: string, verdict: "PASS"|"FAIL"|"NO DATA", source: "ci"|"agent", path: string|null, detail: string|null }} Claim */
 
+/** Evidence paths must be non-empty, repo-relative: no absolute/~, no ".." segment, no NUL/newline. */
+function safePath(p) {
+  if (typeof p !== "string" || !p) return null;
+  if (p.startsWith("/") || p.startsWith("~") || /[\0\r\n]/.test(p)) return null;
+  if (p.split(/[\\/]/).includes("..")) return null;
+  return p;
+}
+
 /**
  * Parse the agent's proof file: {claims:[{claim, evidence, path}]}.
  * Anything malformed yields []; entries without a string `claim` are dropped.
@@ -21,8 +29,8 @@ export function parseProofFile(text) {
   if (!data || typeof data !== "object" || !Array.isArray(data.claims)) return [];
   const out = [];
   for (const c of data.claims) {
-    if (!c || typeof c !== "object" || typeof c.claim !== "string") continue;
-    out.push({ claim: c.claim, path: typeof c.path === "string" && c.path ? c.path : null });
+    if (!c || typeof c !== "object" || typeof c.claim !== "string" || !c.claim.trim()) continue;
+    out.push({ claim: c.claim, path: safePath(c.path) });
   }
   return out;
 }
@@ -43,7 +51,7 @@ export function buildClaims(checks, agentClaims, exists) {
     else claims.push({ claim: c.name, verdict: "NO DATA", source: "ci", path: null, detail: "running" });
   }
   for (const a of agentClaims ?? []) {
-    const ok = !!a.path && !!exists?.[a.path];
+    const ok = typeof a.path === "string" && !!exists && Object.hasOwn(exists, a.path) && exists[a.path] === true;
     claims.push({ claim: a.claim, verdict: ok ? "PASS" : "NO DATA", source: "agent", path: a.path ?? null, detail: null });
   }
   return claims;
