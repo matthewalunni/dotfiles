@@ -14,7 +14,7 @@ Run this every time you finish a task, open a PR, or ask to merge, and start fro
 1. **Go to the repo root, exclude `.herdr/` from git, and reset the proof directory.** Deck reads the root's `.herdr/`; from any other directory Deck sees nothing (NO DATA). Works in worktrees too. Never commit `.herdr/`.
 
    ```sh
-   cd "$(git rev-parse --show-toplevel)"
+   cd "$(git rev-parse --show-toplevel)" || exit 1
    ex=$(git rev-parse --git-path info/exclude); mkdir -p "$(dirname "$ex")"
    grep -qxF '.herdr/' "$ex" 2>/dev/null || printf '\n.herdr/\n' >> "$ex"
    rm -rf .herdr/proof; mkdir -p .herdr/proof
