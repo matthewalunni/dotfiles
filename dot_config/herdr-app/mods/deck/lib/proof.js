@@ -85,25 +85,32 @@ export function stampText(claims) {
   return `${claims.filter((c) => c.verdict === "PASS").length} of ${claims.length}`;
 }
 
-// Evidence types that open in a viewer; anything else (scripts, .command, no
-// extension) is only revealed in Finder, so a click never runs a file.
-const VIEWABLE = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "pdf",
-  "mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav",
-  "txt", "log", "md", "json", "csv", "xml", "yaml", "yml",
-]);
+// How an evidence file opens: only ever with a named viewer, never the
+// file's default handler, so a click can't run anything. Images and PDFs in
+// Preview, text in TextEdit, media in QuickTime; anything else (svg too) is
+// only revealed in Finder.
+const VIEWERS = [
+  [["png", "jpg", "jpeg", "gif", "heic", "webp", "pdf"], ["-a", "Preview"]],
+  [["txt", "log", "md", "json"], ["-e"]],
+  [["mp4", "mov", "m4v", "mp3", "wav", "m4a"], ["-a", "QuickTime Player"]],
+];
 
 /**
- * `open` arguments for an evidence file:// URL (raw absolute path, no escaping), or null.
- * @param {string|null} url
+ * `open` arguments for an evidence file. `resolved` must already be the file's
+ * realpath (symlinks followed) and `realRoot` the repo root's realpath: the
+ * type comes from the resolved name, and anything not strictly inside the
+ * root is refused (null).
+ * @param {string|null} resolved @param {string|null} realRoot
  * @returns {string[]|null}
  */
-export function evidenceOpenArgs(url) {
-  if (typeof url !== "string" || !url.startsWith("file:///")) return null;
-  const path = url.slice("file://".length);
-  if (/[\0\r\n]/.test(path) || path.split("/").includes("..")) return null;
-  const name = path.split("/").pop() ?? "";
+export function evidenceOpenArgs(resolved, realRoot) {
+  if (typeof resolved !== "string" || typeof realRoot !== "string" || !realRoot.startsWith("/")) return null;
+  if (!resolved.startsWith("/") || /[\0\r\n]/.test(resolved) || resolved.split("/").includes("..")) return null;
+  const root = realRoot.replace(/\/+$/, "");
+  if (!root || !resolved.startsWith(root + "/")) return null;
+  const name = resolved.split("/").pop() ?? "";
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-  return VIEWABLE.has(ext) ? [path] : ["-R", path];
+  const viewer = VIEWERS.find(([exts]) => exts.includes(ext));
+  return viewer ? [...viewer[1], resolved] : ["-R", resolved];
 }

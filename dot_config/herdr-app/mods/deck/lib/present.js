@@ -144,6 +144,10 @@ export function hhmm(t) {
 // Text draws a tab as nothing: pad each to the next 4-column stop.
 const untab = (text) => text.replace(/[^\t]*\t/g, (s) => s.slice(0, -1).padEnd(s.length - 1 - ((s.length - 1) % 4) + 4));
 
+const CODE_MAX = 400;
+// A minified line can be huge; the row truncates anyway.
+const clipCode = (s) => (s.length <= CODE_MAX ? s : s.slice(0, CODE_MAX - 1) + "…");
+
 export const ROW_H = { file: 32, hunk: 22, line: 20, truncated: 32 };
 
 /**
@@ -174,7 +178,7 @@ export function diffRows(files, cap) {
           truncated = true;
           break outer;
         }
-        rows.push({ kind: "line", a: l.a, b: l.b, sign: l.sign, code: untab(l.code) });
+        rows.push({ kind: "line", a: l.a, b: l.b, sign: l.sign, code: clipCode(untab(l.code)) });
         lines++;
       }
     }

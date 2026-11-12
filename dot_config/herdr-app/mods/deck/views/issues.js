@@ -7,7 +7,7 @@ import { shared, setShared, notify } from "herdr";
 import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
-  currentStore, showView, reply, pressOption, requestProof, dismiss, openUrl, focusTerminal,
+  currentStore, showView, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
   STORE_KEY, SEL_KEY, TAB_KEY,
 } from "../data.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act } from "./ui.js";
@@ -312,7 +312,7 @@ export default class IssuesView extends View {
           .gap(6)
           .children(
             options.map((o, n) =>
-              optionButton(`opt-${issue.key}-${n}`, o.label, n === 0, (_e, cx) =>
+              optionButton(`opt-${issue.key}-${n}`, o.label, false, (_e, cx) =>
                 this.run(cx, issue, () => pressOption(issue, o), "Could not answer"), busy).w_full(),
             ),
           ),
@@ -502,7 +502,7 @@ export default class IssuesView extends View {
               return row
                 .cursor_pointer()
                 .hover((s) => s.bg(k.raised))
-                .on_click((_e, cx) => act(cx, () => openUrl("file://" + issue.root + "/" + c.path), "Could not open evidence"));
+                .on_click((_e, cx) => act(cx, () => openEvidence(issue, c.path), "Could not open evidence"));
             }),
           ),
       )
@@ -541,8 +541,10 @@ export default class IssuesView extends View {
     const store = currentStore();
     const issues = store.issues;
     const selKey = shared(SEL_KEY);
-    const ordered = groupIssues(issues, null).flatMap((g) => g.items);
-    const issue = issues.find((i) => i.key === selKey) ?? groupIssues(issues, this.filter).flatMap((g) => g.items)[0] ?? ordered[0] ?? null;
+    // Only an issue the list shows can be the detail's: a filter that hides
+    // the selected one moves the detail to the first visible issue.
+    const visible = groupIssues(issues, this.filter).flatMap((g) => g.items);
+    const issue = visible.find((i) => i.key === selKey) ?? visible[0] ?? null;
     this.shown = issue;
     const tab = shared(TAB_KEY) === "pr" && issue?.pr ? "pr" : "overview";
 
@@ -562,7 +564,8 @@ export default class IssuesView extends View {
 
     root.child(this.list(issues, issue, k));
     if (!issue) {
-      return root.child(v_flex().flex_1().items_center().justify_center().text_color(k.muted).child("No agents yet. Start one with cmd-t."));
+      const why = issues.length ? "No issues match this view." : "No agents yet. Start one with cmd-t.";
+      return root.child(v_flex().flex_1().items_center().justify_center().text_color(k.muted).child(why));
     }
     return root.child(
       v_flex()

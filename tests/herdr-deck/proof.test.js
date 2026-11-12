@@ -90,17 +90,48 @@ test("parseProofFile drops empty or whitespace claims", () => {
   assert.deepEqual(parseProofFile('{"claims":[{"claim":""},{"claim":"  \\t"}]}'), []);
 });
 
-test("evidenceOpenArgs opens viewable files and reveals the rest", async () => {
+test("evidenceOpenArgs opens resolved evidence only with an explicit viewer", async () => {
   const { evidenceOpenArgs } = await import("../../dot_config/herdr-app/mods/deck/lib/proof.js");
-  assert.deepEqual(evidenceOpenArgs("file:///repo/proof/a.mp4"), ["/repo/proof/a.mp4"]);
-  assert.deepEqual(evidenceOpenArgs("file:///repo/proof/A.PNG"), ["/repo/proof/A.PNG"]);
-  assert.deepEqual(evidenceOpenArgs("file:///repo/x y/log.txt"), ["/repo/x y/log.txt"]);
-  // Anything that could run when opened is only revealed in Finder.
-  assert.deepEqual(evidenceOpenArgs("file:///repo/run.command"), ["-R", "/repo/run.command"]);
-  assert.deepEqual(evidenceOpenArgs("file:///repo/noext"), ["-R", "/repo/noext"]);
-  assert.equal(evidenceOpenArgs("file://relative/a.png"), null);
-  assert.equal(evidenceOpenArgs("file:///repo/../etc/a.png"), null);
-  assert.equal(evidenceOpenArgs("file:///repo/a\0.png"), null);
-  assert.equal(evidenceOpenArgs("https://x.test/a.png"), null);
-  assert.equal(evidenceOpenArgs(null), null);
+  const root = "/real/repo";
+  for (const ext of ["png", "jpg", "jpeg", "gif", "heic", "webp", "pdf", "PNG"]) {
+    assert.deepEqual(evidenceOpenArgs(`/real/repo/proof/a.${ext}`, root), ["-a", "Preview", `/real/repo/proof/a.${ext}`]);
+  }
+  for (const ext of ["txt", "log", "md", "json"]) {
+    assert.deepEqual(evidenceOpenArgs(`/real/repo/a.${ext}`, root), ["-e", `/real/repo/a.${ext}`]);
+  }
+  for (const ext of ["mp4", "mov", "m4v", "mp3", "wav", "m4a"]) {
+    assert.deepEqual(evidenceOpenArgs(`/real/repo/x y/a.${ext}`, root), ["-a", "QuickTime Player", `/real/repo/x y/a.${ext}`]);
+  }
+  // Anything else, svg included, is only revealed in Finder.
+  assert.deepEqual(evidenceOpenArgs("/real/repo/a.svg", root), ["-R", "/real/repo/a.svg"]);
+  assert.deepEqual(evidenceOpenArgs("/real/repo/run.command", root), ["-R", "/real/repo/run.command"]);
+  assert.deepEqual(evidenceOpenArgs("/real/repo/noext", root), ["-R", "/real/repo/noext"]);
+  assert.deepEqual(evidenceOpenArgs("/real/repo/.png", root), ["-R", "/real/repo/.png"]);
+  // Outside the resolved root, relative, or malformed: refused.
+  assert.equal(evidenceOpenArgs("/real/repository/a.png", root), null);
+  assert.equal(evidenceOpenArgs("/real/repo", root), null);
+  assert.equal(evidenceOpenArgs("/etc/a.png", root), null);
+  assert.equal(evidenceOpenArgs("real/repo/a.png", root), null);
+  assert.equal(evidenceOpenArgs("/real/repo/../etc/a.png", root), null);
+  assert.equal(evidenceOpenArgs("/real/repo/a\0.png", root), null);
+  assert.equal(evidenceOpenArgs("/real/repo/a.png", ""), null);
+  assert.equal(evidenceOpenArgs(null, root), null);
+});
+
+test("a .png symlink to a .command is judged by its resolved target", async () => {
+  const { evidenceOpenArgs } = await import("../../dot_config/herdr-app/mods/deck/lib/proof.js");
+  const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "deck-proof-"));
+  try {
+    mkdirSync(join(dir, "proof"));
+    writeFileSync(join(dir, "proof", "run.command"), "#!/bin/sh\necho hi\n");
+    symlinkSync("run.command", join(dir, "proof", "shot.png"));
+    const realRoot = realpathSync(dir);
+    const resolved = realpathSync(join(dir, "proof", "shot.png"));
+    assert.deepEqual(evidenceOpenArgs(resolved, realRoot), ["-R", join(realRoot, "proof", "run.command")]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

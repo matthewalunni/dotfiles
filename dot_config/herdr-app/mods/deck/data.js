@@ -453,15 +453,34 @@ export function dismiss(issue) {
   save(dismissIn(currentStore(), issue.key, Date.now()));
 }
 
-/**
- * Opens a web link in the default browser (http/https), or an evidence file
- * (file:///abs/path): viewable types open, anything else is revealed in Finder.
- */
+/** Opens a web link in the default browser (http/https only). */
 export async function openUrl(url) {
-  const args = typeof url === "string" && /^https?:\/\//.test(url) ? [url] : evidenceOpenArgs(url);
-  if (!args) return { ok: false, error: "not a web link or evidence file" };
-  const r = await sh("open", args, { timeout: T_GIT });
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false, error: "not a web link" };
+  const r = await sh("open", [url], { timeout: T_GIT });
   return r.code === 0 ? { ok: true, error: null } : { ok: false, error: String(r.stderr).trim() };
+}
+
+/**
+ * Opens an agent claim's evidence file. Checked again at click time: the file's
+ * realpath must be a regular file strictly inside the repo root's realpath, and
+ * its type (from the resolved name) picks a named viewer; anything else is only
+ * revealed in Finder. The file's default handler is never used.
+ * @param {Issue} issue @param {string} path repo-relative, from the proof file
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function openEvidence(issue, path) {
+  const root = latest(issue).root;
+  if (!root || typeof path !== "string" || !path || path.startsWith("/") || /[\0\r\n]/.test(path)) {
+    return { ok: false, error: "no evidence file" };
+  }
+  const realRoot = okText(await sh("realpath", ["--", root], { timeout: T_GIT }));
+  const resolved = okText(await sh("realpath", ["--", path], { cwd: root, timeout: T_GIT }));
+  const args = evidenceOpenArgs(resolved || null, realRoot || null);
+  if (!args) return { ok: false, error: "evidence is outside the repo" };
+  const f = await sh("test", ["-f", resolved], { timeout: T_GIT });
+  if (f.code !== 0) return { ok: false, error: "evidence file is missing" };
+  const r = await sh("open", args, { timeout: T_GIT });
+  return r.code === 0 ? { ok: true, error: null } : { ok: false, error: String(r.stderr || "open failed").trim() };
 }
 
 /** Show a child of the deck-main stack and remember it for the bar. */

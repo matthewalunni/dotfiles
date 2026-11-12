@@ -129,3 +129,12 @@ test("diffRows caps lines and marks truncation; tabs become spaces", () => {
   assert.equal(d.rows[2].code, "    x");
   assert.equal(d.fileRow[1], -1);
 });
+
+test("diffRows clips very long lines to 400 characters", () => {
+  const long = "x".repeat(5000);
+  const files = [{ path: "a", add: 1, del: 0, hunks: [{ header: "@@ -1 +1 @@", lines: [{ a: null, b: 1, sign: "+", code: long }] }] }];
+  const code = diffRows(files, 10).rows[2].code;
+  assert.equal(code.length, 400);
+  assert.equal(code.endsWith("…"), true);
+  assert.equal(diffRows([{ ...files[0], hunks: [{ header: "@@ -1 +1 @@", lines: [{ a: null, b: 1, sign: "+", code: "y".repeat(400) }] }] }], 10).rows[2].code.length, 400);
+});
