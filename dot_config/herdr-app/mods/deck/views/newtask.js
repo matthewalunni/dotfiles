@@ -105,7 +105,14 @@ export default class NewTaskView extends View {
     cx.timer.every(1000, () => dialogBeat(KEY, p.overlay));
   }
 
+  /** esc / Cancel: ignored while a filing is in flight (it can't be cancelled). */
+  cancel() {
+    if (!this.busy) this.shut();
+  }
+
   shut() {
+    if (this.closed) return;
+    this.closed = true;
     const p = props() ?? {};
     if (p.overlay) {
       forgetDialog(KEY, p.overlay);
@@ -197,7 +204,7 @@ export default class NewTaskView extends View {
         const d = dialogKeyNewTask(keyOf(e), this.field);
         if (!d) return; // text for the input: never a Deck shortcut
         cx.stop_propagation();
-        if (d === "cancel") this.shut();
+        if (d === "cancel") this.cancel();
         else if (d === "submit") this.submit(cx);
         else this.move(d === "next" ? 1 : -1);
       })
@@ -261,7 +268,7 @@ export default class NewTaskView extends View {
           .items_center()
           .gap(8)
           .child(div().flex_1().min_w(0).text_color(k.muted).child("tab next field · ⌘↵ add · esc cancel"))
-          .child(button("nt-cancel", "Cancel", "plain", () => this.shut(), false, "esc"))
+          .child(button("nt-cancel", "Cancel", "plain", () => this.cancel(), this.busy, "esc"))
           .child(button("nt-add", this.busy ? "Adding…" : "Add to Backlog", "brand", (_e, cx) => this.submit(cx), this.busy, "⌘↵")),
       );
   }

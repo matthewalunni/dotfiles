@@ -1,6 +1,7 @@
 // The New task dialog (views/newtask.js): its repo chips, the script's argv,
 // its keys and the filing flow. Pure; no herdr imports. Filing runs the
-// herdr-backlog script with argv only (never a shell), source "you".
+// herdr-backlog script through a fixed login-shell string (zsh -lc), the text as
+// positional args only, source "you".
 import { safeRepo } from "./backlog.js";
 
 export const REQUIRED = "Title and brief are required";
