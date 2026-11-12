@@ -22,3 +22,21 @@ install-minimal.sh
 # herdr-app writes these into every mod folder itself
 .config/herdr-app/mods/*/gpui-kit.d.ts
 .config/herdr-app/mods/*/jsconfig.json
+
+# herdr-app runtime and platform files (never source)
+.config/herdr-app/AGENTS.md
+.config/herdr-app/*.d.ts
+.config/herdr-app/view.json
+.config/herdr-app/shared.json
+.config/herdr-app/seen.json
+.config/herdr-app/installed.json
+.config/herdr-app/window.json
+.config/herdr-app/windows.json
+.config/herdr-app/update-notes*
+.config/herdr-app/data
+.config/herdr-app/frame
+.config/herdr-app/icons
+.config/herdr-app/telemetry
+.config/herdr-app/layouts/.state
+.config/herdr-app/*.error
+.config/herdr-app/*.sock

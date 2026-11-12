@@ -1,0 +1,93 @@
+{
+  "id": "root",
+  "type": "column",
+  "theme": "earthcode-moss",
+  "font": "JetBrains Mono",
+  "ui_font": "JetBrains Mono",
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    14,
+    12
+  ],
+  "divider": {
+    "width": 1,
+    "color": "border"
+  },
+  "children": [
+    {
+      "id": "deck-bar",
+      "type": "block",
+      "size": {
+        "px": 44
+      },
+      "window_drag": true,
+      "content": {
+        "mod": "deck",
+        "props": {
+          "view": "bar"
+        }
+      }
+    },
+    {
+      "id": "deck-main",
+      "type": "stack",
+      "active": "deck-command",
+      "children": [
+        {
+          "id": "deck-command",
+          "type": "block",
+          "content": {
+            "mod": "deck",
+            "props": {
+              "view": "command"
+            }
+          }
+        },
+        {
+          "id": "deck-issues",
+          "type": "block",
+          "content": {
+            "mod": "deck",
+            "props": {
+              "view": "issues"
+            }
+          }
+        },
+        {
+          "id": "deck-work",
+          "type": "block",
+          "content": {
+            "tab": "active",
+            "pane": {
+              "gap": 8,
+              "radius": 10,
+              "background": "background",
+              "lone": true,
+              "border": {
+                "width": 1,
+                "color": "border"
+              },
+              "focus": {
+                "width": 1,
+                "color": "accent"
+              },
+              "header": {
+                "content": {
+                  "mod": "pane"
+                },
+                "height": 30,
+                "position": "top",
+                "reveal": "always"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

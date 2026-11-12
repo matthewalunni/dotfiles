@@ -1,0 +1,37 @@
+{{- $t := index .themes "earthcode-moss" -}}
+{
+  "background": "{{ $t.bg }}",
+  "foreground": "{{ $t.fg }}",
+  "selection": "{{ $t.raised }}",
+  "cursor": "{{ $t.fg }}",
+  "ansi": [
+    "{{ $t.black }}", "{{ $t.red }}", "{{ $t.green }}", "{{ $t.yellow }}",
+    "{{ $t.blue }}", "{{ $t.magenta }}", "{{ $t.cyan }}", "{{ $t.white }}",
+    "{{ $t.br_black }}", "{{ $t.br_red }}", "{{ $t.br_green }}", "{{ $t.br_yellow }}",
+    "{{ $t.br_blue }}", "{{ $t.br_magenta }}", "{{ $t.br_cyan }}", "{{ $t.br_white }}"
+  ],
+  "colors": {
+    "canvas": "{{ $t.bg }}",
+    "chrome": "{{ $t.chrome }}",
+    "surface": "{{ $t.surface }}",
+    "raised": "{{ $t.raised }}",
+    "selected": "{{ $t.raised }}",
+    "border": "{{ $t.border }}",
+    "foreground": "{{ $t.strong }}",
+    "muted": "{{ $t.text }}",
+    "dim": "{{ $t.muted }}",
+    "accent": "{{ $t.brand }}",
+    "accent_foreground": "#000000",
+    "solid": "{{ $t.hold }}",
+    "solid_foreground": "#000000",
+    "working": "{{ $t.work }}",
+    "blocked": "{{ $t.hold }}",
+    "done": "{{ $t.ok }}",
+    "idle": "{{ $t.muted }}",
+    "unknown": "{{ $t.nodata }}",
+    "deck_hold_bg": "{{ $t.hold_bg }}",
+    "deck_ok_bg": "{{ $t.ok_bg }}",
+    "deck_add_bg": "{{ $t.add_bg }}",
+    "deck_del_bg": "{{ $t.del_bg }}"
+  }
+}
