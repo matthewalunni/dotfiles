@@ -23,9 +23,9 @@ export function issuePane(issue) {
 
 /**
  * Opening `issue`'s page: the selection to store, where it came from, the
- * terminal to agent.focus (null when gone) and the stack child to show.
+ * stack child to show and the right side ("terminal" | "gone").
  * @param {Issue|null|undefined} issue @param {string} from
- * @returns {{sel: string, from: IssueFrom, focus: string|null, child: "deck-issue", pane: "terminal"|"gone"}|null}
+ * @returns {{sel: string, from: IssueFrom, child: "deck-issue", pane: "terminal"|"gone"}|null}
  */
 export function openPlan(issue, from) {
   if (!issue?.key) return null;
@@ -33,10 +33,23 @@ export function openPlan(issue, from) {
   return {
     sel: issue.key,
     from: /** @type {IssueFrom} */ (FROMS.has(from) ? from : "list"),
-    focus: pane === "terminal" ? issue.terminal : null,
     child: "deck-issue",
     pane,
   };
+}
+
+/**
+ * How opening the page shows the issue's terminal: the tab (and space) that
+ * holds its agent, to show with space.select + tab.select. Never a focus call:
+ * the keyboard stays on the overview until T. {none: true} when the issue is
+ * gone or its agent is not in `agents` (agents()).
+ * @param {Issue|null|undefined} issue @param {{address: string, tab: string, space: string}[]|null|undefined} agents
+ * @returns {{tab: string, space: string}|{none: true}}
+ */
+export function openTarget(issue, agents) {
+  if (issuePane(issue) !== "terminal") return { none: true };
+  const a = (agents ?? []).find((x) => x.address === issue.terminal);
+  return a?.tab ? { tab: a.tab, space: a.space } : { none: true };
 }
 
 /**

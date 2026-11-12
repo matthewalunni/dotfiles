@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { issuePane, stepIssue, openPlan, issueFrom, backTarget } from "../../dot_config/herdr-app/mods/deck/lib/issuepage.js";
+import { issuePane, stepIssue, openPlan, issueFrom, backTarget, openTarget } from "../../dot_config/herdr-app/mods/deck/lib/issuepage.js";
 
 const iss = (key, o = {}) => ({ key, terminal: "t-" + key, observed: true, ...o });
 
@@ -12,10 +12,19 @@ test("issuePane: a live terminal shows, a gone one does not", () => {
 });
 test("unobserved issue opens the overview without agent.focus", () => {
   const p = openPlan(iss("a", { observed: false }), "board");
-  assert.deepEqual(p, { sel: "a", from: "board", focus: null, child: "deck-issue", pane: "gone" });
+  assert.deepEqual(p, { sel: "a", from: "board", child: "deck-issue", pane: "gone" });
+  assert.deepEqual(openTarget(iss("a", { observed: false }), [{ address: "t-a", tab: "tb1", space: "sp1" }]), { none: true });
 });
-test("observed issue opens and focuses its agent", () => {
-  assert.deepEqual(openPlan(iss("a"), "list"), { sel: "a", from: "list", focus: "t-a", child: "deck-issue", pane: "terminal" });
+test("observed issue opens with its pane", () => {
+  assert.deepEqual(openPlan(iss("a"), "list"), { sel: "a", from: "list", child: "deck-issue", pane: "terminal" });
+});
+test("openTarget: the agent's tab to show (never a focus call)", () => {
+  const ags = [{ address: "t-b", tab: "tb2", space: "sp1" }, { address: "t-a", tab: "tb1", space: "sp2" }];
+  assert.deepEqual(openTarget(iss("a"), ags), { tab: "tb1", space: "sp2" });
+  assert.deepEqual(openTarget(iss("c"), ags), { none: true }); // its agent is not listed
+  assert.deepEqual(openTarget(iss("a"), [{ address: "t-a", tab: "", space: "sp2" }]), { none: true });
+  assert.deepEqual(openTarget(iss("a"), undefined), { none: true });
+  assert.deepEqual(openTarget(null, ags), { none: true });
 });
 test("board click opens", () => {
   // One click on a card opens the page (no select-then-open): the plan never depends on the selection.

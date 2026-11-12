@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shownChild, takesFocus, ASK_MS } from "../../dot_config/herdr-app/mods/deck/lib/views.js";
+import { shownChild, takesFocus, ASK_MS, navChild } from "../../dot_config/herdr-app/mods/deck/lib/views.js";
 
 test("shownChild: only in a deck layout", () => {
   assert.equal(shownChild("main", "deck-issues"), null);
@@ -30,4 +30,11 @@ test("takesFocus: a new, recent show request for it counts once", () => {
 });
 test("shownChild: the issue page is a Deck view", () => {
   assert.equal(shownChild("deck", "deck-issue"), "deck-issue");
+});
+test("navChild: the issue page underlines Issues", () => {
+  assert.equal(navChild("deck-issue"), "deck-issues");
+  assert.equal(navChild("deck-issues"), "deck-issues");
+  assert.equal(navChild("deck-terminal"), "deck-terminal");
+  assert.equal(navChild("deck-work"), "deck-command");
+  assert.equal(navChild(undefined), "deck-command");
 });

@@ -34,3 +34,15 @@ export function takesFocus(last, now, ask, child, ms) {
   if (last.shown !== child) return true;
   return Boolean(ask && ask !== last.ask && ask.child === child && ms - ask.at < ASK_MS);
 }
+
+const NAV = ["deck-command", "deck-issues", "deck-terminal"];
+
+/**
+ * The bar nav item to underline for a VIEW_KEY: the issue page is Issues; a
+ * stale or unknown view is Command.
+ * @param {unknown} view @returns {string}
+ */
+export function navChild(view) {
+  if (view === "deck-issue") return "deck-issues";
+  return NAV.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-command";
+}

@@ -7,10 +7,10 @@
 //   come back into sight, they focus their own handle a beat later.
 // The handle registry is on globalThis (like the collector guard): every copy
 // of the mod shares it, and a reloaded build's copies register again in init.
-import { shared, setShared, agents, run } from "herdr";
+import { shared, setShared, agents, focused, run } from "herdr";
 import { showView, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { shownChild, takesFocus } from "../lib/views.js";
-import { openPlan, issueFrom } from "../lib/issuepage.js";
+import { openPlan, openTarget, issueFrom } from "../lib/issuepage.js";
 
 // The stack child may draw only on the next frame: focus once it has.
 const SETTLE_MS = 40;
@@ -79,9 +79,10 @@ export function showIssueSide(pane) {
 /**
  * Opens the issue page for `issue`: selects it, records where it was opened
  * from (`from`, or worked out from the view shown when omitted), shows its
- * agent's tab with agent.focus when its terminal is observed (never when it
- * is gone), and puts the keyboard on the overview (goTo; the page's
- * focusOnShow takes it again a beat later, after agent.focus).
+ * agent's tab with space.select + tab.select when its terminal is observed
+ * (nothing when it is gone), and puts the keyboard on the overview (goTo).
+ * Never agent.focus / pane.focus: only T gives the terminal the keyboard, so a
+ * digit pressed right after opening can't answer a prompt in the terminal.
  * @param {any} issue @param {"board"|"list"|"command"|"terminal"} [from]
  */
 export function openIssue(issue, from) {
@@ -92,6 +93,10 @@ export function openIssue(issue, from) {
   setShared(TAB_KEY, "overview");
   setShared(ISSUE_FROM_KEY, plan.from);
   showIssueSide(plan.pane);
-  if (plan.focus) run("agent.focus", { terminal: plan.focus });
+  const t = openTarget(issue, agents());
+  if ("tab" in t) {
+    if (t.space && focused()?.space !== t.space) run("space.select", { id: t.space });
+    run("tab.select", { id: t.tab });
+  }
   goTo(plan.child);
 }

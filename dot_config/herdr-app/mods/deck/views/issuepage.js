@@ -1,7 +1,7 @@
 // The issue page (stack child deck-issue): the issue overview on the left
 // (540 px, the Issues view's detail stacked into one column) and the agent's
 // live terminal on the right (the active-tab pane, its tab shown with
-// agent.focus when the page opens). Keys go to the overview until T, which
+// tab.select when the page opens, never a focus call). Keys go to the overview until T, which
 // gives the terminal the keyboard; ⌘⇧I (deck.agent-issue) comes back.
 // When the issue's terminal is gone, the right side shows "Agent not running"
 // instead (the deck-issue-side stack's other child) and nothing is focused.
@@ -109,7 +109,7 @@ export default class IssuePage extends View {
     const k = tokens();
     const issue = selectedIssue();
     showIssue(this, issue);
-    // Shown (opened, or a j / k step): the keys are ours, after agent.focus.
+    // Shown (opened, or a j / k step): the keys are ours (goTo focused us already; again once drawn).
     focusOnShow(this, "deck-issue", () => this.handle.focus(), cx);
     // R on the Command Center: open with the reply box focused.
     if (issue && globalThis.__deckReplyFocus === issue.key) {

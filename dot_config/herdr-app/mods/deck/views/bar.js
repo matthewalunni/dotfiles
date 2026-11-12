@@ -9,6 +9,7 @@ import { shared, theme, nextCommand, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
 import { currentStore, VIEW_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
+import { navChild } from "../lib/views.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
 import { goTo, focusedAgent, openIssue } from "./focus.js";
@@ -139,9 +140,8 @@ export default class BarView extends View {
   render(cx) {
     const k = deckTokens(theme());
     // A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
-    // The issue page underlines Issues.
-    const stored = shared(VIEW_KEY) === "deck-issue" ? "deck-issues" : shared(VIEW_KEY);
-    const active = NAV.some((n) => n.child === stored) ? stored : "deck-command";
+    // The issue page underlines Issues (lib/views.js navChild).
+    const active = navChild(shared(VIEW_KEY));
     const issues = currentStore().issues;
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;
     // "next" is the holding issue after the focused agent's (wrapping).
