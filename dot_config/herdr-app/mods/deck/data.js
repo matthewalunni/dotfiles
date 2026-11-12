@@ -33,6 +33,8 @@ const T_GIT = 5_000;
 const T_HC = 5_000;
 const T_GH = 15_000;
 const T_MERGE = 60_000;
+// A cycle still running after this is abandoned; its result is discarded.
+const CYCLE_DEADLINE_MS = 60_000;
 // readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
 const HISTORY_TAIL = String(4 * 1024 * 1024);
 
@@ -59,15 +61,9 @@ async function sh(cmd, args, opts) {
   }
 }
 
-/** Read-only hc calls, time-limited through exec; falls back to the host's hc(). */
-async function hcRead(args) {
-  const r = await sh("hc", args, { timeout: T_HC });
-  if (r.code !== -1) return r;
-  try {
-    return (await hc(args)) ?? FAILED("no result");
-  } catch (e) {
-    return FAILED(e);
-  }
+/** Read-only hc calls, time-limited through exec. A failure (or timeout) is no data. */
+function hcRead(args) {
+  return sh("hc", args, { timeout: T_HC });
 }
 
 const okText = (r) => (r.code === 0 ? String(r.stdout ?? "").trim() : "");
@@ -122,10 +118,10 @@ async function proofClaims(root) {
   const exists = Object.create(null);
   const paths = [...new Set(agentClaims.map((c) => c.path).filter((p) => typeof p === "string"))];
   if (!paths.length) return { agentClaims, exists };
-  const realRoot = okText(await sh("realpath", [root], { timeout: T_GIT }));
+  const realRoot = okText(await sh("realpath", ["--", root], { timeout: T_GIT }));
   if (!realRoot) return { agentClaims, exists };
   await Promise.all(paths.map(async (p) => {
-    const resolved = okText(await sh("realpath", [p], { cwd: root, timeout: T_GIT }));
+    const resolved = okText(await sh("realpath", ["--", p], { cwd: root, timeout: T_GIT }));
     if (!resolved || !resolved.startsWith(realRoot + "/")) return;
     const f = await sh("test", ["-f", resolved], { timeout: T_GIT });
     if (f.code === 0) exists[p] = true;
@@ -191,10 +187,10 @@ function fingerprint(store) {
   });
 }
 
-let lastPrint = null;
 let lastWrite = 0;
 
-async function cycle() {
+/** @param {number} id the cycle's id; a result from an abandoned cycle is dropped */
+async function cycle(id) {
   const list = agents() ?? [];
   const terms = terminals() ?? [];
   const termByAddr = new Map(terms.map((x) => [x.address, x]));
@@ -210,31 +206,37 @@ async function cycle() {
 
   // Read the store only now, after every await, so actions taken meanwhile are kept.
   const now = Date.now();
-  const next = reconcile(currentStore(), obs, now);
-  const print = fingerprint(next);
-  if (print !== lastPrint || now - lastWrite > HEARTBEAT_WRITE_MS) {
+  if (id !== cycleId) return;
+  const prev = currentStore();
+  const next = reconcile(prev, obs, now);
+  if (fingerprint(next) !== fingerprint(prev) || now - lastWrite > HEARTBEAT_WRITE_MS) {
     setShared(STORE_KEY, next);
-    lastPrint = print;
     lastWrite = now;
   }
 }
 
 let running = null;
+let cycleId = 0;
+let cycleStarted = 0;
+// When the last cycle started, or 0 to run one at the next tick (refresh()).
 let lastStart = 0;
 
 function startCycle() {
+  if (running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS) running = null; // hung: abandon it
   if (running) return running;
-  lastStart = Date.now();
-  running = (async () => {
+  const id = ++cycleId;
+  cycleStarted = lastStart = Date.now();
+  const p = (async () => {
     try {
-      await cycle();
+      await cycle(id);
     } catch (e) {
       console.error("deck collector:", e);
     } finally {
-      running = null;
+      if (running === p) running = null;
     }
   })();
-  return running;
+  running = p;
+  return p;
 }
 
 /** Poll interval: fast while the selected issue's PR has a pending check. */
@@ -265,7 +267,8 @@ export function startCollector(cx) {
   const tick = (cx) => {
     if (!claim()) return;
     guard.beat = Date.now();
-    if (running || Date.now() - lastStart < interval()) return;
+    const hung = running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS;
+    if ((running && !hung) || Date.now() - lastStart < interval()) return;
     cx.spawn(async () => {
       await startCycle();
     });
@@ -300,9 +303,11 @@ function save(s) {
  */
 export async function reply(issue, text) {
   if (!issue?.terminal || typeof text !== "string" || !text.trim()) return { ok: false, error: "nothing to send" };
+  if (text.includes("\0")) return { ok: false, error: "reply contains a NUL character" };
   let r;
   try {
-    r = await hc(["send", issue.terminal, text]);
+    // "--" ends hc's options, so a reply starting with "-" is text, not a flag.
+    r = await hc(["send", issue.terminal, "--", text]);
   } catch (e) {
     r = FAILED(e);
   }
@@ -321,9 +326,15 @@ export async function reply(issue, text) {
  */
 export async function pressOption(issue, option) {
   if (!issue?.terminal || !option) return { ok: false, error: "no option" };
-  if (typeof option.reply === "string" && option.reply) return reply(issue, option.reply);
   const t = issue.terminal;
   const status = (agents() ?? []).find((a) => a.address === t)?.status ?? issue.status;
+  if (typeof option.reply === "string" && option.reply) {
+    // An end-of-turn choice: only while the agent is still waiting, not mid-turn.
+    if (status !== "working") return reply(issue, option.reply);
+    notify({ title: "The agent is working again — refreshed", level: "info" });
+    refresh();
+    return { ok: false, error: "agent is working" };
+  }
   const fresh = status !== "working" ? await readScreen(t, status) : null;
   const old = issue.prompt;
   const match = fresh && old && samePrompt(old, fresh)
@@ -349,14 +360,34 @@ export async function pressOption(issue, option) {
 /** Keys with a merge in flight: one press, one merge. */
 const merging = new Set();
 
-async function doMerge(issue) {
+const notMerged = (error) => {
+  notify({ title: "Checks changed — not merged", level: "warning" });
+  refresh();
+  return { ok: false, error };
+};
+
+/**
+ * Squash-merge PR `n`, pinned to `sha` (gh refuses if the head moved).
+ * `recheck`: first re-read the PR and proof from GitHub and the repo and merge
+ * only if the lock is still open on that fresh data, pinned to its head.
+ */
+async function doMerge(issue, sha, recheck) {
   const n = issue.pr?.number;
-  const cwd = issue.root || issue.cwd;
-  if (!Number.isInteger(n) || !cwd) return { ok: false, error: "no pull request" };
+  const root = issue.root;
+  if (!Number.isInteger(n) || !root) return { ok: false, error: "no pull request" };
   if (merging.has(issue.key)) return { ok: false, error: "merge already running" };
   merging.add(issue.key);
   try {
-    const r = await sh("gh", ["pr", "merge", String(n), "--squash"], { cwd, timeout: T_MERGE });
+    if (recheck) {
+      const { pr, error } = parsePr(await sh("gh", ["pr", "view", String(n), "--json", PR_FIELDS], { cwd: root, timeout: T_GH }));
+      if (!pr || pr.number !== n || !pr.headSha) return notMerged(error ?? "pull request unavailable");
+      const proof = await proofClaims(root);
+      const claims = buildClaims(pr.checks, proof.agentClaims, proof.exists);
+      if (!mergeState(pr, error, claims).canMerge) return notMerged("proof incomplete");
+      sha = pr.headSha;
+    }
+    if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) return { ok: false, error: "unknown head commit" };
+    const r = await sh("gh", ["pr", "merge", String(n), "--squash", "--match-head-commit", sha], { cwd: root, timeout: T_MERGE });
     if (r.code !== 0) return { ok: false, error: String(r.stderr || r.stdout || "merge failed").trim() };
     return { ok: true, error: null };
   } finally {
@@ -366,27 +397,29 @@ async function doMerge(issue) {
 }
 
 /**
- * Merge only when the lock is open (open PR, every claim PASS).
+ * Merge only when the lock is open (open PR, every claim PASS), both on the
+ * store's copy and on a fresh read right before merging.
  * @param {Issue} issue
  * @returns {Promise<{ok: boolean, error: string|null}>}
  */
 export async function merge(issue) {
   const it = latest(issue);
   if (!mergeState(it.pr, it.ghError, it.claims ?? []).canMerge) return { ok: false, error: "proof incomplete" };
-  return doMerge(it);
+  return doMerge(it, null, true);
 }
 
 /**
- * The confirm dialog's "Merge anyway", after the person confirmed. Still needs an
- * open PR that GitHub currently reports (mergeState offers "anyway" for it).
- * @param {Issue} issue
+ * The confirm dialog's "Merge anyway", after the person confirmed. Pinned to
+ * `headSha`, the head the dialog showed (issue.pr.headSha when it opened), so a
+ * push since then makes gh refuse. Still needs an open PR GitHub reports.
+ * @param {Issue} issue @param {string} headSha
  * @returns {Promise<{ok: boolean, error: string|null}>}
  */
-export async function mergeAnyway(issue) {
+export async function mergeAnyway(issue, headSha) {
   const it = latest(issue);
   const m = mergeState(it.pr, it.ghError, it.claims ?? []);
   if (!m.canMerge && !m.showAnyway) return { ok: false, error: "no open pull request" };
-  return doMerge(it);
+  return doMerge(it, headSha, false);
 }
 
 /**

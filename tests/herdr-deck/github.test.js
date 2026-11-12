@@ -16,7 +16,7 @@ test("GIT_CMDS and PR_FIELDS are verbatim", () => {
     ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
     ["rev-list", "--count", "<base>..HEAD"],
   ]);
-  assert.equal(PR_FIELDS, "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits");
+  assert.equal(PR_FIELDS, "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits,headRefOid");
 });
 
 test("fixtures map to state, checks, files", () => {
@@ -30,11 +30,14 @@ test("fixtures map to state, checks, files", () => {
     assert.equal(pr.commits, raw.commits.length);
     assert.equal(pr.base, raw.baseRefName);
     assert.equal(pr.head, raw.headRefName);
+    assert.equal(pr.headSha, raw.headRefOid);
+    assert.match(pr.headSha, /^[0-9a-f]{40}$/);
     assert.equal(pr.review, raw.reviewDecision || null);
     assert.equal(pr.checks.length, raw.statusCheckRollup.length);
     for (const c of pr.checks) assert.ok(["pass", "fail", "pending"].includes(c.status));
   }
   const { pr } = parsePr(ok(fx("pr-open.json")));
+  assert.equal(parsePr(withChecks([])).pr.headSha, null); // missing headRefOid
   assert.equal(pr.checks.find((c) => c.name === "Web · tests").status, "pass"); // SKIPPED
 });
 

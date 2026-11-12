@@ -6,7 +6,7 @@
  * @typedef {{
  *   number: number, title: string, state: "OPEN"|"MERGED"|"CLOSED", url: string,
  *   review: string|null, checks: Check[], files: { path: string, add: number, del: number }[],
- *   additions: number, deletions: number, base: string, head: string, commits: number
+ *   additions: number, deletions: number, base: string, head: string, headSha: string|null, commits: number
  * }} Pr
  */
 
@@ -19,7 +19,7 @@ export const GIT_CMDS = [
 ];
 
 export const PR_FIELDS =
-  "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits";
+  "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits,headRefOid";
 
 const okOut = (r) => (r && r.code === 0 ? String(r.stdout ?? "").trim() : "");
 
@@ -88,6 +88,7 @@ export function parsePr(res) {
       deletions: j.deletions ?? 0,
       base: j.baseRefName ?? "",
       head: j.headRefName ?? "",
+      headSha: typeof j.headRefOid === "string" && /^[0-9a-f]{40}$/.test(j.headRefOid) ? j.headRefOid : null,
       commits: Array.isArray(j.commits) ? j.commits.length : 0,
     },
     error: null,
