@@ -4,7 +4,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared } from "herdr";
 import { pickDecision, STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
-import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm } from "../lib/present.js";
+import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm, liveIssues } from "../lib/present.js";
 import { keyAction } from "../lib/keys.js";
 import { currentStore, focusTerminal, openUrl, STORE_KEY } from "../data.js";
 import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
@@ -296,7 +296,8 @@ export default class CommandView extends View {
     focusOnShow(this, "deck-command", () => this.handle.focus(), cx);
     const k = tokens();
     const store = currentStore();
-    const issues = store.issues;
+    // Backlog entries are not agents: no row, count, telemetry or empty-state change here.
+    const issues = liveIssues(store.issues);
     const decision = pickDecision(issues.filter((i) => i.stage === "holding"));
     this.decisionKey = decision?.key ?? null;
     if (!issues.length) this.order = [];

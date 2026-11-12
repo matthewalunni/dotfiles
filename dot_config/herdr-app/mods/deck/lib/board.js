@@ -1,6 +1,7 @@
 // Board columns and navigation. Pure.
 
 import { STAGE_LABEL } from "./stage.js";
+import { backlogFiler } from "./backlog.js";
 
 /** @typedef {import("./store.js").Issue} Issue */
 
@@ -53,9 +54,16 @@ export function repoColor(name, palette) {
 
 /**
  * A card's one status line: {text, tone} with tone "hold"|"work"|"fail"|"ok"|"muted".
- * @param {Issue} issue
+ * A backlog card says who filed it: "from <issue ID> · agent" when the filing
+ * terminal is a known issue (in `issues`), else just its source.
+ * @param {Issue} issue @param {Issue[]} [issues]
  */
-export function boardNote(issue) {
+export function boardNote(issue, issues) {
+  if (issue.kind === "backlog") {
+    const by = backlogFiler(issue, issues);
+    const src = issue.source || "agent";
+    return { text: by ? `from ${by.id} · ${src}` : src, tone: "muted" };
+  }
   if (issue.stage === "landed") return { text: "Merged", tone: "ok" };
   if (issue.stage === "holding") {
     const q = String(issue.prompt?.text ?? "").split("\n").map((l) => l.trim()).find(Boolean);

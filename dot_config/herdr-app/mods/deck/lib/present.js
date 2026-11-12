@@ -8,8 +8,8 @@
 
 /** Pipeline order (counters, telemetry). */
 export const STAGES = /** @type {Stage[]} */ (["survey", "build", "verify", "holding", "landed"]);
-/** Issues list order: what needs Matt first. */
-export const LIST_ORDER = /** @type {Stage[]} */ (["holding", "verify", "build", "survey", "landed"]);
+/** Issues list order: the Backlog first, then what needs Matt. */
+export const LIST_ORDER = /** @type {Stage[]} */ (["backlog", "holding", "verify", "build", "survey", "landed"]);
 
 const PCT = { survey: 15, build: 50, verify: 75, holding: 100, landed: 100 };
 
@@ -34,10 +34,21 @@ export function quickReplies(text) {
 const hasFailingCheck = (i) => (i.pr?.checks ?? []).some((c) => c.status === "fail");
 const hasNoData = (i) => (i.claims ?? []).some((c) => c.verdict === "NO DATA");
 
+const isBacklog = (i) => i.kind === "backlog";
+
+/** The agents' issues, without backlog entries (Command Center, telemetry). @param {Issue[]} issues */
+export function liveIssues(issues) {
+  return (issues ?? []).filter((i) => !isBacklog(i));
+}
+
 /**
+ * A discarded backlog entry shows only under the "discarded" view.
  * @param {Issue} issue @param {Filter} filter
  */
 export function matchesView(issue, filter) {
+  const discarded = isBacklog(issue) && Boolean(issue.discarded);
+  if (filter?.kind === "view" && filter.value === "discarded") return discarded;
+  if (discarded) return false;
   if (!filter) return true;
   if (filter.kind === "repo") return (issue.repo ?? null) === filter.value;
   switch (filter.value) {
@@ -69,7 +80,7 @@ const WORD = { holding: "HOLDING", verify: "VERIFYING", build: "BUILDING", surve
 export function repoTelemetry(issues) {
   /** @type {Map<string|null, Stage[]>} */
   const by = new Map();
-  for (const i of issues) {
+  for (const i of liveIssues(issues)) {
     const r = i.repo ?? null;
     if (!by.has(r)) by.set(r, []);
     by.get(r).push(i.stage);

@@ -94,7 +94,7 @@ export function prefixFor(repo, taken) {
   for (let n = 1; ; n++) if (!used.has(letters[0] + n)) return letters[0] + n;
 }
 
-/** Backlog entries are a separate kind: reconcile never touches them. */
+/** Backlog entries are a separate kind: reconcile and the mutators below (dismiss, markReplied, updatePr, markReviewed) never touch them. */
 const isBacklog = (i) => i.kind === "backlog";
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -275,7 +275,7 @@ function finish(store, now) {
  */
 export function dismiss(store, key, now) {
   const prev = store.issues.find((i) => i.key === key);
-  if (!prev) return store;
+  if (!prev || isBacklog(prev)) return store;
   const next = { ...prev, dismissed: true, quiet: true, quietPrompt: null, quietAt: null, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null };
   next.stage = deriveStage(next);
   if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
@@ -291,7 +291,7 @@ export function dismiss(store, key, now) {
  */
 export function markReplied(store, key, now) {
   const prev = store.issues.find((i) => i.key === key);
-  if (!prev) return store;
+  if (!prev || isBacklog(prev)) return store;
   const next = {
     ...prev, holdingSince: null, awaitingAck: true,
     answered: prev.prompt ?? null, repliedAt: typeof now === "number" ? now : null,
@@ -310,7 +310,7 @@ export function markReplied(store, key, now) {
  */
 export function updatePr(store, key, fresh, now) {
   const prev = store.issues.find((i) => i.key === key);
-  if (!prev) return store;
+  if (!prev || isBacklog(prev)) return store;
   const pr = fresh.pr ?? (fresh.ghError ? prev.pr ?? null : null);
   const mergedNow = pr?.state === "MERGED" && prev.pr?.state !== "MERGED";
   const next = { ...prev, pr, ghError: fresh.ghError, claims: fresh.claims };
@@ -332,7 +332,7 @@ export function updatePr(store, key, fresh, now) {
 export function markReviewed(store, key, sha) {
   if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) return store;
   const prev = store.issues.find((i) => i.key === key);
-  if (!prev || prev.reviewedSha === sha) return store;
+  if (!prev || isBacklog(prev) || prev.reviewedSha === sha) return store;
   const next = { ...prev, reviewedSha: sha };
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
 }

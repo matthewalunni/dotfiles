@@ -146,3 +146,112 @@ export function markStarted(store, ref, now) {
     backlogTombs: capTombs(tomb(store, prev.entryId, "started", now)),
   };
 }
+
+// ---------------------------------------------------------------- start flow
+
+const MAX_LOOKUPS = 64;
+const ASK = Symbol("ask");
+const errText = (e) => String(e?.message ?? e ?? "failed");
+
+/**
+ * startPlan with an async `exists` (a timed shell check). Each name is asked
+ * once; a rejecting `exists` is an error, never a guess.
+ * @param {{ id: string, title: string, brief: string, root?: string, repo?: string }} entry
+ * @param {string} home @param {(name: string) => Promise<boolean>} exists
+ * @returns {Promise<ReturnType<typeof startPlan>>}
+ */
+export async function resolvePlan(entry, home, exists) {
+  const known = new Map();
+  for (let n = 0; n <= MAX_LOOKUPS; n++) {
+    let need = null;
+    try {
+      return startPlan(entry, home, (p) => {
+        if (known.has(p)) return known.get(p);
+        need = p;
+        throw ASK;
+      });
+    } catch (e) {
+      if (e !== ASK) throw e;
+    }
+    try {
+      known.set(need, Boolean(await exists(need)));
+    } catch (e) {
+      return { error: "Could not check " + need + ": " + errText(e) };
+    }
+  }
+  return { error: "Too many branches or worktrees named like " + branchSlug(entry.title, entry.id) };
+}
+
+/**
+ * Start an agent on a backlog entry: `git worktree add -b` (argv only), then
+ * space.new with claude and the task, then `done(plan)` (mark it started).
+ * Any failure is returned as {ok:false, error} and the later steps never run.
+ * @param {any} entry the store's backlog issue
+ * @param {string} home
+ * @param {{ exists: (name: string) => Promise<boolean>,
+ *   git: (argv: string[]) => Promise<{code: number, stdout?: string, stderr?: string}>,
+ *   spaceNew: (args: {folder: string, argv: string[], task: string}) => unknown,
+ *   done: (plan: any) => void }} io
+ * @returns {Promise<{ok: boolean, error: string|null, plan?: any}>}
+ */
+export async function runStart(entry, home, io) {
+  if (!entry || entry.kind !== "backlog" || entry.discarded) return { ok: false, error: "Not in the Backlog" };
+  let plan;
+  try {
+    plan = await resolvePlan(entry, home, io.exists);
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+  if ("error" in plan) return { ok: false, error: plan.error };
+  const g = await io.git(plan.argv);
+  if (!g || g.code !== 0) {
+    return { ok: false, error: "git worktree add failed: " + String(g?.stderr || g?.stdout || "unknown error").trim() };
+  }
+  try {
+    await io.spaceNew({ folder: plan.path, argv: ["claude"], task: plan.task });
+  } catch (e) {
+    return { ok: false, error: "The worktree " + plan.path + " was made, but the agent did not start: " + errText(e) };
+  }
+  io.done(plan);
+  return { ok: true, error: null, plan };
+}
+
+/** What the card shows under "When you start it": the first-choice branch and path (a start may add -2, -3…). */
+export function previewPlan(entry, home) {
+  const root = String(entry?.root ?? "");
+  return startPlan(entry, home, (p) => p === root || p === root + "/.git");
+}
+
+/** The issue whose terminal filed `entry`, or null. @param {any} entry @param {any[]} issues */
+export function backlogFiler(entry, issues) {
+  if (!entry?.from) return null;
+  return (issues ?? []).find((i) => i.kind !== "backlog" && i.terminal === entry.from) ?? null;
+}
+
+/** UTF-8 length of a string. */
+function utf8Bytes(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      n += 4;
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/**
+ * The text of `tail -c max`: when the read filled the cap the file was cut, so
+ * its first (partial) line is dropped. A few bytes of slack cover a multi-byte
+ * character split at the cut.
+ * @param {string|null|undefined} text @param {number} max
+ */
+export function inboxTail(text, max) {
+  const s = String(text ?? "");
+  if (utf8Bytes(s) < max - 3) return s;
+  const nl = s.indexOf("\n");
+  return nl < 0 ? "" : s.slice(nl + 1);
+}

@@ -10,7 +10,7 @@ import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/gi
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
-import { parseBacklog, mergeBacklog } from "./lib/backlog.js";
+import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 
@@ -29,6 +29,8 @@ export const VIEW_KEY = "deck.view";
 export const ISSUE_FROM_KEY = "deck.issueFrom";
 /** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
 export const MACHINES_KEY = "deck.machines";
+/** The last failed backlog start: {key, error} (the card shows it), or null. */
+export const START_ERR_KEY = "deck.startError";
 
 const SLOW_MS = 45_000;
 const FAST_MS = 10_000;
@@ -42,10 +44,13 @@ const T_GIT = 5_000;
 const T_HC = 5_000;
 const T_GH = 15_000;
 const T_MERGE = 60_000;
+// git worktree add checks out the whole tree.
+const T_WORKTREE = 60_000;
 // A cycle still running after this is abandoned; its result is discarded.
 const CYCLE_DEADLINE_MS = 60_000;
-// readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
+// The backlog inbox is read with tail -c: its newest MiB.
 const INBOX_MAX = 1024 * 1024;
+// readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
 const HISTORY_TAIL = String(4 * 1024 * 1024);
 
 /** @returns {Store} */
@@ -256,8 +261,9 @@ async function cycle(id) {
   const obs = await Promise.all(mine.map((a) => observe(a, history, paneByTerminal, termByAddr)));
 
   // The inbox: a missing or unreadable file is empty (entries already merged stay).
-  const ib = await sh("head", ["-c", String(INBOX_MAX), home() + "/.local/state/herdr-deck/backlog.jsonl"], { timeout: T_GIT });
-  const inbox = ib.code === 0 ? parseBacklog(String(ib.stdout ?? "")) : [];
+  // Its newest MiB (append-only, so the newest entries win); a cut-off first line is dropped.
+  const ib = await sh("tail", ["-c", String(INBOX_MAX), home() + "/.local/state/herdr-deck/backlog.jsonl"], { timeout: T_GIT });
+  const inbox = ib.code === 0 ? parseBacklog(inboxTail(String(ib.stdout ?? ""), INBOX_MAX)) : [];
 
   // Read the store only now, after every await, so actions taken meanwhile are kept.
   const now = Date.now();
@@ -572,7 +578,7 @@ export function markDiffReviewed(issue, sha) {
 
 /** @param {Issue} issue */
 export function dismiss(issue) {
-  if (!issue?.key) return;
+  if (!issue?.key || issue.kind === "backlog") return;
   save(dismissIn(currentStore(), issue.key, Date.now()));
 }
 
@@ -620,4 +626,72 @@ export function focusTerminal(issue) {
   if (!issue?.terminal) return;
   showView("deck-terminal");
   run("agent.focus", { terminal: issue.terminal });
+}
+
+// ---------------------------------------------------------------- backlog
+
+/** The store's live (not discarded) backlog entry for `entry`, or null. */
+function liveBacklog(entry) {
+  return currentStore().issues.find((i) => i.kind === "backlog" && i.key === entry?.key && !i.discarded) ?? null;
+}
+
+/**
+ * `exists` for startPlan, timed: a bare branch name is checked with
+ * `git show-ref --verify --quiet refs/heads/<branch>` in the repo, an absolute
+ * path with `test -e`. A timeout or a git error is thrown (no guessing).
+ * @param {string} repo
+ */
+function backlogExists(repo) {
+  return async (name) => {
+    if (name.startsWith("/")) {
+      const r = await sh("test", ["-e", name], { timeout: T_GIT });
+      if (r.rejected) throw new Error(r.stderr || "timed out");
+      return r.code === 0;
+    }
+    const r = await sh("git", ["-C", repo, "show-ref", "--verify", "--quiet", "refs/heads/" + name], { timeout: T_GIT });
+    if (r.rejected) throw new Error(r.stderr || "timed out");
+    if (r.code !== 0 && r.code !== 1) throw new Error(String(r.stderr || "git show-ref failed").trim());
+    return r.code === 0;
+  };
+}
+
+/** Keys with a start in flight: one confirm, one start. */
+const starting = new Set();
+
+/**
+ * The start confirm's second S: `git worktree add -b` (timed, argv only), then
+ * space.new running claude with the brief, then the entry is marked started
+ * and leaves the Backlog. On failure nothing is marked; the error is returned.
+ * @param {Issue} entry
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function startBacklog(entry) {
+  const it = liveBacklog(entry);
+  if (!it) return { ok: false, error: "This task is no longer in the Backlog" };
+  if (starting.has(it.key)) return { ok: false, error: "Already starting" };
+  starting.add(it.key);
+  try {
+    const r = await runStart(it, home(), {
+      exists: backlogExists(it.root),
+      git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),
+      spaceNew: (args) => run("space.new", { ...args, machine: "" }),
+      done: () => save(markStarted(currentStore(), it.key, Date.now())),
+    });
+    return { ok: r.ok, error: r.error };
+  } finally {
+    starting.delete(it.key);
+    refresh();
+  }
+}
+
+/** X: the entry moves to the Discarded filter (kept 7 days). @param {Issue} entry */
+export function discardEntry(entry) {
+  if (!liveBacklog(entry)) return;
+  save(discardBacklog(currentStore(), entry.key, Date.now()));
+}
+
+/** Restore (Discarded filter): back into the Backlog. @param {Issue} entry */
+export function restoreEntry(entry) {
+  if (entry?.kind !== "backlog") return;
+  save(restoreBacklog(currentStore(), entry.key));
 }

@@ -43,7 +43,7 @@ export default class ReviewGateView extends View {
   /** On to the confirm for the same merge, pinned to the head this gate showed. */
   proceed() {
     const p = props() ?? {};
-    const issue = currentStore().issues.find((i) => i.key === p.key);
+    const issue = currentStore().issues.find((i) => i.key === p.key && i.kind !== "backlog");
     if (!issue) return;
     const next = p.next === "ship" || p.next === "merge" ? p.next : "anyway";
     this.shut();
@@ -53,7 +53,7 @@ export default class ReviewGateView extends View {
   render(_cx) {
     const k = tokens();
     const p = props() ?? {};
-    const issue = currentStore().issues.find((i) => i.key === p.key) ?? null;
+    const issue = currentStore().issues.find((i) => i.key === p.key && i.kind !== "backlog") ?? null;
     const sha = typeof p.headSha === "string" ? p.headSha.slice(0, 7) : "?";
     const what = p.next === "ship" ? "Merge + ship" : p.next === "anyway" ? "Merge anyway" : "Merge";
     return v_flex()
