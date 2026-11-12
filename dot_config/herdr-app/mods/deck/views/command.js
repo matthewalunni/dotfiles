@@ -3,7 +3,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared, setShared } from "herdr";
-import { pickDecision } from "../lib/stage.js";
+import { pickDecision, STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
 import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm } from "../lib/present.js";
 import { keyAction } from "../lib/keys.js";
 import { currentStore, focusTerminal, openUrl, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
@@ -12,7 +12,7 @@ import { mergeButtons, mergeKey } from "./merge.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow } from "./focus.js";
 
-const STAGE_LABEL = { survey: "Survey", build: "Build", verify: "Verify", holding: "Holding · you", landed: "Landed" };
+const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding · you" };
 const pad2 = (n) => String(n).padStart(2, "0");
 
 /** Open an issue in the Issues view (and give that view the keyboard). */

@@ -70,7 +70,7 @@ test("repoTelemetry: most urgent stage per repo, progress segments", () => {
     ["tf", "holding", "HOLDING", "work,work,work,hold,off"],
     ["rf", "verify", "VERIFYING", "work,work,work,off,off"],
     ["sf", "landed", "LANDED", "ok,ok,ok,ok,ok"],
-    [null, "survey", "SURVEY", "muted,off,off,off,off"],
+    [null, "survey", "STARTED", "muted,off,off,off,off"],
   ]);
 });
 

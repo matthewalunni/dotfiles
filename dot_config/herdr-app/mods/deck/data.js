@@ -106,14 +106,14 @@ async function createdMs(t) {
 
 async function gitState(cwd) {
   const git = (cmd) => sh("git", ["-C", cwd, ...cmd], { timeout: T_GIT });
-  const [cTop, cBranch, cBase, cAhead] = GIT_CMDS;
+  const [cTop, cBranch, cBase, cAhead, cStatus] = GIT_CMDS;
   const toplevel = await git(cTop);
   if (toplevel.code !== 0) return parseGitState({ toplevel, branch: toplevel, base: toplevel, ahead: null });
-  const [branch, base] = await Promise.all([git(cBranch), git(cBase)]);
+  const [branch, base, status] = await Promise.all([git(cBranch), git(cBase), git(cStatus)]);
   // Count against the remote's default branch when known (origin/main), else local "main".
   const baseRef = okText(base) || "main";
   const ahead = await git(cAhead.map((a) => a.replace("<base>", baseRef)));
-  return parseGitState({ toplevel, branch, base, ahead });
+  return parseGitState({ toplevel, branch, base, ahead, status });
 }
 
 async function prState(root, branch, base) {
@@ -168,7 +168,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
   /** @type {Observation} */
   const o = {
     terminal: t, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
-    commitsAhead: null, pr: null, ghError: null, claims: [], prompt: null, brief: null, replied: false,
+    commitsAhead: null, dirty: false, pr: null, ghError: null, claims: [], prompt: null, brief: null, replied: false,
   };
   try {
     const [git, prompt, after] = await Promise.all([
@@ -182,6 +182,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
       o.root = git.root;
       o.branch = git.branch;
       o.commitsAhead = git.commitsAhead;
+      o.dirty = git.dirty;
     }
     if (history && cwd) {
       try {

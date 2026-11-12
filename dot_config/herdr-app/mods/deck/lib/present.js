@@ -59,7 +59,7 @@ export function groupIssues(issues, filter) {
 }
 
 const URGENCY = ["holding", "verify", "build", "survey", "landed"];
-const WORD = { holding: "HOLDING", verify: "VERIFYING", build: "BUILDING", survey: "SURVEY", landed: "LANDED" };
+const WORD = { holding: "HOLDING", verify: "VERIFYING", build: "BUILDING", survey: "STARTED", landed: "LANDED" };
 
 /**
  * One row per repo (first-seen order): its most urgent stage and a 5-segment progress bar.

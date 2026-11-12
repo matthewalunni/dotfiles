@@ -15,6 +15,7 @@ test("GIT_CMDS and PR_FIELDS are verbatim", () => {
     ["rev-parse", "--abbrev-ref", "HEAD"],
     ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
     ["rev-list", "--count", "<base>..HEAD"],
+    ["status", "--porcelain", "--untracked-files=normal"],
   ]);
   assert.equal(PR_FIELDS, "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits,headRefOid");
 });
@@ -71,12 +72,22 @@ test("parseGitState", () => {
   const s = parseGitState({
     toplevel: ok("/Users/m/code/herdr\n"), branch: ok("feat/x\n"), base: ok("origin/develop\n"), ahead: ok("3\n"),
   });
-  assert.deepEqual(s, { repo: "herdr", root: "/Users/m/code/herdr", branch: "feat/x", base: "develop", commitsAhead: 3 });
+  assert.deepEqual(s, { repo: "herdr", root: "/Users/m/code/herdr", branch: "feat/x", base: "develop", commitsAhead: 3, dirty: false });
   const fb = parseGitState({ toplevel: ok("/a/b\n"), branch: ok("main\n"), base: bad(128, "fatal"), ahead: null });
   assert.equal(fb.base, "main");
   assert.equal(fb.commitsAhead, null);
   const none = parseGitState({ toplevel: bad(128, "fatal: not a git repository"), branch: bad(128, ""), base: bad(128, ""), ahead: null });
-  assert.deepEqual(none, { repo: null, root: null, branch: null, base: "main", commitsAhead: null });
+  assert.deepEqual(none, { repo: null, root: null, branch: null, base: "main", commitsAhead: null, dirty: false });
+});
+
+test("status failure is clean", () => {
+  const g = { toplevel: ok("/a/b\n"), branch: ok("main\n"), base: ok("origin/main\n"), ahead: ok("0\n") };
+  assert.equal(parseGitState({ ...g, status: ok(" M a.js\n?? b.js\n") }).dirty, true);
+  assert.equal(parseGitState({ ...g, status: ok("") }).dirty, false);
+  assert.equal(parseGitState({ ...g, status: bad(128, "fatal") }).dirty, false);
+  assert.equal(parseGitState({ ...g, status: bad(124, "") }).dirty, false);
+  assert.equal(parseGitState({ ...g }).dirty, false);
+  assert.equal(parseGitState({ ...g, status: null }).dirty, false);
 });
 
 test("parseDiff on a real diff", () => {

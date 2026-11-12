@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nextHolding, deriveStage, pickDecision } from "../../dot_config/herdr-app/mods/deck/lib/stage.js";
+import { nextHolding, deriveStage, pickDecision, STAGE_LABEL } from "../../dot_config/herdr-app/mods/deck/lib/stage.js";
 
 const pr = (state, checks = []) => ({ number: 1, title: "t", state, checks });
 const base = { holdingSince: null, dismissed: false, pr: null, commitsAhead: null, status: "idle" };
@@ -51,4 +51,17 @@ test("pickDecision", () => {
   assert.equal(pickDecision([i("a", 3), i("b", 3, pr("OPEN"))]).key, "b");
   assert.equal(pickDecision([i("a", 3, pr("OPEN")), i("b", 3)]).key, "a");
   assert.equal(pickDecision([i("a", 3), i("b", 3)]).key, "a");
+});
+
+test("dirty means build", () => {
+  assert.equal(stage({ dirty: true, commitsAhead: 0 }), "build");
+  assert.equal(stage({ dirty: true, commitsAhead: null }), "build");
+  assert.equal(stage({ dirty: false, commitsAhead: 0 }), "survey");
+  assert.equal(stage({ dirty: true, pr: pr("OPEN") }), "verify");
+});
+test("dirty after merge stays landed", () => {
+  assert.equal(stage({ dirty: true, commitsAhead: 2, pr: pr("MERGED") }), "landed");
+});
+test("labels say Started", () => {
+  assert.deepEqual(STAGE_LABEL, { survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" });
 });

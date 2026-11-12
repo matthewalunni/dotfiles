@@ -21,17 +21,20 @@ export function nextHolding(prevSince, status, now, replied) {
   return prevSince;
 }
 
+/** Display names for stages (ids stay as-is; "survey" is shown as "Started"). */
+export const STAGE_LABEL = { survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" };
+
 /**
- * Precedence: holding > landed (merged or dismissed) > verify (open PR) > build > survey.
+ * Precedence: holding > landed (merged or dismissed) > verify (open PR) > build (commits ahead or uncommitted edits) > survey.
  * A CLOSED (unmerged) PR counts as no PR.
- * @param {{ holdingSince: number|null, dismissed: boolean, pr: Pr|null, commitsAhead: number|null, status: Status }} f
+ * @param {{ holdingSince: number|null, dismissed: boolean, pr: Pr|null, commitsAhead: number|null, dirty?: boolean, status: Status }} f
  * @returns {Stage}
  */
 export function deriveStage(f) {
   if (f.holdingSince != null) return "holding";
   if (f.dismissed || f.pr?.state === "MERGED") return "landed";
   if (f.pr?.state === "OPEN") return "verify";
-  if ((f.commitsAhead ?? 0) > 0) return "build";
+  if ((f.commitsAhead ?? 0) > 0 || f.dirty) return "build";
   return "survey";
 }
 

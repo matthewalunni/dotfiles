@@ -1,11 +1,10 @@
 // Board columns and navigation. Pure.
 
+import { STAGE_LABEL } from "./stage.js";
+
 /** @typedef {import("./store.js").Issue} Issue */
 
-const COLS = [
-  ["holding", "Holding"], ["survey", "Survey"], ["build", "Build"],
-  ["verify", "Verify"], ["landed", "Landed"],
-];
+const COLS = ["holding", "survey", "build", "verify", "landed"].map((s) => [s, STAGE_LABEL[s]]);
 const recency = (i) => i.holdingSince ?? i.lastSeen ?? 0;
 
 /** @param {Issue[]} issues */
@@ -65,7 +64,7 @@ export function boardNote(issue) {
   const failing = (issue.pr?.checks ?? []).filter((c) => c.status === "fail").length;
   if (failing) return { text: `${failing} check${failing === 1 ? "" : "s"} failing`, tone: "fail" };
   if (issue.status === "working") return { text: "Working…", tone: "work" };
-  return { text: issue.stage[0].toUpperCase() + issue.stage.slice(1), tone: "muted" };
+  return { text: STAGE_LABEL[issue.stage] ?? issue.stage, tone: "muted" };
 }
 
 /** Clicking a card opens it only when it is already the stored selection (a fallback highlight doesn't count). */

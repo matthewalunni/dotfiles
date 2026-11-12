@@ -16,6 +16,7 @@ export const GIT_CMDS = [
   ["rev-parse", "--abbrev-ref", "HEAD"],
   ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
   ["rev-list", "--count", "<base>..HEAD"],
+  ["status", "--porcelain", "--untracked-files=normal"],
 ];
 
 export const PR_FIELDS =
@@ -24,12 +25,12 @@ export const PR_FIELDS =
 const okOut = (r) => (r && r.code === 0 ? String(r.stdout ?? "").trim() : "");
 
 /**
- * @param {{ toplevel: ExecResult, branch: ExecResult, base: ExecResult, ahead: ExecResult|null }} out
- * @returns {{ repo: string|null, root: string|null, branch: string|null, base: string, commitsAhead: number|null }}
+ * @param {{ toplevel: ExecResult, branch: ExecResult, base: ExecResult, ahead: ExecResult|null, status?: ExecResult|null }} out
+ * @returns {{ repo: string|null, root: string|null, branch: string|null, base: string, commitsAhead: number|null, dirty: boolean }}
  */
 export function parseGitState(out) {
   const root = okOut(out.toplevel);
-  if (!root) return { repo: null, root: null, branch: null, base: "main", commitsAhead: null };
+  if (!root) return { repo: null, root: null, branch: null, base: "main", commitsAhead: null, dirty: false };
   const base = okOut(out.base).replace(/^origin\//, "") || "main";
   const n = out.ahead ? Number.parseInt(okOut(out.ahead), 10) : NaN;
   return {
@@ -38,6 +39,8 @@ export function parseGitState(out) {
     branch: okOut(out.branch) || null,
     base,
     commitsAhead: Number.isFinite(n) ? n : null,
+    // A failed or timed-out `git status` counts as clean (okOut is "" unless code 0).
+    dirty: okOut(out.status ?? null) !== "",
   };
 }
 

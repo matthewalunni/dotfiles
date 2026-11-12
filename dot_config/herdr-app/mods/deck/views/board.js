@@ -131,5 +131,26 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .child(div().flex_1())
         .child(div().text_color(k.muted).child("h j k l move · ↵ open · click a card to select, again to open")),
     )
-    .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)));
+    .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)))
+    .child(
+      h_flex()
+        .flex_none()
+        .h(44)
+        .items_center()
+        .gap(14)
+        .px(20)
+        .border_t(1)
+        .border_color(k.line)
+        .text_color(k.muted)
+        .child(div().text_color(k.text).child("Cards move by themselves:"))
+        .child(div().child("Started"))
+        .child(div().child("→"))
+        .child(h_flex().gap(6).child(div().child("Build")).child(div().text_color(k.text).child("first edit")))
+        .child(div().child("→"))
+        .child(h_flex().gap(6).child(div().child("Verify")).child(div().text_color(k.text).child("PR opened")))
+        .child(div().child("→"))
+        .child(h_flex().gap(6).child(div().child("Landed")).child(div().text_color(k.text).child("merged")))
+        .child(div().flex_1())
+        .child(div().text_color(k.hold).child("● Holding whenever the agent waits for you, from any column")),
+    );
 }

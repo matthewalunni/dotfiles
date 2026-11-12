@@ -13,7 +13,7 @@ import { samePrompt } from "./prompt.js";
  * @typedef {{
  *   key: string, id: string, terminal: string, status: Status, title: string,
  *   cwd: string, repo: string|null, root: string|null, branch: string|null,
- *   commitsAhead: number|null, pr: Pr|null, ghError: string|null,
+ *   commitsAhead: number|null, dirty?: boolean, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
  *   stage: Stage, holdingSince: number|null, awaitingAck: boolean,
  *   answered: Prompt|null, repliedAt: number|null, reviewedSha: string|null,
@@ -27,7 +27,7 @@ import { samePrompt } from "./prompt.js";
 /**
  * @typedef {{
  *   terminal: string, status: Status, title: string, cwd: string, repo: string|null,
- *   root: string|null, branch: string|null, commitsAhead: number|null, pr: Pr|null,
+ *   root: string|null, branch: string|null, commitsAhead: number|null, dirty?: boolean, pr: Pr|null,
  *   ghError: string|null, claims: Claim[], prompt: Prompt|null, brief: any, replied: boolean
  * }} Observation
  */
@@ -181,7 +181,7 @@ export function reconcile(store, obs, now) {
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
     const next = {
       key, id, terminal: o.terminal, status: o.status, title: o.title, cwd: o.cwd,
-      repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, pr,
+      repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, dirty: o.dirty ?? false, pr,
       ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
       quietPrompt: mergedNow ? o.prompt ?? null : quietHeld ? prev?.quietPrompt ?? null : null,

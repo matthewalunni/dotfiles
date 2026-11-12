@@ -12,7 +12,7 @@ test("five fixed columns, newest first, dismissed excluded", () => {
     iss("d", "holding", { holdingSince: 10 }), iss("e", "holding", { holdingSince: 20 }),
   ]);
   assert.deepEqual(cols.map((c) => [c.stage, c.label]), [
-    ["holding", "Holding"], ["survey", "Survey"], ["build", "Build"], ["verify", "Verify"], ["landed", "Landed"]]);
+    ["holding", "Holding"], ["survey", "Started"], ["build", "Build"], ["verify", "Verify"], ["landed", "Landed"]]);
   assert.deepEqual(cols[0].items.map((i) => i.key), ["e", "d"]);
   assert.deepEqual(cols[2].items.map((i) => i.key), ["b", "a"]);
 });
@@ -55,7 +55,7 @@ test("boardNote: holding question, working, failing check, merged, stage", () =>
   assert.deepEqual(boardNote(iss("a", "build", { status: "working" })), { text: "Working…", tone: "work" });
   assert.deepEqual(boardNote(iss("a", "verify", { status: "working", pr: { checks: [{ status: "fail" }, { status: "fail" }] } })), { text: "2 checks failing", tone: "fail" });
   assert.deepEqual(boardNote(iss("a", "landed")), { text: "Merged", tone: "ok" });
-  assert.deepEqual(boardNote(iss("a", "survey", { status: "idle" })), { text: "Survey", tone: "muted" });
+  assert.deepEqual(boardNote(iss("a", "survey", { status: "idle" })), { text: "Started", tone: "muted" });
 });
 
 test("repoColor is stable per name", () => {

@@ -15,11 +15,12 @@ import { mergeButtons, mergeKey } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
 import { boardColumns, cardClick, moveBoard } from "../lib/board.js";
+import { STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow } from "./focus.js";
 
-const STAGE_LABEL = { holding: "Holding for you", verify: "Verify", build: "Build", survey: "Survey", landed: "Landed" };
+const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding for you" };
 const VIEWS = [
   { value: "holding", text: "Holding for you" },
   { value: "failing", text: "Failing checks" },
