@@ -59,33 +59,103 @@
           }
         },
         {
-          "id": "deck-work",
-          "type": "block",
-          "content": {
-            "tab": "active",
-            "pane": {
-              "gap": 8,
-              "radius": 10,
-              "background": "background",
-              "lone": true,
-              "border": {
-                "width": 1,
-                "color": "border"
+          "id": "deck-terminal",
+          "type": "row",
+          "resizable": false,
+          "divider": {
+            "width": 1,
+            "color": "border"
+          },
+          "children": [
+            {
+              "id": "deck-term-side",
+              "type": "column",
+              "size": {
+                "px": 268
               },
-              "focus": {
-                "width": 1,
-                "color": "accent"
-              },
-              "header": {
-                "content": {
-                  "mod": "pane"
+              "background": "chrome",
+              "resizable": false,
+              "children": [
+                {
+                  "id": "deck-term-spaces",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 90,
+                  "content": {
+                    "mod": "spaces"
+                  }
                 },
-                "height": 30,
-                "position": "top",
-                "reveal": "always"
+                {
+                  "id": "deck-term-machines",
+                  "type": "block",
+                  "size": {
+                    "px": 120
+                  },
+                  "content": {
+                    "mod": "deck",
+                    "props": {
+                      "view": "machines"
+                    }
+                  }
+                },
+                {
+                  "id": "deck-term-agents",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 90,
+                  "content": {
+                    "mod": "agents"
+                  }
+                },
+                {
+                  "id": "deck-term-hints",
+                  "type": "block",
+                  "size": {
+                    "px": 52
+                  },
+                  "content": {
+                    "mod": "deck",
+                    "props": {
+                      "view": "termhints"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "id": "deck-term-pane",
+              "type": "block",
+              "content": {
+                "tab": "active",
+                "pane": {
+                  "gap": 8,
+                  "radius": 10,
+                  "background": "background",
+                  "lone": true,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "focus": {
+                    "width": 1,
+                    "color": "accent"
+                  },
+                  "header": {
+                    "content": {
+                      "mod": "pane"
+                    },
+                    "height": 30,
+                    "position": "top",
+                    "reveal": "always"
+                  }
+                }
               }
             }
-          }
+          ]
         }
       ]
     }

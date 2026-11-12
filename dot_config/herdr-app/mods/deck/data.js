@@ -11,6 +11,7 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
+import { parseMachines } from "./lib/machines.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -21,10 +22,13 @@ export const STORE_KEY = "deck.store";
 export const SEL_KEY = "deck.selected";
 export const TAB_KEY = "deck.issueTab";
 export const VIEW_KEY = "deck.view";
+/** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
+export const MACHINES_KEY = "deck.machines";
 
 const SLOW_MS = 45_000;
 const FAST_MS = 10_000;
 const TICK_MS = 2_000;
+const MACHINES_MS = 60_000;
 // A collector whose heartbeat is older than this is gone (e.g. its build was reloaded).
 const STALE_MS = 15_000;
 // Rewrite the store at least this often even if only lastSeen moved (expiry uses it).
@@ -207,6 +211,26 @@ function fingerprint(store) {
 
 let lastWrite = 0;
 
+// ---------------------------------------------------------------- machines
+
+let lastMachines = 0;
+let machinesBusy = false;
+
+/** Refresh MACHINES_KEY from a timed `hc machine ls --json`; any failure is "no machines". */
+async function machinesCycle() {
+  machinesBusy = true;
+  try {
+    const r = await hcRead(["machine", "ls", "--json"]);
+    const list = parseMachines(String(r.stdout ?? ""), r.code);
+    const prev = shared(MACHINES_KEY);
+    if (JSON.stringify(prev ?? null) !== JSON.stringify(list)) setShared(MACHINES_KEY, list);
+  } catch (e) {
+    console.error("deck machines:", e);
+  } finally {
+    machinesBusy = false;
+  }
+}
+
 /** @param {number} id the cycle's id; a result from an abandoned cycle is dropped */
 async function cycle(id) {
   const list = agents() ?? [];
@@ -315,11 +339,19 @@ export function startCollector(cx) {
     if (g && Date.now() - g.beat < STALE_MS) return false;
     globalThis.__deckCollector = guard;
     lastStart = 0;
+    lastMachines = 0;
     return true;
   };
   const tick = (cx) => {
     if (!claim()) return;
     guard.beat = Date.now();
+    // Machines: its own 60 s poll, independent of the issue cycle.
+    if (!machinesBusy && Date.now() - lastMachines >= MACHINES_MS) {
+      lastMachines = Date.now();
+      cx.spawn(async () => {
+        await machinesCycle();
+      });
+    }
     const hung = running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS;
     if (running && !hung) return;
     const now = Date.now();
@@ -569,6 +601,6 @@ export function showView(child) {
 /** @param {Issue} issue */
 export function focusTerminal(issue) {
   if (!issue?.terminal) return;
-  showView("deck-work");
+  showView("deck-terminal");
   run("agent.focus", { terminal: issue.terminal });
 }

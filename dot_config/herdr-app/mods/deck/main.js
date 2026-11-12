@@ -10,8 +10,13 @@ import Command from "./views/command.js";
 import Issues from "./views/issues.js";
 import Confirm from "./views/confirm.js";
 import Review from "./views/review.js";
+import Machines from "./views/machines.js";
+import TermHints from "./views/termhints.js";
 
-const VIEWS = { bar: Bar, command: Command, issues: Issues, confirm: Confirm, review: Review };
+const VIEWS = {
+  bar: Bar, command: Command, issues: Issues, confirm: Confirm, review: Review,
+  machines: Machines, termhints: TermHints,
+};
 
 export default class Deck extends View {
   init(p, cx) {
