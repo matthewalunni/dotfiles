@@ -4,12 +4,12 @@ import { STAGE_LABEL } from "./stage.js";
 
 /** @typedef {import("./store.js").Issue} Issue */
 
-const COLS = ["holding", "survey", "build", "verify", "landed"].map((s) => [s, STAGE_LABEL[s]]);
+const COLS = ["backlog", "holding", "survey", "build", "verify", "landed"].map((s) => [s, STAGE_LABEL[s]]);
 const recency = (i) => i.holdingSince ?? i.lastSeen ?? 0;
 
 /** @param {Issue[]} issues */
 export function boardColumns(issues) {
-  const live = (issues ?? []).filter((i) => !i.dismissed);
+  const live = (issues ?? []).filter((i) => !i.dismissed && !i.discarded);
   return COLS.map(([stage, label]) => ({
     stage, label,
     items: live.filter((i) => i.stage === stage).sort((a, b) => recency(b) - recency(a)),

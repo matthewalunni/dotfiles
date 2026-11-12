@@ -10,6 +10,7 @@ import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/gi
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
+import { parseBacklog, mergeBacklog } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 
@@ -44,6 +45,7 @@ const T_MERGE = 60_000;
 // A cycle still running after this is abandoned; its result is discarded.
 const CYCLE_DEADLINE_MS = 60_000;
 // readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
+const INBOX_MAX = 1024 * 1024;
 const HISTORY_TAIL = String(4 * 1024 * 1024);
 
 /** @returns {Store} */
@@ -253,11 +255,15 @@ async function cycle(id) {
   }
   const obs = await Promise.all(mine.map((a) => observe(a, history, paneByTerminal, termByAddr)));
 
+  // The inbox: a missing or unreadable file is empty (entries already merged stay).
+  const ib = await sh("head", ["-c", String(INBOX_MAX), home() + "/.local/state/herdr-deck/backlog.jsonl"], { timeout: T_GIT });
+  const inbox = ib.code === 0 ? parseBacklog(String(ib.stdout ?? "")) : [];
+
   // Read the store only now, after every await, so actions taken meanwhile are kept.
   const now = Date.now();
   if (id !== cycleId) return;
   const prev = currentStore();
-  const next = reconcile(prev, obs, now);
+  const next = mergeBacklog(reconcile(prev, obs, now), inbox, now);
   if (fingerprint(next) !== fingerprint(prev) || now - lastWrite > HEARTBEAT_WRITE_MS) {
     setShared(STORE_KEY, next);
     lastWrite = now;

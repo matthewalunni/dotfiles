@@ -23,7 +23,7 @@ import { samePrompt } from "./prompt.js";
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
-/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, log: LogEvent[] }} Store */
+/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
  *   terminal: string, status: Status, title: string, cwd: string, repo: string|null,
@@ -42,7 +42,7 @@ const ACK_MS = 15_000;
 
 /** @returns {Store} */
 export function emptyStore() {
-  return { issues: [], counters: {}, prefixes: {}, retired: {}, log: [] };
+  return { issues: [], counters: {}, prefixes: {}, retired: {}, backlogTombs: {}, log: [] };
 }
 
 /** @param {string|null} branch */
@@ -94,6 +94,9 @@ export function prefixFor(repo, taken) {
   for (let n = 1; ; n++) if (!used.has(letters[0] + n)) return letters[0] + n;
 }
 
+/** Backlog entries are a separate kind: reconcile never touches them. */
+const isBacklog = (i) => i.kind === "backlog";
+
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
@@ -130,7 +133,8 @@ function diffEvents(prev, next, now) {
 export function reconcile(store, obs, now) {
   const counters = { ...store.counters };
   const prefixes = { ...(store.prefixes ?? {}) };
-  const issues = store.issues.map((i) => ({ ...i }));
+  const backlogItems = store.issues.filter(isBacklog);
+  const issues = store.issues.filter((i) => !isBacklog(i)).map((i) => ({ ...i }));
   const log = [...store.log];
   const retired = { ...(store.retired ?? {}) };
   const byKey = new Map(issues.map((i) => [i.key, i]));
@@ -212,7 +216,7 @@ export function reconcile(store, obs, now) {
     issues[n] = next;
   }
 
-  return finish({ issues, counters, prefixes, retired, log }, now);
+  return finish({ issues: [...backlogItems, ...issues], counters, prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log }, now);
 }
 
 /**
@@ -249,6 +253,7 @@ function quietEnds(prev, o, now) {
 function finish(store, now) {
   const retired = { ...(store.retired ?? {}) };
   const issues = store.issues.filter((i) => {
+    if (isBacklog(i)) return true; // backlog entries expire in mergeBacklog
     const expired = i.stage === "landed"
       ? i.landedAt != null && i.landedAt < now - LANDED_TTL
       : i.lastSeen != null && i.lastSeen < now - LANDED_TTL;
@@ -261,7 +266,7 @@ function finish(store, now) {
     keys.sort((x, y) => retired[x] - retired[y]);
     for (const k of keys.slice(0, keys.length - RETIRED_CAP)) delete retired[k];
   }
-  return { issues, counters: store.counters, prefixes: store.prefixes, retired, log: store.log.slice(-LOG_CAP) };
+  return { issues, counters: store.counters, prefixes: store.prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log: store.log.slice(-LOG_CAP) };
 }
 
 /**
