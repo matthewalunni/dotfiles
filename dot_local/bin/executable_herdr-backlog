@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+//
+// herdr-backlog — file a task into the Herdr Deck backlog.
+//
+//   herdr-backlog --title "Short title" --brief "One paragraph brief" [--repo PATH]
+//
+// Appends one JSON line to ~/.local/state/herdr-deck/backlog.jsonl. The repo
+// defaults to the main checkout of the current directory (worktrees resolve to
+// their main checkout). Never starts any work; Matt starts it from Deck.
+//
+const { execFileSync } = require("node:child_process");
+const { appendFileSync, mkdirSync } = require("node:fs");
+const { randomBytes } = require("node:crypto");
+const { dirname, basename, resolve, join } = require("node:path");
+
+const die = (msg) => { process.stderr.write("herdr-backlog: " + msg + "\n"); process.exit(1); };
+
+let title = "", brief = "", repoArg = "";
+const a = process.argv.slice(2);
+for (let i = 0; i < a.length; i++) {
+  const k = a[i];
+  if (k === "--title" || k === "--brief" || k === "--repo") {
+    if (i + 1 >= a.length) die(k + " needs a value");
+    const v = a[++i];
+    if (k === "--title") title = v; else if (k === "--brief") brief = v; else repoArg = v;
+  } else if (k === "-h" || k === "--help") {
+    process.stdout.write("usage: herdr-backlog --title TITLE --brief BRIEF [--repo PATH]\n");
+    process.exit(0);
+  } else die("unknown argument: " + k);
+}
+title = title.trim();
+if (!title) die("--title is required and must not be empty");
+if (!brief.trim()) die("--brief is required and must not be empty");
+
+function mainCheckout(dir) {
+  try {
+    const common = execFileSync("git", ["-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return basename(common) === ".git" ? dirname(common) : common;
+  } catch { return null; }
+}
+const repo = mainCheckout(repoArg ? resolve(repoArg) : process.cwd());
+if (!repo) die("not a git repo: " + (repoArg ? resolve(repoArg) : process.cwd()) + " (use --repo PATH)");
+
+const home = process.env.HOME;
+if (!home) die("HOME is not set");
+const dir = join(home, ".local", "state", "herdr-deck");
+const entry = {
+  id: randomBytes(6).toString("hex"),
+  title, brief, repo,
+  source: "agent",
+  from: process.env.HC_TERMINAL_ID || null,
+  createdAt: Date.now(),
+};
+mkdirSync(dir, { recursive: true });
+appendFileSync(join(dir, "backlog.jsonl"), JSON.stringify(entry) + "\n");
+process.stdout.write("Filed B-? " + title.replace(/[\r\n]+/g, " ") + "\n");
