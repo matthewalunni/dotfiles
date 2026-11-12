@@ -199,6 +199,53 @@ Run the test suite with `zsh tests/worktree.test.zsh`.
 
 ---
 
+## Learning Commands with Tab (`cmd-help`)
+
+fzf-tab menus get a preview pane that shows the docs for whatever is
+highlighted (`dot_config/zsh/completion.zsh`, `dot_local/bin/executable_cmd-help`):
+
+| Highlighted | Preview |
+|---|---|
+| a flag (`rg -<Tab>`) | its entry in the man page or `--help`, scrollable to the end |
+| a subcommand (`git <Tab>`, `hunk <Tab>`) | that subcommand's page (`man git-clone`, `hunk diff --help`) |
+| a command name | `tldr` examples, else the man page |
+| a file / directory | `bat` / `eza` |
+
+Keys in the menu: `ctrl-o` opens the full page in `less`, jumped to the
+flag; `ctrl-f` enlarges the preview; `ctrl-/` hides it; `ctrl-d`/`ctrl-u`
+scroll it; `<`/`>` switch groups. Your query matches candidate names only;
+`alt-d` toggles matching descriptions too (handy for "which subcommand
+does X?"). In a narrow pane the preview moves below the list. On the prompt, `Alt-H` opens the page for
+what you've typed so far, jumped to the flag under the cursor.
+
+Also in that file:
+
+- zsh's own `_git` is used instead of Homebrew git's bash-wrapper version,
+  which has no flag descriptions.
+- `git <Tab>` offers everyday commands; plumbing (`cat-file`,
+  `checkout-index`, …) only appears when nothing else matches. Group header
+  rows are hidden (`show-group brief`); rows stay color-coded by group.
+- `git clone <Tab>` lists your GitHub repos (from `gh`, cached for a day in
+  `~/.cache/zsh/gh-repos.tsv`) instead of local directories and ssh hosts.
+  Type `git@` for ssh URLs, `https` for https; otherwise it follows
+  `gh config get git_protocol`. A name fragment works too:
+  `git clone dispa<Tab>`.
+- Tools that ship a completion generator but don't install it (`hunk`) are
+  cached under `~/.cache/zsh/completions`; any other command with no
+  completion gets flags parsed from its `--help`.
+
+Previews only ever run `tool --help` / `tool sub --help`, and only for
+executables that contain the string `--help`, so a script that ignores its
+arguments is never run by moving through a menu.
+
+Help text is cached in `~/.cache/cmd-help`, keyed on the tool's (or man
+page's) mtime and size, so each page is generated once per version. The
+first preview of a new tool can take a moment (scanning a large binary for
+`--help`); after that previews are ~30ms. `rm -rf ~/.cache/cmd-help` to
+reset.
+
+Run the test suite with `zsh tests/completion.test.zsh`.
+
 ## Sweeping Landed Worktrees
 
 `sweep` (in `dot_local/bin/`) audits every worktree in the current repo against
