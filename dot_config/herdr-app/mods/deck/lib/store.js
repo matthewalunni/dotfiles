@@ -1,5 +1,6 @@
 // The issue store: turns each poll's observations into stable issues. Pure; no herdr imports.
 import { deriveStage, nextHolding } from "./stage.js";
+import { samePrompt } from "./prompt.js";
 
 /** @typedef {"working"|"blocked"|"done"|"idle"} Status */
 /** @typedef {"survey"|"build"|"verify"|"holding"|"landed"} Stage */
@@ -15,6 +16,7 @@ import { deriveStage, nextHolding } from "./stage.js";
  *   commitsAhead: number|null, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
  *   stage: Stage, holdingSince: number|null, awaitingAck: boolean,
+ *   answered: Prompt|null, repliedAt: number|null, quiet: boolean,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number
  * }} Issue
@@ -34,6 +36,8 @@ const LOG_CAP = 200;
 const RETIRED_TTL = 30 * 24 * 60 * 60 * 1000;
 const RETIRED_CAP = 500;
 const NO_PROMPT = { kind: "none", text: "", options: [] };
+// After a Deck reply, a still-blocked/done screen is ignored for at most this long.
+const ACK_MS = 15_000;
 
 /** @returns {Store} */
 export function emptyStore() {
@@ -139,7 +143,18 @@ export function reconcile(store, obs, now) {
       continue;
     }
     seen.add(key);
-    const prev = byKey.get(key) ?? null;
+    let prev = byKey.get(key) ?? null;
+    if (!prev) {
+      // Same terminal, new branch: an issue that never got a PR (and has not
+      // landed) follows the terminal to the new key instead of leaving a ghost.
+      const moved = issues
+        .filter((i) => i.terminal === o.terminal && !seen.has(i.key) && i.stage !== "landed" && !i.pr)
+        .sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))[0];
+      if (moved) {
+        byKey.delete(moved.key);
+        prev = moved;
+      }
+    }
     let id;
     if (prev) id = prev.id;
     else {
@@ -149,21 +164,26 @@ export function reconcile(store, obs, now) {
       id = prefix + "-" + counters[prefix];
     }
     const wasLanded = prev?.stage === "landed";
-    const sticky = wasLanded && o.status !== "working";
-    const dismissed = wasLanded && !sticky ? false : prev?.dismissed ?? false;
     // A failed gh call keeps the last known PR rather than dropping it.
     const pr = o.pr ?? (o.ghError ? prev?.pr ?? null : null);
-    const awaitingAck = prev?.awaitingAck ?? false;
-    const landing = sticky || dismissed || pr?.state === "MERGED";
+    // Landing (merge seen now, or dismiss) quiets holding until the agent works
+    // again; after that a new blocked/done flags it as usual.
+    const mergedNow = pr?.state === "MERGED" && prev?.pr?.state !== "MERGED";
+    const prevQuiet = prev ? prev.quiet ?? wasLanded : false;
+    const quietHeld = prevQuiet && o.status !== "working";
+    const sticky = wasLanded && quietHeld;
+    const dismissed = wasLanded && !sticky ? false : prev?.dismissed ?? false;
+    const landing = sticky || dismissed || mergedNow;
+    const stillAck = ackHeld(prev, o, now);
     const holdingSince = landing
       ? null
-      : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || awaitingAck);
-    const stillAck = awaitingAck && o.status !== "working" && o.status !== "idle";
+      : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
     const next = {
       key, id, terminal: o.terminal, status: o.status, title: o.title, cwd: o.cwd,
       repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, pr,
       ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
-      holdingSince, awaitingAck: stillAck, dismissed,
+      holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
+      answered: stillAck ? prev?.answered ?? null : null, repliedAt: stillAck ? prev?.repliedAt ?? null : null,
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
       observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
@@ -181,12 +201,27 @@ export function reconcile(store, obs, now) {
   for (let n = 0; n < issues.length; n++) {
     const i = issues[n];
     if (seen.has(i.key)) continue;
-    const next = { ...i, observed: false, holdingSince: null, awaitingAck: false, prompt: NO_PROMPT };
+    const next = {
+      ...i, observed: false, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null, prompt: NO_PROMPT,
+    };
     if (i.stage === "holding") next.stage = deriveStage(next);
     issues[n] = next;
   }
 
   return finish({ issues, counters, prefixes, retired, log }, now);
+}
+
+/**
+ * Whether a Deck reply still masks blocked/done: until a poll sees working or
+ * idle, a prompt other than the one answered, or ACK_MS has passed.
+ * @param {Issue|null} prev @param {Observation} o @param {number} now
+ */
+function ackHeld(prev, o, now) {
+  if (!prev?.awaitingAck) return false;
+  if (o.status === "working" || o.status === "idle") return false;
+  if (typeof prev.repliedAt === "number" && now - prev.repliedAt >= ACK_MS) return false;
+  if (o.prompt && !samePrompt(prev.answered ?? NO_PROMPT, o.prompt)) return false;
+  return true;
 }
 
 /**
@@ -219,7 +254,7 @@ function finish(store, now) {
 export function dismiss(store, key, now) {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev) return store;
-  const next = { ...prev, dismissed: true, holdingSince: null, awaitingAck: false };
+  const next = { ...prev, dismissed: true, quiet: true, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null };
   next.stage = deriveStage(next);
   if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
   const log = [...store.log, ...diffEvents(prev, next, now)];
@@ -227,15 +262,41 @@ export function dismiss(store, key, now) {
 }
 
 /**
- * The user replied: clear holding and ignore stale blocked/done until the
- * agent shows working or idle.
- * @param {Store} store @param {string} key
+ * The user replied at `now`: clear holding and ignore the answered prompt
+ * (see ackHeld) until the agent moves on.
+ * @param {Store} store @param {string} key @param {number} now
  * @returns {Store}
  */
-export function markReplied(store, key) {
+export function markReplied(store, key, now) {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev) return store;
-  const next = { ...prev, holdingSince: null, awaitingAck: true };
+  const next = {
+    ...prev, holdingSince: null, awaitingAck: true,
+    answered: prev.prompt ?? null, repliedAt: typeof now === "number" ? now : null,
+  };
   next.stage = deriveStage(next);
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+}
+
+/**
+ * Fast refresh of one issue's PR, checks and claims (the selected issue while
+ * the Issues view is open), between full collection cycles.
+ * @param {Store} store @param {string} key
+ * @param {{ pr: Pr|null, ghError: string|null, claims: Claim[] }} fresh
+ * @param {number} now
+ * @returns {Store}
+ */
+export function updatePr(store, key, fresh, now) {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev) return store;
+  const pr = fresh.pr ?? (fresh.ghError ? prev.pr ?? null : null);
+  const mergedNow = pr?.state === "MERGED" && prev.pr?.state !== "MERGED";
+  const next = { ...prev, pr, ghError: fresh.ghError, claims: fresh.claims };
+  if (mergedNow) Object.assign(next, { holdingSince: null, quiet: true });
+  const sticky = prev.stage === "landed" && (prev.quiet ?? true);
+  next.stage = sticky ? "landed" : deriveStage(next);
+  if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
+  if (next.stage !== "landed") next.landedAt = null;
+  const log = [...store.log, ...diffEvents(prev, next, now)];
+  return finish({ ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log }, now);
 }

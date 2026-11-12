@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, prefixFor, reconcile, dismiss, markReplied } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -19,8 +19,8 @@ test("ids are stable and per-repo prefixed", () => {
   assert.equal(get(s, "t7|fix/x").id, "TF-1");
 });
 
-test("new branch on same terminal is a new issue; old kept; HEAD is no branch", () => {
-  let s = reconcile(emptyStore(), [ob()], 1);
+test("new branch on same terminal after a PR is a new issue; old kept; HEAD is no branch", () => {
+  let s = reconcile(emptyStore(), [ob({ pr: pr() })], 1);
   s = reconcile(s, [ob({ branch: "fix/y" })], 2);
   assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2"]);
   s = reconcile(s, [ob({ terminal: "t3", branch: "HEAD" })], 3);
@@ -54,7 +54,7 @@ test("stage, PR and check events", () => {
 
 test("markReplied clears holding; awaitingAck flow", () => {
   let s = reconcile(emptyStore(), [ob({ status: "done" })], 1);
-  s = markReplied(s, "t7|fix/x");
+  s = markReplied(s, "t7|fix/x", 1);
   assert.equal(get(s, "t7|fix/x").holdingSince, null);
   s = reconcile(s, [ob({ status: "done" })], 2);
   assert.equal(get(s, "t7|fix/x").holdingSince, null);
@@ -204,7 +204,7 @@ test("a CLOSED PR does not land", () => {
 
 test("awaitingAck is cleared by idle", () => {
   let s = reconcile(emptyStore(), [ob({ status: "done" })], 1);
-  s = markReplied(s, "t7|fix/x");
+  s = markReplied(s, "t7|fix/x", 1);
   s = reconcile(s, [ob({ status: "idle" })], 2);
   assert.equal(get(s, "t7|fix/x").awaitingAck, false);
   assert.equal(get(s, "t7|fix/x").holdingSince, null);
@@ -216,4 +216,82 @@ test("prefixes and retired survive a JSON round-trip", () => {
   s = reconcile(s, [ob({ terminal: "t3", repo: "readflow" })], 2);
   assert.equal(get(s, "t3|fix/x").id, "RF-2");
   assert.deepEqual(s.prefixes, { taskflow: "TF", readflow: "RF" });
+});
+
+const ask = (text) => ({ kind: "permission", text, options: [{ label: "Yes", keys: ["1"] }, { label: "No", keys: ["2"] }] });
+
+test("I1: after a reply, a different blocked prompt is holding again", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "blocked", prompt: ask("Run rm?") })], 1);
+  s = markReplied(s, "t7|fix/x", 10);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run rm?") })], 11);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run curl?") })], 12);
+  const i = get(s, "t7|fix/x");
+  assert.equal(i.awaitingAck, false);
+  assert.equal(i.holdingSince, 12);
+  assert.equal(i.stage, "holding");
+});
+
+test("I1: the same prompt still showing 15 s after the reply is holding again", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "blocked", prompt: ask("Run rm?") })], 1);
+  s = markReplied(s, "t7|fix/x", 1000);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run rm?") })], 1000 + 14999);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
+  assert.equal(get(s, "t7|fix/x").awaitingAck, true);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run rm?") })], 1000 + 15000);
+  assert.equal(get(s, "t7|fix/x").awaitingAck, false);
+  assert.equal(get(s, "t7|fix/x").holdingSince, 16000);
+});
+
+test("I2: merged, then working, then blocked is holding again", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done", pr: pr() })], 1);
+  s = reconcile(s, [ob({ status: "done", pr: pr({ state: "MERGED" }) })], 2);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  s = reconcile(s, [ob({ status: "done", pr: pr({ state: "MERGED" }) })], 3);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null, "the done that was merged does not re-flag");
+  s = reconcile(s, [ob({ status: "working", pr: pr({ state: "MERGED" }) })], 4);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  s = reconcile(s, [ob({ status: "blocked", pr: pr({ state: "MERGED" }) })], 5);
+  assert.equal(get(s, "t7|fix/x").holdingSince, 5);
+  assert.equal(get(s, "t7|fix/x").stage, "holding");
+});
+
+test("I3: switching branch with no PR moves the issue (same ID, no ghost)", () => {
+  let s = reconcile(emptyStore(), [ob({ terminal: "t1", branch: "main" })], 1);
+  const before = get(s, "t1|main");
+  assert.equal(before.id, "TF-1");
+  s = reconcile(s, [ob({ terminal: "t1", branch: "feat-x", commitsAhead: 1 })], 2);
+  assert.equal(s.issues.length, 1);
+  const i = get(s, "t1|feat-x");
+  assert.equal(i.id, "TF-1");
+  assert.equal(i.createdAt, 1);
+  assert.equal(i.branch, "feat-x");
+  assert.equal(get(s, "t1|main"), undefined);
+  assert.equal(s.counters.TF, 1);
+});
+
+test("I3: switching branch after the old issue landed makes a new issue", () => {
+  let s = reconcile(emptyStore(), [ob({ terminal: "t1", branch: "main" })], 1);
+  s = dismiss(s, "t1|main", 2);
+  s = reconcile(s, [ob({ terminal: "t1", branch: "feat-x" })], 3);
+  assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2"]);
+});
+
+test("updatePr refreshes one issue's PR and logs check events", () => {
+  const pend = pr({ checks: [{ name: "ci", status: "pending", detail: "" }] });
+  let s = reconcile(emptyStore(), [ob({ commitsAhead: 1, pr: pend })], 1);
+  s = updatePr(s, "t7|fix/x", { pr: pr({ checks: [{ name: "ci", status: "pass", detail: "" }] }), ghError: null, claims: [] }, 2);
+  assert.equal(get(s, "t7|fix/x").pr.checks[0].status, "pass");
+  assert.equal(s.log.at(-1).what, "checks passed");
+  s = updatePr(s, "t7|fix/x", { pr: null, ghError: "rate limited", claims: [] }, 3);
+  assert.equal(get(s, "t7|fix/x").pr.number, 455);
+});
+
+test("updatePr: a merge seen there clears holding at the transition", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done", pr: pr() })], 1);
+  s = updatePr(s, "t7|fix/x", { pr: pr({ state: "MERGED" }), ghError: null, claims: [] }, 2);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  s = reconcile(s, [ob({ status: "done", pr: pr({ state: "MERGED" }) })], 3);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
 });
