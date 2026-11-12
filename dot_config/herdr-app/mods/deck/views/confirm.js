@@ -10,7 +10,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, notify } from "herdr";
 import { currentStore, mergeAnyway, merge, mergeAndShip } from "../data.js";
-import { lockOf } from "./merge.js";
+import { lockOf, dialogBeat, forgetDialog } from "./merge.js";
 import { MONO, tokens, label, heading, button, dot, act, keyChip, keyOf } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
 
@@ -19,11 +19,18 @@ export default class ConfirmView extends View {
     this.busy = false;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    // "This issue has a merge dialog up" (merge.js mergeKey): a heartbeat.
+    const p = props() ?? {};
+    dialogBeat(p.key, p.overlay);
+    cx.timer.every(1000, () => dialogBeat(p.key, p.overlay));
   }
 
   shut() {
-    const id = (props() ?? {}).overlay;
-    if (id) closeOverlay(id);
+    const p = props() ?? {};
+    if (p.overlay) {
+      forgetDialog(p.key, p.overlay);
+      closeOverlay(p.overlay);
+    }
   }
 
   confirm(cx) {

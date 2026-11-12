@@ -9,7 +9,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, setShared } from "herdr";
 import { currentStore, showView, SEL_KEY, TAB_KEY } from "../data.js";
-import { openConfirm } from "./merge.js";
+import { openConfirm, dialogBeat, forgetDialog } from "./merge.js";
 import { MONO, tokens, heading, button, keyChip, keyOf } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
 
@@ -17,11 +17,18 @@ export default class ReviewGateView extends View {
   init(_p, cx) {
     this.handle = cx.focus_handle();
     this.handle.focus();
+    // "This issue has a merge dialog up" (merge.js mergeKey): a heartbeat.
+    const p = props() ?? {};
+    dialogBeat(p.key, p.overlay);
+    cx.timer.every(1000, () => dialogBeat(p.key, p.overlay));
   }
 
   shut() {
-    const id = (props() ?? {}).overlay;
-    if (id) closeOverlay(id);
+    const p = props() ?? {};
+    if (p.overlay) {
+      forgetDialog(p.key, p.overlay);
+      closeOverlay(p.overlay);
+    }
   }
 
   review() {

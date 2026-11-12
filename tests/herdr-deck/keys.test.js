@@ -73,3 +73,15 @@ test("shift with a digit past 3 is not an answer", () => {
   for (const key of ["4", "5", "9"]) assert.equal(keyAction(k(key, { shift: true }), ctx({ optionCount: 9 })), null);
   assert.equal(keyAction(k("$"), ctx({ optionCount: 9 })), null);
 });
+test("held digit does not answer", () => {
+  assert.equal(keyAction(k("1", { held: true }), ctx()), null);
+  for (const key of ["r", "t", "p", "o", "m", "enter", "v", "?", "@"]) assert.equal(keyAction(k(key, { held: true }), ctx()), null, key);
+  assert.equal(keyAction(k("m", { held: true, shift: true }), ctx()), null);
+  assert.equal(keyAction(k("1", { held: true, shift: true }), ctx()), null);
+});
+test("held j still moves", () => {
+  assert.deepEqual(keyAction(k("j", { held: true }), ctx()), { type: "move", dy: 1 });
+  assert.deepEqual(keyAction(k("up", { held: true }), ctx()), { type: "move", dy: -1 });
+  assert.deepEqual(keyAction(k("l", { held: true }), ctx({ mode: "board" })), { type: "col", dx: 1 });
+  assert.deepEqual(keyAction(k("n", { held: true }), ctx({ tab: "changes" })), { type: "file", d: 1 });
+});

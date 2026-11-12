@@ -8,6 +8,37 @@ import { needsReviewGate } from "../lib/github.js";
 import { merge, mergeAndShip } from "../data.js";
 import { button, act } from "./ui.js";
 
+// issue key -> { id, beat } for its open merge dialog (globalThis: every copy).
+// Herdr has no overlay list, and Esc or a click beside a dialog closes it
+// without telling us, so an open dialog proves itself with a heartbeat
+// (dialogBeat, every second from its own timer, which stops when it closes).
+const dialogs = () => (globalThis.__deckMergeDialogs ??= new Map());
+const BEAT_STALE_MS = 2500;
+
+function remember(issue, id) {
+  if (typeof id === "string" && id) dialogs().set(issue.key, { id, beat: Date.now() });
+}
+
+/** From confirm.js / review.js: init and every second while open. */
+export function dialogBeat(key, id) {
+  const d = dialogs().get(key);
+  if (d && d.id === id) d.beat = Date.now();
+}
+
+/** From confirm.js / review.js when they close themselves. */
+export function forgetDialog(key, id) {
+  if (dialogs().get(key)?.id === id) dialogs().delete(key);
+}
+
+/** Whether a merge dialog for `issue` is still open. */
+function dialogOpen(issue) {
+  const d = dialogs().get(issue.key);
+  if (!d) return false;
+  if (Date.now() - d.beat < BEAT_STALE_MS) return true;
+  dialogs().delete(issue.key);
+  return false;
+}
+
 /** @param {any} issue */
 export function lockOf(issue) {
   return mergeState(issue?.pr ?? null, issue?.ghError ?? null, issue?.claims ?? []);
@@ -21,22 +52,22 @@ export function lockOf(issue) {
  * @param {"anyway"|"merge"|"ship"} [next]
  */
 export function openConfirm(issue, headSha = issue.pr?.headSha ?? null, next = "anyway") {
-  openOverlay({
+  remember(issue, openOverlay({
     mod: "deck",
     props: { view: "confirm", key: issue.key, headSha, next },
     kind: "dialog",
     width: 460,
-  });
+  }));
 }
 
 /** Review soft gate (views/review.js), then `next` if the person goes on. */
 function openReviewGate(issue, next) {
-  openOverlay({
+  remember(issue, openOverlay({
     mod: "deck",
     props: { view: "review", key: issue.key, headSha: issue.pr?.headSha ?? null, next },
     kind: "dialog",
     width: 460,
-  });
+  }));
 }
 
 /**
@@ -82,6 +113,8 @@ export function mergeButtons(host, issue, idPrefix, { ship = true } = {}) {
  */
 export function mergeKey(host, issue, ship) {
   if (!issue?.pr || host.busy) return false;
+  // One merge dialog per issue: a second M while one is up does nothing.
+  if (dialogOpen(issue)) return false;
   const m = lockOf(issue);
   const gated = needsReviewGate(issue);
   if (m.canMerge) {

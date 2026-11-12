@@ -116,9 +116,20 @@ function holdingChip(k, holding, next) {
 export default class BarView extends View {
   init(_p, cx) {
     // keys.json "deck.<command>" lands here (the bar is shown in every Deck view).
+    // A rejected nextCommand() logs and the loop goes on; two rejections in a
+    // row wait a tick first, so a broken channel can't spin.
     cx.spawn(async (cx) => {
+      let rejected = 0;
       for (;;) {
-        const c = await nextCommand();
+        let c;
+        try {
+          c = await nextCommand();
+          rejected = 0;
+        } catch (e) {
+          console.log("deck: nextCommand failed: " + String(e?.message ?? e));
+          if (++rejected >= 2) await cx.sleep(1000);
+          continue;
+        }
         try {
           runCommand(c, cx);
         } catch (e) {

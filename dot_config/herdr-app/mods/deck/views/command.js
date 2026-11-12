@@ -76,8 +76,12 @@ export default class CommandView extends View {
         break;
       case "terminal": if (issue.observed !== false) focusTerminal(issue); break;
       case "github": if (issue.pr?.url) act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"); break;
-      case "merge": mergeKey(this, issue, false); break;
-      case "mergeShip": mergeKey(this, issue, true); break;
+      case "merge":
+      case "mergeShip":
+        // Only the decision band has merge buttons: M acts on that row alone.
+        if (issue.key !== this.decisionKey) return;
+        if (!mergeKey(this, issue, a.type === "mergeShip")) return;
+        break;
       case "help": openKeys(); break;
       default: return;
     }

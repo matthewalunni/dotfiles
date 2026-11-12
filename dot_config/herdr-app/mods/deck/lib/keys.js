@@ -1,7 +1,7 @@
 // Pure key map for the deck views. No herdr imports.
 
 /**
- * @typedef {{ key: string, shift: boolean, cmd: boolean }} Key
+ * @typedef {{ key: string, shift: boolean, cmd: boolean, held?: boolean }} Key  held: a key-repeat event
  * @typedef {{ view: "command"|"issues", mode: "list"|"board", tab: "overview"|"pr"|"changes",
  *   typing: boolean, optionCount: number, hasIssue: boolean }} KeyCtx
  */
@@ -9,11 +9,19 @@
 const SHIFT_DIGIT = { "!": 1, "@": 2, "#": 3 };
 const TABS = { 1: "overview", 2: "pr", 3: "changes" };
 
+// Key repeat (a held key) only navigates.
+const REPEATS = new Set(["move", "col", "file"]);
+
 /**
  * @param {Key} ev @param {KeyCtx} ctx
  * @returns {object|null}
  */
 export function keyAction(ev, ctx) {
+  const a = action(ev, ctx);
+  return a && ev?.held && !REPEATS.has(a.type) ? null : a;
+}
+
+function action(ev, ctx) {
   const raw = String(ev?.key ?? "");
   if (ev?.cmd) return null;
   const k = raw.toLowerCase();
