@@ -218,19 +218,22 @@ export async function resolvePlan(entry, home, exists) {
  * Start an agent on a backlog entry: `git worktree add -b` (argv only), then
  * space.new with claude and the task, then `done(plan)` (mark it started).
  * Any failure is returned as {ok:false, error} and the later steps never run.
- * @param {any} entry the store's backlog issue
+ * The New task dialog's Start now passes an entry-like `{kind: "new", id, title,
+ * brief, root, terminal?, pendingWorktree?}`: with `terminal` the space gets the
+ * default shell (no argv, no task). `again` is how the lost-start error says to retry.
+ * @param {any} entry the store's backlog issue, or the dialog's entry-like object
  * @param {string} home
  * @param {{ exists: (name: string) => Promise<boolean>,
  *   toplevel: (repo: string) => Promise<string|null>,
  *   pending?: (plan: any) => void,
  *   appeared: (folder: string) => Promise<boolean>,
  *   git: (argv: string[]) => Promise<{code: number, stdout?: string, stderr?: string}>,
- *   spaceNew: (args: {folder: string, argv: string[], task: string}) => unknown,
- *   done: (plan: any) => void }} io
+ *   spaceNew: (args: {folder: string, argv?: string[], task?: string}) => unknown,
+ *   done: (plan: any) => void, again?: string }} io
  * @returns {Promise<{ok: boolean, error: string|null, plan?: any}>}
  */
 export async function runStart(entry, home, io) {
-  if (!entry || entry.kind !== "backlog" || entry.discarded) return { ok: false, error: "Not in the Backlog" };
+  if (!entry || (entry.kind !== "backlog" && entry.kind !== "new") || entry.discarded) return { ok: false, error: "Not in the Backlog" };
   let plan;
   try {
     plan = await resolvePlan(entry, home, io.exists);
@@ -251,9 +254,12 @@ export async function runStart(entry, home, io) {
       return { ok: false, error: "git worktree add failed: " + String(g?.stderr || g?.stdout || "unknown error").trim() };
     }
   }
-  const lost = "Worktree created at " + plan.path + ", but the agent didn't start — open it from Herdr or press S again";
+  // Only the New task dialog sets terminal: true; a store issue's terminal id never counts.
+  const shell = entry.terminal === true;
+  const what = shell ? "terminal" : "agent";
+  const lost = "Worktree created at " + plan.path + ", but the " + what + " didn't start — open it from Herdr or " + (io.again ?? "press S again");
   try {
-    await io.spaceNew({ folder: plan.path, argv: ["claude"], task: plan.task });
+    await io.spaceNew(spaceNewArgs(plan, shell));
   } catch (e) {
     io.pending?.(plan);
     return { ok: false, error: lost + " (" + errText(e) + ")" };
@@ -266,6 +272,15 @@ export async function runStart(entry, home, io) {
   }
   io.done(plan);
   return { ok: true, error: null, plan };
+}
+
+/**
+ * space.new's arguments for a planned start: claude with the task, or with
+ * `terminal` ("Just a terminal") only the folder: the default shell, no task.
+ * @param {{path: string, task: string}} plan @param {boolean} terminal
+ */
+export function spaceNewArgs(plan, terminal) {
+  return terminal ? { folder: plan.path } : { folder: plan.path, argv: ["claude"], task: plan.task };
 }
 
 /** What the card shows under "When you start it": the first-choice branch and path (a start may add -2, -3…). */

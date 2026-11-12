@@ -32,6 +32,23 @@ export function forgetDialog(key, id) {
   if (dialogs().get(key)?.id === id) dialogs().delete(key);
 }
 
+/**
+ * A dialog that may have been opened from outside Deck (New task by ⌘⇧N through
+ * deck-new) claims its slot when it starts: true when it is the one remembered
+ * under `key`, or when no other Deck dialog is open (it is remembered then);
+ * false when another Deck dialog is up, and the caller closes itself.
+ */
+export function claimDialog(key, id) {
+  const d = dialogs().get(key);
+  if (d && d.id === id) {
+    d.beat = Date.now();
+    return true;
+  }
+  if (anyDialogOpen()) return false;
+  remember({ key }, id);
+  return true;
+}
+
 /** Whether a dialog for `issue` is still open (its heartbeat is fresh). */
 export function dialogOpen(issue) {
   const d = dialogs().get(issue.key);
