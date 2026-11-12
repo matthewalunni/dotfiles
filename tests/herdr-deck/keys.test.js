@@ -45,10 +45,26 @@ test("action letters and merge", () => {
   assert.deepEqual(keyAction(k("o"), ctx()), { type: "github" });
   assert.deepEqual(keyAction(k("m"), ctx()), { type: "merge" });
   assert.deepEqual(keyAction(k("m", { shift: true }), ctx()), { type: "mergeShip" });
-  assert.deepEqual(keyAction(k("M"), ctx()), { type: "mergeShip" });
   assert.equal(keyAction(k("m"), ctx({ hasIssue: false })), null);
 });
 test("cmd-modified keys are null", () => {
   assert.equal(keyAction(k("j", { cmd: true }), ctx()), null);
   assert.equal(keyAction(k("1", { cmd: true, shift: true }), ctx()), null);
+});
+test("proof reachable on changes tab", () => {
+  const c = ctx({ tab: "changes" });
+  assert.deepEqual(keyAction(k("p", { shift: true }), c), { type: "proof" });
+  assert.deepEqual(keyAction(k("P", { shift: true }), c), { type: "proof" });
+  assert.deepEqual(keyAction(k("p"), c), { type: "file", d: -1 });
+});
+test("caps lock is not shift", () => {
+  assert.deepEqual(keyAction(k("M"), ctx()), { type: "merge" });
+  assert.deepEqual(keyAction(k("M", { shift: true }), ctx()), { type: "mergeShip" });
+  assert.deepEqual(keyAction(k("P"), ctx({ tab: "changes" })), { type: "file", d: -1 });
+});
+test("shift-j/k/r/t/o behave like the plain keys", () => {
+  for (const key of ["j", "k", "r", "t", "o"]) {
+    assert.deepEqual(keyAction(k(key, { shift: true }), ctx()), keyAction(k(key), ctx()));
+    assert.notEqual(keyAction(k(key, { shift: true }), ctx()), null);
+  }
 });

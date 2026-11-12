@@ -18,7 +18,7 @@ export function keyAction(ev, ctx) {
   if (ev?.cmd) return null;
   const k = raw.toLowerCase();
   if (ctx.typing) return k === "escape" ? { type: "back" } : null;
-  const shift = !!ev.shift || (raw.length === 1 && raw !== k);
+  const shift = !!ev.shift;
   const issues = ctx.view === "issues";
 
   if (k === "escape") return { type: "back" };
@@ -40,7 +40,7 @@ export function keyAction(ev, ctx) {
     if (k === "h") return { type: "col", dx: -1 };
     if (k === "l") return { type: "col", dx: 1 };
   }
-  if (issues && ctx.tab === "changes" && ctx.hasIssue) {
+  if (issues && ctx.tab === "changes" && ctx.hasIssue && !(shift && k === "p")) {
     if (k === "n") return { type: "file", d: 1 };
     if (k === "p") return { type: "file", d: -1 };
   }
