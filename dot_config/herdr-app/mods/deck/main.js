@@ -10,6 +10,7 @@ import Command from "./views/command.js";
 import Issues from "./views/issues.js";
 import Confirm from "./views/confirm.js";
 import StartConfirm from "./views/startconfirm.js";
+import NewTask from "./views/newtask.js";
 import Review from "./views/review.js";
 import Machines from "./views/machines.js";
 import TermHints from "./views/termhints.js";
@@ -17,7 +18,7 @@ import Keys from "./views/keys.js";
 import IssuePage, { ThreadView, GoneView, IssueHints } from "./views/issuepage.js";
 
 const VIEWS = {
-  bar: Bar, command: Command, issues: Issues, confirm: Confirm, startconfirm: StartConfirm, review: Review,
+  bar: Bar, command: Command, issues: Issues, confirm: Confirm, startconfirm: StartConfirm, newtask: NewTask, review: Review,
   machines: Machines, termhints: TermHints, keys: Keys,
   issue: IssuePage, thread: ThreadView, issuegone: GoneView, issuehints: IssueHints,
 };

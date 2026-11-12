@@ -41,6 +41,15 @@ export function dialogOpen(issue) {
   return false;
 }
 
+/** Whether any Deck dialog (a merge confirm, the review gate, the start confirm, New task) is open. */
+export function anyDialogOpen() {
+  for (const [key, d] of dialogs()) {
+    if (Date.now() - d.beat < BEAT_STALE_MS) return true;
+    dialogs().delete(key);
+  }
+  return false;
+}
+
 /** @param {any} issue */
 export function lockOf(issue) {
   return mergeState(issue?.pr ?? null, issue?.ghError ?? null, issue?.claims ?? []);

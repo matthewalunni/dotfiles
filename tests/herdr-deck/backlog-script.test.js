@@ -5,6 +5,8 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync, realpathSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBacklog } from "../../dot_config/herdr-app/mods/deck/lib/backlog.js";
+import { backlogExec, newTaskArgs } from "../../dot_config/herdr-app/mods/deck/lib/newtask.js";
+import { symlinkSync } from "node:fs";
 
 const SCRIPT = new URL("../../dot_local/bin/executable_herdr-backlog", import.meta.url).pathname;
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -98,4 +100,47 @@ test("--repo pointing at a worktree also resolves to the main checkout; from is 
   assert.equal(r.status, 0, r.stderr);
   const [e] = parseBacklog(readFileSync(s.inbox, "utf8"));
   assert.equal(e.repo, s.repo); assert.equal(e.from, null);
+});
+
+test("--source you files a hostile title verbatim (argv only) with from null", () => {
+  const s = setup();
+  const title = `Fix "quotes" 'x' $(touch ${s.root}/pwned) \`touch ${s.root}/pwned2\`\nsecond line`;
+  const brief = `b1\nb2 $(touch ${s.root}/pwned3)`;
+  const r = run(s, ["--title", title, "--brief", brief, "--repo", s.repo, "--source", "you"], s.root, { HC_TERMINAL_ID: "term-9" });
+  assert.equal(r.status, 0, r.stderr);
+  const [e] = parseBacklog(readFileSync(s.inbox, "utf8"));
+  assert.equal(e.title, title); assert.equal(e.brief, brief);
+  assert.equal(e.source, "you"); assert.equal(e.from, null); assert.equal(e.repo, s.repo);
+  for (const f of ["pwned", "pwned2", "pwned3"]) assert.equal(existsSync(join(s.root, f)), false);
+});
+
+test("--source agent is the default; any other source is refused and writes nothing", () => {
+  const s = setup();
+  const ok = run(s, ["--title", "t", "--brief", "b", "--source", "agent"], s.repo, { HC_TERMINAL_ID: "term-1" });
+  assert.equal(ok.status, 0, ok.stderr);
+  const [e] = parseBacklog(readFileSync(s.inbox, "utf8"));
+  assert.equal(e.source, "agent"); assert.equal(e.from, "term-1");
+  const s2 = setup();
+  for (const src of ["linear", "", "You", "you;rm"]) {
+    const r = run(s2, ["--title", "t", "--brief", "b", "--source", src], s2.repo);
+    assert.notEqual(r.status, 0, src);
+    assert.match(r.stderr, /herdr-backlog: --source must be agent or you/);
+  }
+  const r = run(s2, ["--title", "t", "--brief", "b", "--source"], s2.repo);
+  assert.notEqual(r.status, 0);
+  assert.equal(existsSync(s2.inbox), false);
+});
+
+test("Deck's login-shell call files hostile text verbatim and runs none of it", () => {
+  const s = setup();
+  mkdirSync(join(s.home, ".local/bin"), { recursive: true });
+  symlinkSync(SCRIPT, join(s.home, ".local/bin/herdr-backlog"));
+  const title = `$(touch ${s.root}/pwned) "q" 'x' \`touch ${s.root}/pwned2\``;
+  const brief = `b\n$HOME ; touch ${s.root}/pwned3`;
+  const ex = backlogExec(newTaskArgs({ title, brief, root: s.repo }));
+  const r = spawnSync(ex.cmd, ex.args, { cwd: s.root, encoding: "utf8", env: { PATH: process.env.PATH, HOME: s.home } });
+  assert.equal(r.status, 0, r.stderr);
+  const [e] = parseBacklog(readFileSync(s.inbox, "utf8"));
+  assert.equal(e.title, title); assert.equal(e.brief, brief); assert.equal(e.source, "you");
+  for (const f of ["pwned", "pwned2", "pwned3"]) assert.equal(existsSync(join(s.root, f)), false);
 });

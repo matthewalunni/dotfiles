@@ -16,7 +16,7 @@ const COLS = [
     ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["↵", "Open issue"],
     ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
-    ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"],
+    ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"], ["N", "New task"],
   ] },
   { title: "Pull request", tone: "work", rows: [
     ["⇧1 ⇧2", "Overview / Pull request"], ["n  p", "Next / previous file"],

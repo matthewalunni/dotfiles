@@ -1,7 +1,7 @@
 // The top bar: brand, Command / Issues / Terminal nav, the holding chip, "? keys"
 // and the clock. The collector runs in this copy; main.js starts and stops it
 // (close() only reaches the root view). This copy also runs the keys.json
-// command loop (deck.go:*, deck.next-holding, deck.agent-issue). The holding
+// command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
 // chip, ⌘⇧J and ⌘⇧I open the issue page (views/issuepage.js).
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -12,6 +12,7 @@ import { nextHolding } from "../lib/board.js";
 import { navChild } from "../lib/views.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
+import { openNewTask } from "./newtask.js";
 import { goTo, focusedAgent, openIssue } from "./focus.js";
 
 const BARLOW = "Barlow Condensed";
@@ -41,13 +42,15 @@ function focusedIssue(issues) {
 const GO = { command: "deck-command", issues: "deck-issues", terminal: "deck-terminal" };
 
 /**
- * One keys.json command: "go:<view>", "next-holding" or "agent-issue".
+ * One keys.json command: "go:<view>", "next-holding", "agent-issue" or "new-task"
+ * (the New task dialog, as N; nothing while another Deck dialog is open).
  * @param {string} c
  */
 export function runCommand(c) {
   const cmd = String(c ?? "").trim();
   const go = /^go:(command|issues|terminal)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
+  if (cmd === "new-task") return void openNewTask();
   const issues = currentStore().issues;
   if (cmd === "next-holding") {
     // Nothing holding: stay put (the bar already says "0 holding").
