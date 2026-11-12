@@ -1,0 +1,617 @@
+// Deck's collector and actions. Herdr-bound: polls agents, git, gh, proof files,
+// screens and Claude history into the issue store in shared state, and performs
+// the user's actions (reply, press an option, merge, ...).
+//
+// Actions are async; call them from a view inside `cx.spawn(async (cx) => ...)`.
+// Nothing here runs on its own except the collector, which the bar starts.
+
+import { agents, terminals, panes, exec, home, shared, setShared, run, notify } from "herdr";
+import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/github.js";
+import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
+import { parsePrompt, samePrompt } from "./lib/prompt.js";
+import { findBrief } from "./lib/brief.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
+import { parseMachines } from "./lib/machines.js";
+
+/** @typedef {import("./lib/store.js").Issue} Issue */
+/** @typedef {import("./lib/store.js").Store} Store */
+/** @typedef {import("./lib/store.js").Observation} Observation */
+/** @typedef {import("./lib/prompt.js").PromptOption} PromptOption */
+
+export const STORE_KEY = "deck.store";
+export const SEL_KEY = "deck.selected";
+export const TAB_KEY = "deck.issueTab";
+/** Issues view mode: "list" (default) or "board". */
+export const MODE_KEY = "deck.issuesMode";
+export const VIEW_KEY = "deck.view";
+/** Where the issue page was opened from: "board" | "list" | "command" | "terminal" (esc goes back there). */
+export const ISSUE_FROM_KEY = "deck.issueFrom";
+/** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
+export const MACHINES_KEY = "deck.machines";
+
+const SLOW_MS = 45_000;
+const FAST_MS = 10_000;
+const TICK_MS = 2_000;
+const MACHINES_MS = 60_000;
+// A collector whose heartbeat is older than this is gone (e.g. its build was reloaded).
+const STALE_MS = 15_000;
+// Rewrite the store at least this often even if only lastSeen moved (expiry uses it).
+const HEARTBEAT_WRITE_MS = 10 * 60_000;
+const T_GIT = 5_000;
+const T_HC = 5_000;
+const T_GH = 15_000;
+const T_MERGE = 60_000;
+// A cycle still running after this is abandoned; its result is discarded.
+const CYCLE_DEADLINE_MS = 60_000;
+// readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
+const HISTORY_TAIL = String(4 * 1024 * 1024);
+
+/** @returns {Store} */
+export function currentStore() {
+  const s = /** @type {Store|null} */ (shared(STORE_KEY));
+  return s && Array.isArray(s.issues) ? s : emptyStore();
+}
+
+/** The store's latest copy of an issue (actions get one captured at render time). */
+function latest(issue) {
+  return currentStore().issues.find((i) => i.key === issue.key) ?? issue;
+}
+
+const FAILED = (e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e ?? "failed") });
+
+/** exec that never rejects. A rejection (timeout, or it could not start) is marked `rejected`. */
+async function sh(cmd, args, opts) {
+  try {
+    const r = await exec(cmd, args, opts);
+    return r ?? FAILED("no result");
+  } catch (e) {
+    return { ...FAILED(e), rejected: true };
+  }
+}
+
+/** Read-only hc calls, time-limited through exec. A failure (or timeout) is no data. */
+function hcRead(args) {
+  return sh("hc", args, { timeout: T_HC });
+}
+
+const okText = (r) => (r.code === 0 ? String(r.stdout ?? "").trim() : "");
+
+// hc send / hc keys wait while the agent's composer holds an unfinished draft.
+const DRAFT = "Agent has a draft — not sent";
+
+/** hc send / hc keys, time-limited. A timeout means the agent's draft blocked it. */
+async function hcAct(args, failed) {
+  const r = await sh("hc", args, { timeout: T_HC });
+  if (r.code === 0) return { ok: true, error: null };
+  if (r.rejected) return { ok: false, error: DRAFT };
+  return { ok: false, error: String(r.stderr || r.stdout || failed).trim() };
+}
+
+// ---------------------------------------------------------------- collector
+
+/** terminal -> created_ms (never changes for a terminal). */
+const createdCache = new Map();
+
+async function createdMs(t) {
+  if (createdCache.has(t)) return createdCache.get(t);
+  const r = await hcRead(["get", t, "--json"]);
+  if (r.code !== 0) return null;
+  try {
+    const ms = Number(JSON.parse(r.stdout).created_ms);
+    if (!Number.isFinite(ms)) return null;
+    createdCache.set(t, ms);
+    return ms;
+  } catch {
+    return null;
+  }
+}
+
+async function gitState(cwd) {
+  const git = (cmd) => sh("git", ["-C", cwd, ...cmd], { timeout: T_GIT });
+  const [cTop, cBranch, cBase, cAhead, cStatus] = GIT_CMDS;
+  const toplevel = await git(cTop);
+  if (toplevel.code !== 0) return parseGitState({ toplevel, branch: toplevel, base: toplevel, ahead: null });
+  const [branch, base, status] = await Promise.all([git(cBranch), git(cBase), git(cStatus)]);
+  // Count against the remote's default branch when known (origin/main), else local "main".
+  const baseRef = okText(base) || "main";
+  const ahead = await git(cAhead.map((a) => a.replace("<base>", baseRef)));
+  return parseGitState({ toplevel, branch, base, ahead, status });
+}
+
+async function prState(root, branch, base) {
+  if (!root || !branch || branch === "HEAD" || branch === base) return { pr: null, error: null };
+  const r = await sh("gh", ["pr", "view", branch, "--json", PR_FIELDS], { cwd: root, timeout: T_GH });
+  return parsePr(r);
+}
+
+/** Agent proof claims with `exists` built from realpath-inside-root + regular file. */
+async function proofClaims(root) {
+  if (!root) return { agentClaims: [], exists: Object.create(null) };
+  // Timed and size-capped: a FIFO or huge file at that path can't stall the cycle.
+  const read = await sh("head", ["-c", "65536", root + "/.herdr/proof.json"], { timeout: T_GIT });
+  const agentClaims = parseProofFile(read.code === 0 ? String(read.stdout ?? "") : null);
+  const exists = Object.create(null);
+  const paths = [...new Set(agentClaims.map((c) => c.path).filter((p) => typeof p === "string"))];
+  if (!paths.length) return { agentClaims, exists };
+  const realRoot = okText(await sh("realpath", ["--", root], { timeout: T_GIT }));
+  if (!realRoot) return { agentClaims, exists };
+  await Promise.all(paths.map(async (p) => {
+    const resolved = okText(await sh("realpath", ["--", p], { cwd: root, timeout: T_GIT }));
+    if (!resolved || !resolved.startsWith(realRoot + "/")) return;
+    // A regular file that is not empty (-s alone passes a directory; an empty file is NO DATA).
+    const f = await sh("test", ["-f", resolved, "-a", "-s", resolved], { timeout: T_GIT });
+    if (f.code === 0) exists[p] = true;
+  }));
+  return { agentClaims, exists };
+}
+
+/** Whether the repo has CI workflows (.github/workflows/*.yml|*.yaml). */
+async function hasWorkflows(root) {
+  if (!root) return false;
+  const r = await sh(
+    "find", [root + "/.github/workflows", "-maxdepth", "1", "-type", "f", "(", "-name", "*.yml", "-o", "-name", "*.yaml", ")"],
+    { timeout: T_GIT },
+  );
+  return okText(r) !== "";
+}
+
+async function readScreen(t, status) {
+  const r = await hcRead(["read", t, "--lines", "60"]);
+  return r.code === 0 ? parsePrompt(String(r.stdout ?? ""), status) : null;
+}
+
+/** @returns {Promise<Observation>} */
+async function observe(a, history, paneByTerminal, termByAddr) {
+  const t = a.address;
+  const status = a.status;
+  const pane = paneByTerminal.get(t);
+  const term = termByAddr.get(t);
+  const cwd = pane?.cwd || term?.foreground?.cwd || term?.cwd || "";
+  /** @type {Observation} */
+  const o = {
+    terminal: t, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
+    commitsAhead: null, dirty: false, pr: null, ghError: null, claims: [], prompt: null, brief: null, replied: false,
+  };
+  try {
+    const [git, prompt, after] = await Promise.all([
+      cwd ? gitState(cwd) : Promise.resolve(null),
+      status !== "working" ? readScreen(t, status) : Promise.resolve({ kind: "none", text: "", options: [] }),
+      createdMs(t),
+    ]);
+    o.prompt = prompt;
+    if (git) {
+      o.repo = git.repo;
+      o.root = git.root;
+      o.branch = git.branch;
+      o.commitsAhead = git.commitsAhead;
+      o.dirty = git.dirty;
+    }
+    if (history && cwd) {
+      try {
+        o.brief = findBrief(history, { cwd, root: o.root, after });
+      } catch {
+        o.brief = null;
+      }
+    }
+    if (o.root) {
+      const [pr, proof, wf] = await Promise.all([prState(o.root, o.branch, git.base), proofClaims(o.root), hasWorkflows(o.root)]);
+      o.pr = pr.pr;
+      o.ghError = pr.error;
+      o.claims = buildClaims(o.pr?.checks ?? [], proof.agentClaims, proof.exists, wf && o.pr != null);
+    }
+  } catch {
+    // Keep what is known; the next cycle tries again.
+  }
+  return o;
+}
+
+/** Store without the fields that move every cycle, to skip no-op writes (each write redraws). */
+function fingerprint(store) {
+  return JSON.stringify(store, (k, v) => {
+    if (k === "lastSeen") return undefined;
+    if (k === "retired" && v && typeof v === "object") return Object.keys(v).sort();
+    return v;
+  });
+}
+
+let lastWrite = 0;
+
+// ---------------------------------------------------------------- machines
+
+let lastMachines = 0;
+let machinesBusy = false;
+
+/** Refresh MACHINES_KEY from a timed `hc machine ls --json`; a failure keeps the previous list. */
+async function machinesCycle() {
+  machinesBusy = true;
+  try {
+    const r = await hcRead(["machine", "ls", "--json"]);
+    // A failed or timed-out poll keeps the last good list; only a clean run replaces it.
+    if (!r || r.code !== 0) return;
+    const list = parseMachines(String(r.stdout ?? ""), r.code);
+    const prev = shared(MACHINES_KEY);
+    if (JSON.stringify(prev ?? null) !== JSON.stringify(list)) setShared(MACHINES_KEY, list);
+  } catch (e) {
+    console.error("deck machines:", e);
+  } finally {
+    machinesBusy = false;
+  }
+}
+
+/** @param {number} id the cycle's id; a result from an abandoned cycle is dropped */
+async function cycle(id) {
+  const list = agents() ?? [];
+  const terms = terminals() ?? [];
+  const termByAddr = new Map(terms.map((x) => [x.address, x]));
+  const paneByTerminal = new Map((panes() ?? []).filter((p) => p.terminal).map((p) => [p.terminal, p]));
+  const mine = list.filter((a) => !termByAddr.get(a.address)?.parent);
+
+  let history = null;
+  if (mine.length) {
+    const r = await sh("tail", ["-c", HISTORY_TAIL, home() + "/.claude/history.jsonl"], { timeout: T_GIT });
+    history = r.code === 0 ? String(r.stdout ?? "") : null;
+  }
+  const obs = await Promise.all(mine.map((a) => observe(a, history, paneByTerminal, termByAddr)));
+
+  // Read the store only now, after every await, so actions taken meanwhile are kept.
+  const now = Date.now();
+  if (id !== cycleId) return;
+  const prev = currentStore();
+  const next = reconcile(prev, obs, now);
+  if (fingerprint(next) !== fingerprint(prev) || now - lastWrite > HEARTBEAT_WRITE_MS) {
+    setShared(STORE_KEY, next);
+    lastWrite = now;
+  }
+}
+
+/**
+ * Fast refresh of the selected issue: only its PR, checks and workflows; its
+ * agent claims are kept from the last full cycle.
+ * @param {number} id @param {string} key
+ */
+async function selectedCycle(id, key) {
+  const it = currentStore().issues.find((i) => i.key === key);
+  if (!it?.root || !it.branch) return;
+  const [pr, wf] = await Promise.all([prState(it.root, it.branch, it.pr?.base || null), hasWorkflows(it.root)]);
+  if (id !== cycleId) return;
+  const now = Date.now();
+  const prev = currentStore();
+  const cur = prev.issues.find((i) => i.key === key);
+  if (!cur) return;
+  const shownPr = pr.pr ?? (pr.error ? cur.pr : null);
+  const agentClaims = (cur.claims ?? []).filter((c) => c.source === "agent");
+  const claims = [...buildClaims(shownPr?.checks ?? [], [], {}, wf && shownPr != null), ...agentClaims];
+  const next = updatePr(prev, key, { pr: pr.pr, ghError: pr.error, claims }, now);
+  if (fingerprint(next) !== fingerprint(prev)) setShared(STORE_KEY, next);
+}
+
+let running = null;
+let cycleId = 0;
+let cycleStarted = 0;
+// When the last full cycle started, or 0 to run one at the next tick (refresh()).
+let lastStart = 0;
+// When the last fast (selected-issue) refresh started.
+let lastFast = 0;
+
+/** @param {string|null} [fastKey] refresh only this issue's PR instead of a full cycle */
+function startCycle(fastKey = null) {
+  if (running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS) running = null; // hung: abandon it
+  if (running) return running;
+  const id = ++cycleId;
+  cycleStarted = Date.now();
+  if (fastKey) lastFast = cycleStarted;
+  else lastStart = lastFast = cycleStarted;
+  const p = (async () => {
+    try {
+      if (fastKey) await selectedCycle(id, fastKey);
+      else await cycle(id);
+    } catch (e) {
+      console.error("deck collector:", e);
+    } finally {
+      if (running === p) running = null;
+    }
+  })();
+  running = p;
+  return p;
+}
+
+/**
+ * The issue to refresh every FAST_MS: the selected one, only while the deck
+ * layout shows the Issues view or the issue page (VIEW_KEY, set by showView). Otherwise null and
+ * only the full SLOW_MS cycle runs.
+ * @returns {string|null}
+ */
+function fastKey() {
+  if (!String(shared("layout") ?? "").startsWith("deck")) return null;
+  const view = shared(VIEW_KEY);
+  if (view !== "deck-issues" && view !== "deck-issue") return null;
+  const sel = shared(SEL_KEY);
+  if (!sel) return null;
+  const it = currentStore().issues.find((i) => i.key === sel);
+  if (!it?.root || !it.branch || it.observed === false || it.pr?.state === "MERGED") return null;
+  return sel;
+}
+
+/**
+ * Called from the bar's init. One collector per app: while another copy's
+ * collector is alive (heartbeat within STALE_MS) this one only watches, and
+ * takes over once that one goes quiet (its copy closed, or its build was
+ * reloaded without close()). Returns the guard to hand to stopCollector.
+ * @param {any} cx
+ */
+export function startCollector(cx) {
+  const guard = { beat: 0 };
+  const claim = () => {
+    const g = globalThis.__deckCollector;
+    if (g === guard) return true;
+    if (g && Date.now() - g.beat < STALE_MS) return false;
+    globalThis.__deckCollector = guard;
+    lastStart = 0;
+    lastMachines = 0;
+    return true;
+  };
+  const tick = (cx) => {
+    if (!claim()) return;
+    guard.beat = Date.now();
+    // Machines: its own 60 s poll, independent of the issue cycle.
+    if (!machinesBusy && Date.now() - lastMachines >= MACHINES_MS) {
+      lastMachines = Date.now();
+      cx.spawn(async () => {
+        await machinesCycle();
+      });
+    }
+    const hung = running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS;
+    if (running && !hung) return;
+    const now = Date.now();
+    if (now - lastStart >= SLOW_MS) {
+      cx.spawn(async () => {
+        await startCycle();
+      });
+      return;
+    }
+    const fast = now - lastFast >= FAST_MS ? fastKey() : null;
+    if (fast) {
+      cx.spawn(async () => {
+        await startCycle(fast);
+      });
+    }
+  };
+  tick(cx);
+  cx.timer.every(TICK_MS, tick);
+  return guard;
+}
+
+/** From the bar's close(): release the guard so another copy can collect. */
+export function stopCollector(guard) {
+  if (guard && globalThis.__deckCollector === guard) globalThis.__deckCollector = null;
+}
+
+/** Run a cycle soon (within a tick), e.g. after an action. */
+export function refresh() {
+  lastStart = 0;
+}
+
+// ---------------------------------------------------------------- actions
+
+/** @param {Store} s */
+function save(s) {
+  setShared(STORE_KEY, s);
+}
+
+/**
+ * Type text into the agent and press Enter (hc send; no --force, so a blocked
+ * agent's dialog is never answered by accident).
+ * @param {Issue} issue @param {string} text
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function reply(issue, text) {
+  if (!issue?.terminal || typeof text !== "string" || !text.trim()) return { ok: false, error: "nothing to send" };
+  if (text.includes("\0")) return { ok: false, error: "reply contains a NUL character" };
+  // "--" ends hc's options, so a reply starting with "-" is text, not a flag.
+  const r = await hcAct(["send", issue.terminal, "--", text], "send failed");
+  if (!r.ok) return r;
+  save(markReplied(currentStore(), issue.key, Date.now()));
+  refresh();
+  return { ok: true, error: null };
+}
+
+/**
+ * Answer a prompt option, only if a fresh read of the screen still shows the
+ * same prompt; then the fresh option is used. Reply options (an idle agent's
+ * numbered list) are typed; key options are pressed.
+ * @param {Issue} issue @param {PromptOption} option
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function pressOption(issue, option) {
+  if (!issue?.terminal || !option) return { ok: false, error: "no option" };
+  const t = issue.terminal;
+  const status = (agents() ?? []).find((a) => a.address === t)?.status ?? issue.status;
+  const isReply = typeof option.reply === "string" && option.reply !== "";
+  if (isReply && status === "working") {
+    // An end-of-turn choice: only while the agent is still waiting, not mid-turn.
+    notify({ title: "The agent is working again — refreshed", level: "info" });
+    refresh();
+    return { ok: false, error: "agent is working" };
+  }
+  const fresh = status !== "working" ? await readScreen(t, status) : null;
+  const old = issue.prompt;
+  const match = fresh && old && samePrompt(old, fresh)
+    ? fresh.options.find((o) => o.label === option.label)
+    : null;
+  const usable = isReply
+    ? typeof match?.reply === "string" && match.reply !== ""
+    : Array.isArray(match?.keys) && match.keys.length > 0;
+  if (!usable) {
+    notify({ title: "The question changed — refreshed", level: "info" });
+    refresh();
+    return { ok: false, error: "prompt changed" };
+  }
+  if (isReply) return reply(issue, match.reply);
+  const r = await hcAct(["keys", t, ...match.keys], "keys failed");
+  if (!r.ok) return r;
+  save(markReplied(currentStore(), issue.key, Date.now()));
+  refresh();
+  return { ok: true, error: null };
+}
+
+/** Keys with a merge in flight: one press, one merge. */
+const merging = new Set();
+
+const notMerged = (error) => {
+  notify({ title: "Checks changed — not merged", level: "warning" });
+  refresh();
+  return { ok: false, error };
+};
+
+/**
+ * Squash-merge PR `n`, pinned to `sha`, the head the person saw (gh refuses if
+ * the head moved). `recheck`: first re-read the PR and proof from GitHub and the
+ * repo; refuse if GitHub's head is not `sha` or the lock is closed on that data.
+ */
+async function doMerge(issue, sha, recheck) {
+  const n = issue.pr?.number;
+  const root = issue.root;
+  if (!Number.isInteger(n) || !root) return { ok: false, error: "no pull request" };
+  if (merging.has(issue.key)) return { ok: false, error: "merge already running" };
+  merging.add(issue.key);
+  try {
+    if (recheck) {
+      const { pr, error } = parsePr(await sh("gh", ["pr", "view", String(n), "--json", PR_FIELDS], { cwd: root, timeout: T_GH }));
+      if (!pr || pr.number !== n || !pr.headSha) return notMerged(error ?? "pull request unavailable");
+      const head = headCheck(sha, pr.headSha);
+      if (!head.ok) return { ok: false, error: head.error };
+      const [proof, wf] = await Promise.all([proofClaims(root), hasWorkflows(root)]);
+      const claims = buildClaims(pr.checks, proof.agentClaims, proof.exists, wf);
+      if (!mergeState(pr, error, claims).canMerge) return notMerged("proof incomplete");
+    }
+    if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) return { ok: false, error: "unknown head commit" };
+    const r = await sh("gh", ["pr", "merge", String(n), "--squash", "--match-head-commit", sha], { cwd: root, timeout: T_MERGE });
+    if (r.code !== 0) return { ok: false, error: String(r.stderr || r.stdout || "merge failed").trim() };
+    return { ok: true, error: null };
+  } finally {
+    merging.delete(issue.key);
+    refresh();
+  }
+}
+
+/**
+ * Merge only when the lock is open (open PR, every claim PASS), both on the
+ * store's copy and on a fresh read right before merging, and only the head
+ * shown on screen (`shownSha`, the issue's pr.headSha the view drew; required).
+ * @param {Issue} issue @param {string|null} shownSha
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function merge(issue, shownSha) {
+  const it = latest(issue);
+  // Only the head the screen showed; no fallback to the store's.
+  if (!shownSha) return { ok: false, error: "Branch moved — review again" };
+  const shown = shownSha;
+  const head = headCheck(shown, it.pr?.headSha ?? null);
+  if (!head.ok) return { ok: false, error: head.error };
+  if (!mergeState(it.pr, it.ghError, it.claims ?? []).canMerge) return { ok: false, error: "proof incomplete" };
+  return doMerge(it, shown, true);
+}
+
+/**
+ * The confirm dialog's "Merge anyway", after the person confirmed. Pinned to
+ * `headSha`, the head the dialog showed (issue.pr.headSha when it opened), so a
+ * push since then makes gh refuse. Still needs an open PR GitHub reports.
+ * @param {Issue} issue @param {string} headSha
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function mergeAnyway(issue, headSha) {
+  const it = latest(issue);
+  const m = mergeState(it.pr, it.ghError, it.claims ?? []);
+  if (!m.canMerge && !m.showAnyway) return { ok: false, error: "no open pull request" };
+  const head = headCheck(headSha, it.pr?.headSha ?? null);
+  if (!head.ok) return { ok: false, error: head.error };
+  return doMerge(it, headSha, false);
+}
+
+/**
+ * Merge (same lock and shown head as merge) and, only if it succeeded, tell the agent to ship.
+ * @param {Issue} issue @param {string|null} shownSha
+ */
+export async function mergeAndShip(issue, shownSha) {
+  const m = await merge(issue, shownSha);
+  if (!m.ok) return m;
+  const r = await reply(issue, "merged — ship it");
+  return r.ok ? m : { ok: true, error: "merged, but the message failed: " + r.error };
+}
+
+/**
+ * Ask the agent for the evidence its NO DATA claims lack.
+ * @param {Issue} issue
+ */
+export async function requestProof(issue) {
+  const it = latest(issue);
+  const missing = (it.claims ?? []).filter((c) => c.source === "agent" && c.verdict === "NO DATA").map((c) => c.claim);
+  const text = missing.length
+    ? "Proof needed. These claims have no evidence yet: " + missing.join("; ") +
+      ". Save evidence files in the repo and list them in .herdr/proof.json."
+    : "Proof needed. List each claim with an evidence file path in .herdr/proof.json.";
+  return reply(it, text);
+}
+
+/**
+ * The PR tab drew the diff for head `sha`: record it (the review soft gate).
+ * @param {Issue} issue @param {string} sha
+ */
+export function markDiffReviewed(issue, sha) {
+  if (!issue?.key) return;
+  const prev = currentStore();
+  const next = markReviewed(prev, issue.key, sha);
+  if (next !== prev) save(next);
+}
+
+/** @param {Issue} issue */
+export function dismiss(issue) {
+  if (!issue?.key) return;
+  save(dismissIn(currentStore(), issue.key, Date.now()));
+}
+
+/** Opens a web link in the default browser (http/https only). */
+export async function openUrl(url) {
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false, error: "not a web link" };
+  const r = await sh("open", [url], { timeout: T_GIT });
+  return r.code === 0 ? { ok: true, error: null } : { ok: false, error: String(r.stderr).trim() };
+}
+
+/**
+ * Opens an agent claim's evidence file. Checked again at click time: the file's
+ * realpath must be a regular file strictly inside the repo root's realpath, and
+ * its type (from the resolved name) picks a named viewer; anything else is only
+ * revealed in Finder. The file's default handler is never used.
+ * @param {Issue} issue @param {string} path repo-relative, from the proof file
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function openEvidence(issue, path) {
+  const root = latest(issue).root;
+  if (!root || typeof path !== "string" || !path || path.startsWith("/") || /[\0\r\n]/.test(path)) {
+    return { ok: false, error: "no evidence file" };
+  }
+  const realRoot = okText(await sh("realpath", ["--", root], { timeout: T_GIT }));
+  const resolved = okText(await sh("realpath", ["--", path], { cwd: root, timeout: T_GIT }));
+  const args = evidenceOpenArgs(resolved || null, realRoot || null);
+  if (!args) return { ok: false, error: "evidence is outside the repo" };
+  const f = await sh("test", ["-f", resolved, "-a", "-s", resolved], { timeout: T_GIT });
+  if (f.code !== 0) return { ok: false, error: "evidence file is missing or empty" };
+  const r = await sh("open", args, { timeout: T_GIT });
+  return r.code === 0 ? { ok: true, error: null } : { ok: false, error: String(r.stderr || "open failed").trim() };
+}
+
+/** Show a child of the deck-main stack and remember it for the bar. */
+export function showView(child) {
+  // A show request the view's copy acts on at its next draw (views/focus.js
+  // focusOnShow): a hidden stack child may not have drawn since it went away.
+  globalThis.__deckShown = { child, at: Date.now() };
+  setShared(VIEW_KEY, child);
+  run("layout.select", { stack: "deck-main", child });
+}
+
+/** @param {Issue} issue */
+export function focusTerminal(issue) {
+  if (!issue?.terminal) return;
+  showView("deck-terminal");
+  run("agent.focus", { terminal: issue.terminal });
+}

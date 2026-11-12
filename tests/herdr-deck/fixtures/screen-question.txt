@@ -1,0 +1,120 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/deck-prompt · /rc
+
+⚠ Your login expires in 1 day · run /login to renew
+
+❯ Run the shell command: ls -la
+
+  Listed 1 directory
+
+⏺ /private/tmp/deck-prompt holds two files:
+
+  ┌────────┬────────────┬──────────────┐
+  │  File  │    Size    │   Modified   │
+  ├────────┼────────────┼──────────────┤
+  │ s1.txt │ 1023 bytes │ Nov 12 00:30 │
+  ├────────┼────────────┼──────────────┤
+  │ s2.txt │ 1 byte     │ Nov 12 00:31 │
+  └────────┴────────────┴──────────────┘
+
+  s2.txt is probably empty, apart from a single newline. Want me to show what's in s1.txt?
+
+✻ Sautéed for 6s · done 12:31 AM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                     Your login expires in 1 day · run /login to renew
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ cat s1.txt
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  private/tmp/deck-prompt ctx:6%
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents
