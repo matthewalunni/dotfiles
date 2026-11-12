@@ -154,11 +154,14 @@ export function parsePrompt(screen, status) {
   if (bottom < 0) return { ...NONE, options: [] };
 
   const blocked = status === "blocked";
-  const block = numberedBlock(lines, bottom, blocked) ?? (blocked ? markerBlock(lines, bottom, sawConfirmFooter) : null);
+  const numbered = numberedBlock(lines, bottom, blocked);
+  const block = numbered ?? (blocked ? markerBlock(lines, bottom, sawConfirmFooter) : null);
   if (block && blocked) {
     const text = textAbove(lines, block.top);
     const permission = PERMISSION_Q.test(text) || block.options.some((o) => /^(yes|no)\b/i.test(o.label));
-    return { kind: permission ? "permission" : "menu", text, options: block.options };
+    // A digit key selects 1-9 only; 10 and up get no key option.
+    const options = numbered ? block.options.filter((o) => Number(o.keys[0]) <= 9) : block.options;
+    return { kind: permission ? "permission" : "menu", text, options };
   }
 
   const text = lastMessage(lines, bottom);

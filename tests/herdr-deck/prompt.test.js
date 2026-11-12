@@ -124,3 +124,13 @@ test("only ❯ marks a selection; a markdown blockquote list is not a menu", () 
   assert.deepEqual(p.options, []);
   assert.notEqual(p.kind, "menu");
 });
+
+test("blocked menu: options 10 and up get no key option (one digit key only)", () => {
+  const rows = Array.from({ length: 11 }, (_, n) => `${n === 0 ? "❯" : " "} ${n + 1}. pick ${n + 1}`);
+  const screen = ["Pick a color", "", ...rows, "", "Enter to select · Esc to cancel"].join("\n");
+  const p = parsePrompt(screen, "blocked");
+  assert.equal(p.kind, "menu");
+  assert.equal(p.options.length, 9);
+  assert.deepEqual(p.options.at(-1), { label: "pick 9", keys: ["9"] });
+  assert.ok(p.options.every((o) => o.keys.length === 1 && o.keys[0].length === 1));
+});
