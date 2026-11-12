@@ -1,4 +1,6 @@
 # User binaries
 export PATH="$HOME/bin:$PATH"
+# Hunk (https://hunk.dev) installs itself here; harmless if absent.
+[[ -d $HOME/.hunk/bin ]] && export PATH="$HOME/.hunk/bin:$PATH"
 export EDITOR="nvim"
 export VISUAL="nvim"
