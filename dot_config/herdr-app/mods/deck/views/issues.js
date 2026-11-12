@@ -13,8 +13,9 @@ import {
 } from "../data.js";
 import { previewPlan, backlogFiler } from "../lib/backlog.js";
 import { startKey } from "./startconfirm.js";
+import { openNewTask, newTaskButton } from "./newtask.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
-import { mergeButtons, mergeKey } from "./merge.js";
+import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
 import { boardColumns, moveBoard } from "../lib/board.js";
@@ -282,7 +283,7 @@ function backlogDetail(host, issue, k, opts) {
         .child(div().flex_none().px(7).py(1).border_1().border_color(k.line).child(String(issue.source || "agent").toUpperCase()))
         .child(filer
           ? h_flex().flex_wrap().child(div().child("Filed by ")).child(div().text_color(k.strong).child(`${filer.id} · ${filer.title || "untitled"}`)).child(div().child(" while it worked"))
-          : div().child(`Filed by an ${issue.source || "agent"}`)),
+          : div().child(issue.source === "you" ? "Filed by you from Deck" : `Filed by an ${issue.source || "agent"}`)),
     ))
     .child(section("Brief · what the agent will be told",
       div().border_l(2).border_color(k.brand).pl(12).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
@@ -670,6 +671,7 @@ export default class IssuesView extends View {
     const a = keyAction(keyOf(e), {
       view: "issues", mode: board ? "board" : "list", tab: st.tab === "pr" ? "changes" : "overview",
       typing, optionCount: Math.min(9, st.options.length), hasIssue: Boolean(issue), backlog: st.backlog,
+      dialog: anyDialogOpen(),
     });
     if (!a) return;
     const visible = groupIssues(currentStore().issues, this.filter).flatMap((g) => g.items);
@@ -721,6 +723,9 @@ export default class IssuesView extends View {
         break;
       case "toggleMode":
         setShared(MODE_KEY, board ? "list" : "board");
+        break;
+      case "newTask":
+        if (!openNewTask(issue?.key ?? null)) return;
         break;
       default:
         if (!detailKey(this, a, issue, st, cx)) return;
@@ -886,6 +891,7 @@ export default class IssuesView extends View {
           .border_color(k.line)
           .child(heading("Issues", 18))
           .child(modeToggle("list", k))
+          .child(newTaskButton(k))
           .when(Boolean(filterName), (el) =>
             el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(filterName).toUpperCase())),
           )

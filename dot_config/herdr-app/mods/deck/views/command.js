@@ -8,7 +8,8 @@ import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm, liveIss
 import { keyAction } from "../lib/keys.js";
 import { currentStore, focusTerminal, openUrl, STORE_KEY } from "../data.js";
 import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
-import { mergeButtons, mergeKey } from "./merge.js";
+import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
+import { openNewTask } from "./newtask.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, focusOnShow, openIssue } from "./focus.js";
 
@@ -54,7 +55,7 @@ export default class CommandView extends View {
   onKey(e, cx) {
     const issue = this.cursor();
     // 1–9 and P send to an agent; Command shows no options, so they stay off here.
-    const a = keyAction(keyOf(e), { view: "command", mode: "list", tab: "overview", typing: false, optionCount: 0, hasIssue: Boolean(issue) });
+    const a = keyAction(keyOf(e), { view: "command", mode: "list", tab: "overview", typing: false, optionCount: 0, hasIssue: Boolean(issue), dialog: anyDialogOpen() });
     if (!a) return;
     switch (a.type) {
       case "move": {
@@ -81,6 +82,7 @@ export default class CommandView extends View {
         if (!mergeKey(this, issue, a.type === "mergeShip")) return;
         break;
       case "help": openKeys(); break;
+      case "newTask": if (!openNewTask(issue?.key ?? null)) return; break;
       default: return;
     }
     cx.stop_propagation();

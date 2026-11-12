@@ -55,11 +55,13 @@ export function repoColor(name, palette) {
 /**
  * A card's one status line: {text, tone} with tone "hold"|"work"|"fail"|"ok"|"muted".
  * A backlog card says who filed it: "from <issue ID> · agent" when the filing
- * terminal is a known issue (in `issues`), else just its source.
+ * terminal is a known issue (in `issues`), else just its source; one Matt filed
+ * from Deck (source "you") says "you".
  * @param {Issue} issue @param {Issue[]} [issues]
  */
 export function boardNote(issue, issues) {
   if (issue.kind === "backlog") {
+    if (issue.source === "you") return { text: "you", tone: "muted" };
     const by = backlogFiler(issue, issues);
     const src = issue.source || "agent";
     return { text: by ? `from ${by.id} · ${src}` : src, tone: "muted" };

@@ -6,6 +6,7 @@ import { boardColumns, boardNote, repoColor } from "../lib/board.js";
 import { minutesSince, prChip } from "../lib/present.js";
 import { MODE_KEY, currentStore } from "../data.js";
 import { heading, label, stageColor, dot, keyChip } from "./ui.js";
+import { newTaskButton } from "./newtask.js";
 
 /** LIST / BOARD toggle; `after` runs on a switch (closes an open detail). */
 export function modeToggle(mode, k, after) {
@@ -127,11 +128,12 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .border_color(k.line)
         .child(heading("Issues", 18))
         .child(modeToggle("board", k, onToggled))
+        .child(newTaskButton(k))
         .when(Boolean(opts.filterName), (el) =>
           el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
         )
         .child(div().flex_1())
-        .child(div().text_color(k.muted).child("h l column · j k card · ↵ open · S start · X discard")),
+        .child(div().text_color(k.muted).truncate().child("h l column · j k card · ↵ open · S start · X discard")),
     )
     .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)))
     .child(

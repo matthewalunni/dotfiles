@@ -28,8 +28,8 @@ test("h/l only on the board", () => {
   assert.deepEqual(keyAction(k("l"), ctx({ mode: "board" })), { type: "col", dx: 1 });
   assert.deepEqual(keyAction(k("v"), ctx()), { type: "toggleMode" });
 });
-test("n/p only on the changes tab", () => {
-  assert.equal(keyAction(k("n"), ctx()), null);
+test("n/p are files only on the changes tab", () => {
+  assert.deepEqual(keyAction(k("n"), ctx()), { type: "newTask" }); // v1.4: off the PR tab, n is New task
   assert.deepEqual(keyAction(k("n"), ctx({ tab: "changes" })), { type: "file", d: 1 });
   assert.deepEqual(keyAction(k("p"), ctx({ tab: "changes" })), { type: "file", d: -1 });
   assert.deepEqual(keyAction(k("p"), ctx()), { type: "proof" });

@@ -13,6 +13,7 @@ import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
+import { submitTask } from "./lib/newtask.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -50,6 +51,8 @@ const T_WORKTREE = 60_000;
 const CYCLE_DEADLINE_MS = 60_000;
 // The backlog inbox is read with tail -c: its newest MiB.
 const INBOX_MAX = 1024 * 1024;
+// herdr-backlog (node + git) filing one task.
+const T_BACKLOG = 15_000;
 // readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
 const HISTORY_TAIL = String(4 * 1024 * 1024);
 
@@ -245,6 +248,15 @@ async function machinesCycle() {
   }
 }
 
+/**
+ * The inbox: a missing or unreadable file is empty (entries already merged stay).
+ * Its newest MiB (append-only, so the newest entries win); a cut-off first line is dropped.
+ */
+async function readInbox() {
+  const ib = await sh("tail", ["-c", String(INBOX_MAX), home() + "/.local/state/herdr-deck/backlog.jsonl"], { timeout: T_GIT });
+  return ib.code === 0 ? parseBacklog(inboxTail(String(ib.stdout ?? ""), INBOX_MAX)) : [];
+}
+
 /** @param {number} id the cycle's id; a result from an abandoned cycle is dropped */
 async function cycle(id) {
   const list = agents() ?? [];
@@ -260,10 +272,7 @@ async function cycle(id) {
   }
   const obs = await Promise.all(mine.map((a) => observe(a, history, paneByTerminal, termByAddr)));
 
-  // The inbox: a missing or unreadable file is empty (entries already merged stay).
-  // Its newest MiB (append-only, so the newest entries win); a cut-off first line is dropped.
-  const ib = await sh("tail", ["-c", String(INBOX_MAX), home() + "/.local/state/herdr-deck/backlog.jsonl"], { timeout: T_GIT });
-  const inbox = ib.code === 0 ? parseBacklog(inboxTail(String(ib.stdout ?? ""), INBOX_MAX)) : [];
+  const inbox = await readInbox();
 
   // Read the store only now, after every await, so actions taken meanwhile are kept.
   const now = Date.now();
@@ -714,4 +723,29 @@ export function discardEntry(entry) {
 export function restoreEntry(entry) {
   if (entry?.kind !== "backlog") return;
   save(restoreBacklog(currentStore(), entry.key));
+}
+
+/**
+ * The New task dialog's ⌘↵: runs ~/.local/bin/herdr-backlog (by absolute path:
+ * Herdr's exec PATH has no ~/.local/bin) with argv only, timed, source "you".
+ * On success the inbox is re-read and merged at once and the new card is
+ * selected. Returns the dialog's next state (lib/newtask.js submitTask): done,
+ * or the script's error with the text kept.
+ * @param {{title: string, brief: string, root: string|null}} form
+ */
+export function fileTask(form) {
+  return submitTask(form, {
+    run: (argv) => sh(home() + "/.local/bin/herdr-backlog", argv, { timeout: T_BACKLOG }),
+    reread: async () => {
+      const inbox = await readInbox();
+      const prev = currentStore();
+      const next = mergeBacklog(prev, inbox, Date.now());
+      if (next !== prev) save(next);
+      return inbox;
+    },
+    select: (entryId) => {
+      setShared(SEL_KEY, "backlog|" + entryId);
+      setShared(TAB_KEY, "overview");
+    },
+  }, Date.now());
 }

@@ -3,7 +3,11 @@
 /**
  * @typedef {{ key: string, shift: boolean, cmd: boolean, held?: boolean }} Key  held: a key-repeat event
  * @typedef {{ view: "command"|"issues"|"issue", mode: "list"|"board", tab: "overview"|"changes",
- *   typing: boolean, optionCount: number, hasIssue: boolean, backlog?: boolean }} KeyCtx
+ *   typing: boolean, optionCount: number, hasIssue: boolean, backlog?: boolean, dialog?: boolean }} KeyCtx
+ *   dialog: a Deck dialog (a merge confirm, the review gate, the start confirm or
+ *   New task) is open: N does nothing then.
+ *   N (new task) works in Command and Issues, with or without an issue; on the
+ *   Pull request tab n is the next file instead.
  *   backlog: the selected issue is a (not discarded) backlog entry: only S (start,
  *   which opens the confirm) and X (discard) act on it; the agent keys are off.
  *   tab "changes": the Pull request tab (its file list and diff)
@@ -62,6 +66,7 @@ function action(ev, ctx) {
     if (k === "p") return { type: "file", d: -1 };
   }
   if (k === "v") return issues ? { type: "toggleMode" } : null;
+  if (k === "n") return !page && !ctx.dialog ? { type: "newTask" } : null;
 
   if (!ctx.hasIssue) return null;
   if (ctx.backlog) {
