@@ -89,3 +89,18 @@ test("parseProofFile drops unsafe paths but keeps the claim", () => {
 test("parseProofFile drops empty or whitespace claims", () => {
   assert.deepEqual(parseProofFile('{"claims":[{"claim":""},{"claim":"  \\t"}]}'), []);
 });
+
+test("evidenceOpenArgs opens viewable files and reveals the rest", async () => {
+  const { evidenceOpenArgs } = await import("../../dot_config/herdr-app/mods/deck/lib/proof.js");
+  assert.deepEqual(evidenceOpenArgs("file:///repo/proof/a.mp4"), ["/repo/proof/a.mp4"]);
+  assert.deepEqual(evidenceOpenArgs("file:///repo/proof/A.PNG"), ["/repo/proof/A.PNG"]);
+  assert.deepEqual(evidenceOpenArgs("file:///repo/x y/log.txt"), ["/repo/x y/log.txt"]);
+  // Anything that could run when opened is only revealed in Finder.
+  assert.deepEqual(evidenceOpenArgs("file:///repo/run.command"), ["-R", "/repo/run.command"]);
+  assert.deepEqual(evidenceOpenArgs("file:///repo/noext"), ["-R", "/repo/noext"]);
+  assert.equal(evidenceOpenArgs("file://relative/a.png"), null);
+  assert.equal(evidenceOpenArgs("file:///repo/../etc/a.png"), null);
+  assert.equal(evidenceOpenArgs("file:///repo/a\0.png"), null);
+  assert.equal(evidenceOpenArgs("https://x.test/a.png"), null);
+  assert.equal(evidenceOpenArgs(null), null);
+});

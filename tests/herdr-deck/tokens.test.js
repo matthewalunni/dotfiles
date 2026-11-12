@@ -18,7 +18,7 @@ test("empty theme falls back to Moss values", () => {
     holdBg: "#1a1209",
     work: "#b6ad90",
     ok: "#8fb38f",
-    okBg: "#0a1a0a",
+    okBg: "#132013",
     nodata: "#a68a64",
     fail: "#b5564f",
     addBg: "#0a1a0a",

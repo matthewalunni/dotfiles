@@ -84,3 +84,26 @@ export function mergeState(pr, ghError, claims) {
 export function stampText(claims) {
   return `${claims.filter((c) => c.verdict === "PASS").length} of ${claims.length}`;
 }
+
+// Evidence types that open in a viewer; anything else (scripts, .command, no
+// extension) is only revealed in Finder, so a click never runs a file.
+const VIEWABLE = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "pdf",
+  "mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav",
+  "txt", "log", "md", "json", "csv", "xml", "yaml", "yml",
+]);
+
+/**
+ * `open` arguments for an evidence file:// URL (raw absolute path, no escaping), or null.
+ * @param {string|null} url
+ * @returns {string[]|null}
+ */
+export function evidenceOpenArgs(url) {
+  if (typeof url !== "string" || !url.startsWith("file:///")) return null;
+  const path = url.slice("file://".length);
+  if (/[\0\r\n]/.test(path) || path.split("/").includes("..")) return null;
+  const name = path.split("/").pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  return VIEWABLE.has(ext) ? [path] : ["-R", path];
+}

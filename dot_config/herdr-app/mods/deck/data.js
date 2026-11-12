@@ -7,7 +7,7 @@
 
 import { agents, terminals, panes, exec, hc, home, readTextFile, shared, setShared, run, notify } from "herdr";
 import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr } from "./lib/github.js";
-import { parseProofFile, buildClaims, mergeState } from "./lib/proof.js";
+import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied } from "./lib/store.js";
@@ -453,10 +453,14 @@ export function dismiss(issue) {
   save(dismissIn(currentStore(), issue.key, Date.now()));
 }
 
-/** Opens a web link in the default browser (http/https only). */
+/**
+ * Opens a web link in the default browser (http/https), or an evidence file
+ * (file:///abs/path): viewable types open, anything else is revealed in Finder.
+ */
 export async function openUrl(url) {
-  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false, error: "not a web link" };
-  const r = await sh("open", [url], { timeout: T_GIT });
+  const args = typeof url === "string" && /^https?:\/\//.test(url) ? [url] : evidenceOpenArgs(url);
+  if (!args) return { ok: false, error: "not a web link or evidence file" };
+  const r = await sh("open", args, { timeout: T_GIT });
   return r.code === 0 ? { ok: true, error: null } : { ok: false, error: String(r.stderr).trim() };
 }
 
