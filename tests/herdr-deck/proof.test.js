@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseProofFile, buildClaims, mergeState, stampText } from "../../dot_config/herdr-app/mods/deck/lib/proof.js";
+import { parseProofFile, buildClaims, mergeState, stampText, confirmLine } from "../../dot_config/herdr-app/mods/deck/lib/proof.js";
 
 const openPr = { number: 1, title: "t", state: "OPEN", checks: [] };
 const ci = (name, status) => ({ name, status, detail: "" });
@@ -149,4 +149,15 @@ test("no workflows, or checks present: no CI-not-reported claim", () => {
   assert.equal(buildClaims([], [{ claim: "A", path: "a.png" }], { "a.png": true }).length, 1);
   const c = buildClaims([ci("build", "pass")], [], {}, true);
   assert.deepEqual(c.map((x) => x.claim), ["build"]);
+});
+
+test("confirmLine follows the lock state now, not when the dialog opened", () => {
+  const pass = mergeState(openPr, null, [{ claim: "a", source: "ci", verdict: "PASS" }]);
+  const fail = mergeState(openPr, null, [{ claim: "a", source: "ci", verdict: "FAIL" }]);
+  assert.equal(confirmLine("merge", pass), "Every claim passes. Squash-merges into the base branch.");
+  assert.equal(confirmLine("ship", pass), "Every claim passes. Squash-merges, then tells the agent “merged — ship it”.");
+  assert.equal(confirmLine("merge", fail), null);
+  assert.equal(confirmLine("ship", fail), null);
+  assert.equal(confirmLine("anyway", pass), null);
+  assert.equal(confirmLine(undefined, pass), null);
 });

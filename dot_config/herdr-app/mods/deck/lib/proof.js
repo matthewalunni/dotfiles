@@ -87,6 +87,20 @@ export function mergeState(pr, ghError, claims) {
   return { canMerge: false, showAnyway: true, reasons };
 }
 
+/**
+ * The M / ⇧M confirm's "every claim passes" line, from the lock state as it is
+ * now (`m` from mergeState). Null when it does not hold: Merge anyway, or a
+ * claim stopped passing since the dialog opened.
+ * @param {"anyway"|"merge"|"ship"|undefined} next @param {{ canMerge: boolean }} m
+ * @returns {string|null}
+ */
+export function confirmLine(next, m) {
+  if ((next !== "merge" && next !== "ship") || !m?.canMerge) return null;
+  return next === "ship"
+    ? "Every claim passes. Squash-merges, then tells the agent “merged — ship it”."
+    : "Every claim passes. Squash-merges into the base branch.";
+}
+
 /** @param {Claim[]} claims */
 export function stampText(claims) {
   return `${claims.filter((c) => c.verdict === "PASS").length} of ${claims.length}`;

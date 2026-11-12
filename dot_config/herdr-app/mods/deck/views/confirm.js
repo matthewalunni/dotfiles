@@ -2,7 +2,8 @@
 // { view: "confirm", key, headSha, next }. next "anyway" (default): "Merge
 // anyway" — it lists what is missing (from the lock state each time it draws).
 // next "merge" / "ship": the M / ⇧M keys' confirm (a key never merges on its
-// own). On confirm it merges pinned to `headSha` (the head shown when it
+// own); its "Every claim passes" also comes from the lock state as it draws, so
+// a claim that stops passing turns it into the Missing list. On confirm it merges pinned to `headSha` (the head shown when it
 // opened), so a push since then makes GitHub refuse. Pressing the opening key
 // again (M, or ⇧M for ship) confirms (lib/dialogkeys.js); Esc / Cancel close
 // it; Enter does nothing.
@@ -13,6 +14,7 @@ import { currentStore, mergeAnyway, merge, mergeAndShip } from "../data.js";
 import { lockOf, dialogBeat, forgetDialog } from "./merge.js";
 import { MONO, tokens, label, heading, button, dot, act, keyChip, keyOf } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
+import { confirmLine } from "../lib/proof.js";
 
 export default class ConfirmView extends View {
   init(_p, cx) {
@@ -67,10 +69,14 @@ export default class ConfirmView extends View {
     const k = tokens();
     const p = props() ?? {};
     const issue = currentStore().issues.find((i) => i.key === p.key) ?? null;
-    const reasons = issue ? lockOf(issue).reasons : [];
+    const lock = issue ? lockOf(issue) : { canMerge: false, reasons: [] };
+    const reasons = lock.reasons;
     const sha = typeof p.headSha === "string" ? p.headSha.slice(0, 7) : null;
-    const ready = Boolean(issue?.pr && sha);
     const plain = p.next === "merge" || p.next === "ship";
+    // M / ⇧M only while every claim still passes (merge() refuses otherwise).
+    const passLine = confirmLine(p.next, lock);
+    const lost = plain && !passLine;
+    const ready = Boolean(issue?.pr && sha) && (!plain || lock.canMerge);
     const what = p.next === "ship" ? "Merge + ship" : "Merge";
     return v_flex()
       .id("deck-confirm")
@@ -102,8 +108,9 @@ export default class ConfirmView extends View {
           .truncate()
           .child(issue ? `${issue.id} · PR #${issue.pr?.number ?? "?"} · ${issue.pr?.title ?? issue.title}` : "This issue is no longer in the store."),
       )
-      .when(!plain, (el) => el.child(label("Missing", k.nodata)))
-      .when(!plain, (el) => el.child(
+      .when(lost, (el) => el.child(div().text_color(k.fail).line_height(1.4).child("Not every claim passes any more. Close this and look again.")))
+      .when(!passLine, (el) => el.child(label("Missing", k.nodata)))
+      .when(!passLine, (el) => el.child(
         v_flex()
           .id("confirm-reasons")
           .flex_1()
@@ -121,12 +128,12 @@ export default class ConfirmView extends View {
             ),
           ),
       ))
-      .when(plain, (el) => el.child(div().flex_1().text_color(k.text).line_height(1.4).child(p.next === "ship" ? "Every claim passes. Squash-merges, then tells the agent “merged — ship it”." : "Every claim passes. Squash-merges into the base branch.")))
+      .when(Boolean(passLine), (el) => el.child(div().flex_1().text_color(k.text).line_height(1.4).child(passLine)))
       .child(
         div()
           .text_color(k.muted)
           .line_height(1.4)
-          .child(ready ? `Squash-merges now, at commit ${sha}. If the branch moved since this opened, GitHub refuses.` : "No head commit known — cannot merge from here."),
+          .child(lost ? "Merge stays off until every claim passes." : ready ? `Squash-merges now, at commit ${sha}. If the branch moved since this opened, GitHub refuses.` : "No head commit known — cannot merge from here."),
       )
       .child(
         h_flex()
