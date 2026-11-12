@@ -91,7 +91,22 @@
         "place": "tab",
         "name": "lazygit"
       }
-    }
+    },
+    "ctrl-a shift-n": "space.new",
+    "ctrl-a shift-w": "space.rename",
+    "ctrl-a shift-d": "space.close",
+    "ctrl-a shift-t": "tab.rename",
+    "ctrl-a shift-/": "app.help",
+    "ctrl-a b": "layout.toggle:sidebar",
+    "ctrl-a 1": "tab.select:1",
+    "ctrl-a 2": "tab.select:2",
+    "ctrl-a 3": "tab.select:3",
+    "ctrl-a 4": "tab.select:4",
+    "ctrl-a 5": "tab.select:5",
+    "ctrl-a 6": "tab.select:6",
+    "ctrl-a 7": "tab.select:7",
+    "ctrl-a 8": "tab.select:8",
+    "ctrl-a 9": "tab.select:9"
   },
   "terminal": {
     "cmd-f": "terminal.search",
