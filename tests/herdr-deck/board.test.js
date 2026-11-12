@@ -1,6 +1,7 @@
+import { deckTokens } from "../../dot_config/herdr-app/mods/deck/lib/tokens.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boardColumns, moveBoard, nextHolding, repoColor, boardNote } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
+import { boardColumns, moveBoard, nextHolding, repoColor, boardNote, cardClick } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
 
 const iss = (key, stage, o = {}) => ({ key, stage, holdingSince: null, lastSeen: 0, dismissed: false, ...o });
 
@@ -58,6 +59,14 @@ test("boardNote: holding question, working, failing check, merged, stage", () =>
 });
 
 test("repoColor is stable per name", () => {
-  assert.equal(repoColor("readflow"), repoColor("readflow"));
-  assert.match(repoColor(null), /^#[0-9a-f]{6}$/);
+  const pal = deckTokens({}).repo;
+  assert.equal(pal.length, 8);
+  assert.equal(repoColor("readflow", pal), repoColor("readflow", pal));
+  assert.ok(pal.includes(repoColor(null, pal)));
+});
+
+test("cardClick: first click selects, only the stored selection opens", () => {
+  assert.equal(cardClick(undefined, "a"), "select");
+  assert.equal(cardClick("b", "a"), "select");
+  assert.equal(cardClick("a", "a"), "open");
 });

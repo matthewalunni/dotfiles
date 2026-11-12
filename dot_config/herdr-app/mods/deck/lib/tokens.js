@@ -23,6 +23,9 @@ const MOSS = {
   delBg: "#582f0e",
 };
 
+// Repo identity colours (fixed, not theme-mapped): a repo keeps its colour everywhere.
+const REPO = ["#f2a65a", "#ef6f6c", "#4fc1a6", "#6f9ceb", "#9bcf7a", "#b58be0", "#e0c56a", "#6fc4d8"];
+
 // token -> theme key
 const KEYS = {
   bg: "background",
@@ -51,5 +54,6 @@ export function deckTokens(theme = {}) {
   for (const [token, key] of Object.entries(KEYS)) {
     out[token] = theme?.[key] || MOSS[token];
   }
+  out.repo = REPO;
   return out;
 }

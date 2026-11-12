@@ -45,13 +45,11 @@ export function nextHolding(issues, currentKey) {
   return h[(at + 1) % h.length];
 }
 
-const REPO_PALETTE = ["#f2a65a", "#ef6f6c", "#4fc1a6", "#6f9ceb", "#9bcf7a", "#b58be0", "#e0c56a", "#6fc4d8"];
-
-/** A stable colour per repo name (same name, same colour). */
-export function repoColor(name) {
+/** A stable colour per repo name from `palette` (deckTokens().repo): same name, same colour. */
+export function repoColor(name, palette) {
   let h = 0;
   for (const ch of String(name ?? "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return REPO_PALETTE[h % REPO_PALETTE.length];
+  return palette[h % palette.length];
 }
 
 /**
@@ -68,4 +66,9 @@ export function boardNote(issue) {
   if (failing) return { text: `${failing} check${failing === 1 ? "" : "s"} failing`, tone: "fail" };
   if (issue.status === "working") return { text: "Working…", tone: "work" };
   return { text: issue.stage[0].toUpperCase() + issue.stage.slice(1), tone: "muted" };
+}
+
+/** Clicking a card opens it only when it is already the stored selection (a fallback highlight doesn't count). */
+export function cardClick(selKey, issueKey) {
+  return selKey === issueKey ? "open" : "select";
 }

@@ -35,10 +35,10 @@ const ago = (issue, now) => {
 };
 
 /**
- * The board pane. `onCard(issue, wasSelected)` handles clicks.
+ * The board pane. `onCard(issue)` handles clicks.
  * @param {{filterName: string|null}} opts
  */
-export function boardPane(issues, selected, k, mode, onCard, onToggled, opts = {}) {
+export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
   const now = Date.now();
   const cols = boardColumns(issues);
   const toneColor = { hold: k.hold, work: k.work, fail: k.fail, ok: k.ok, muted: k.muted };
@@ -57,7 +57,7 @@ export function boardPane(issues, selected, k, mode, onCard, onToggled, opts = {
       .gap(7)
       .cursor_pointer()
       .hover((s) => s.bg(k.raised))
-      .on_click(() => onCard(i, on))
+      .on_click(() => onCard(i))
       .child(
         h_flex()
           .gap(8)
@@ -72,9 +72,9 @@ export function boardPane(issues, selected, k, mode, onCard, onToggled, opts = {
           .items_center()
           .gap(8)
           .text_color(k.muted)
-          .child(div().flex_none().w(7).h(7).bg(repoColor(i.repo)))
+          .child(div().flex_none().w(7).h(7).bg(repoColor(i.repo, k.repo)))
           .child(div().flex_1().min_w(0).truncate().child(i.repo ?? "no repo"))
-          .child(div().flex_none().child(pc.text === "—" ? "—" : pc.text === "merged" ? "merged" : pc.text)),
+          .child(div().flex_none().child(pc.text)),
       );
   };
   const column = (c) => {
@@ -124,7 +124,7 @@ export function boardPane(issues, selected, k, mode, onCard, onToggled, opts = {
         .border_b(1)
         .border_color(k.line)
         .child(heading("Issues", 18))
-        .child(modeToggle(mode, k, onToggled))
+        .child(modeToggle("board", k, onToggled))
         .when(Boolean(opts.filterName), (el) =>
           el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
         )

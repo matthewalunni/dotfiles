@@ -14,7 +14,7 @@ import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot
 import { mergeButtons } from "./merge.js";
 import { prTab } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
-import { boardColumns } from "../lib/board.js";
+import { boardColumns, cardClick } from "../lib/board.js";
 
 const STAGE_LABEL = { holding: "Holding for you", verify: "Verify", build: "Build", survey: "Survey", landed: "Landed" };
 const VIEWS = [
@@ -576,8 +576,8 @@ export default class IssuesView extends View {
         : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
         : VIEWS.find((v) => v.value === this.filter.value)?.text;
       return root.child(
-        boardPane(visible, issue, k, "board", (i, wasSelected) => {
-          if (wasSelected) this.boardOpen = true;
+        boardPane(visible, issue, k, (i) => {
+          if (cardClick(selKey, i.key) === "open") this.boardOpen = true;
           else this.select(i);
           cx.notify();
         }, () => (this.boardOpen = false), { filterName }),

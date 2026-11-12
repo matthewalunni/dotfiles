@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { deckTokens } from "../../dot_config/herdr-app/mods/deck/lib/tokens.js";
 
 test("empty theme falls back to Moss values", () => {
-  assert.deepEqual(deckTokens({}), {
+  const { repo, ...rest } = deckTokens({});
+  assert.equal(repo.length, 8);
+  assert.deepEqual(rest, {
     bg: "#070906",
     chrome: "#0a0d08",
     panel: "#0f130d",
