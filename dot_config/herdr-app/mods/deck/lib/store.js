@@ -19,7 +19,7 @@ import { deriveStage, nextHolding } from "./stage.js";
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
-/** @typedef {{ issues: Issue[], counters: Record<string, number>, log: LogEvent[] }} Store */
+/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
  *   terminal: string, status: Status, title: string, cwd: string, repo: string|null,
@@ -33,7 +33,7 @@ const LOG_CAP = 200;
 
 /** @returns {Store} */
 export function emptyStore() {
-  return { issues: [], counters: {}, log: [] };
+  return { issues: [], counters: {}, prefixes: {}, log: [] };
 }
 
 /** @param {string|null} branch */
@@ -44,10 +44,45 @@ export function issueKey(terminal, branch) {
   return terminal + "|" + (cleanBranch(branch) ?? "-");
 }
 
-/** @param {string|null} repo */
-function prefixOf(repo) {
-  const p = (repo ?? "").replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase();
-  return p.length === 2 ? p : "XX";
+const SUFFIXES = ["flow", "vault", "code", "kit", "app", "ai", "iq", "hub", "lab"];
+
+/** @param {string} repo @returns {string[]} */
+function repoParts(repo) {
+  const out = [];
+  for (const chunk of repo.split(/[-_.\s]+/)) {
+    const words = chunk.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g) ?? [];
+    out.push(...words);
+  }
+  const parts = out.filter(Boolean);
+  if (parts.length === 1) {
+    const w = parts[0].toLowerCase();
+    const suf = SUFFIXES.find((x) => w.length > x.length && w.endsWith(x));
+    if (suf) return [w.slice(0, -suf.length), suf];
+  }
+  return parts;
+}
+
+/**
+ * Issue-ID prefix for a repo. `taken` maps repo -> prefix for repos already seen.
+ * @param {string|null} repo @param {Record<string, string>} taken
+ * @returns {string}
+ */
+export function prefixFor(repo, taken) {
+  if (!repo) return "XX";
+  if (taken[repo]) return taken[repo];
+  const parts = repoParts(repo);
+  const letters = repo.replace(/[^A-Za-z]/g, "").toUpperCase();
+  if (!letters) return "XX";
+  const base = parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : letters.slice(0, 2).padEnd(2, "X");
+  const used = new Set(Object.values(taken));
+  if (!used.has(base)) return base;
+  for (const c of letters.slice(1)) {
+    const cand = letters[0] + c;
+    if (!used.has(cand)) return cand;
+  }
+  for (let n = 1; ; n++) if (!used.has(letters[0] + n)) return letters[0] + n;
 }
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -85,6 +120,7 @@ function diffEvents(prev, next, now) {
  */
 export function reconcile(store, obs, now) {
   const counters = { ...store.counters };
+  const prefixes = { ...(store.prefixes ?? {}) };
   const issues = store.issues.map((i) => ({ ...i }));
   const log = [...store.log];
   const byKey = new Map(issues.map((i) => [i.key, i]));
@@ -96,7 +132,8 @@ export function reconcile(store, obs, now) {
     let id;
     if (prev) id = prev.id;
     else {
-      const prefix = prefixOf(o.repo);
+      const prefix = prefixFor(o.repo, prefixes);
+      if (o.repo) prefixes[o.repo] = prefix;
       counters[prefix] = (counters[prefix] ?? 0) + 1;
       id = prefix + "-" + counters[prefix];
     }
@@ -125,7 +162,7 @@ export function reconcile(store, obs, now) {
     byKey.set(key, next);
   }
 
-  return finish({ issues, counters, log }, now);
+  return finish({ issues, counters, prefixes, log }, now);
 }
 
 /** Drop expired landed issues (their log events stay) and cap the log. */
@@ -133,7 +170,7 @@ function finish(store, now) {
   const issues = store.issues.filter(
     (i) => !(i.stage === "landed" && i.landedAt != null && i.landedAt < now - LANDED_TTL),
   );
-  return { issues, counters: store.counters, log: store.log.slice(-LOG_CAP) };
+  return { issues, counters: store.counters, prefixes: store.prefixes, log: store.log.slice(-LOG_CAP) };
 }
 
 /**

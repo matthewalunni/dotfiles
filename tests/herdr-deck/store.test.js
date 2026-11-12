@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, reconcile, dismiss, markReplied } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -13,16 +13,16 @@ const get = (s, key) => s.issues.find((i) => i.key === key);
 
 test("ids are stable and per-repo prefixed", () => {
   let s = reconcile(emptyStore(), [ob(), ob({ terminal: "t9" }), ob({ terminal: "t1", repo: "readflow" }), ob({ terminal: "t2", repo: null })], 1);
-  assert.deepEqual(s.issues.map((i) => i.id), ["TY-1", "TY-2", "RE-1", "XX-1"]);
+  assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2", "RF-1", "XX-1"]);
   s = reconcile(s, [ob()], 2);
   assert.equal(s.issues.length, 4);
-  assert.equal(get(s, "t7|fix/x").id, "TY-1");
+  assert.equal(get(s, "t7|fix/x").id, "TF-1");
 });
 
 test("new branch on same terminal is a new issue; old kept; HEAD is no branch", () => {
   let s = reconcile(emptyStore(), [ob()], 1);
   s = reconcile(s, [ob({ branch: "fix/y" })], 2);
-  assert.deepEqual(s.issues.map((i) => i.id), ["TY-1", "TY-2"]);
+  assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2"]);
   s = reconcile(s, [ob({ terminal: "t3", branch: "HEAD" })], 3);
   assert.ok(get(s, "t3|-"));
   s = reconcile(s, [ob({ terminal: "t4", branch: null })], 3);
@@ -49,7 +49,7 @@ test("stage, PR and check events", () => {
     ["moved to Build", "work"], ["moved to Verify", "work"], ["opened PR #455", "work"], ["checks passed", "ok"],
   ]);
   s = reconcile(s, [ob({ commitsAhead: 2, pr: pr({ checks: [{ name: "lint", status: "fail", detail: "" }] }) })], 5);
-  assert.deepEqual(s.log.at(-1), { t: 5, key: "t7|fix/x", id: "TY-1", what: "lint failed", tone: "warn" });
+  assert.deepEqual(s.log.at(-1), { t: 5, key: "t7|fix/x", id: "TF-1", what: "lint failed", tone: "warn" });
 });
 
 test("markReplied clears holding; awaitingAck flow", () => {
@@ -96,8 +96,8 @@ test("landed issue older than 7 days dropped, log kept; vanished terminal kept",
   s = reconcile(s, [], 10 + 6 * DAY);
   assert.equal(s.issues.length, 2);
   s = reconcile(s, [], 10 + 8 * DAY);
-  assert.deepEqual(s.issues.map((i) => i.id), ["TY-2"]);
-  assert.ok(s.log.some((e) => e.what === "landed" && e.id === "TY-1"));
+  assert.deepEqual(s.issues.map((i) => i.id), ["TF-2"]);
+  assert.ok(s.log.some((e) => e.what === "landed" && e.id === "TF-1"));
 });
 
 test("log capped at 200, newest last", () => {
@@ -105,4 +105,16 @@ test("log capped at 200, newest last", () => {
   for (let n = 0; n < 250; n++) s = reconcile(s, [ob({ terminal: "a" + n, status: "done" })], n);
   assert.equal(s.log.length, 200);
   assert.equal(s.log.at(-1).t, 249);
+});
+
+test("prefixFor table", () => {
+  const want = { taskflow: "TF", repvault: "RV", readflow: "RF", speakflow: "SF", promptr: "PR", content: "CO", digestIQ: "DI", biscuitai: "BA" };
+  for (const [repo, p] of Object.entries(want)) assert.equal(prefixFor(repo, {}), p, repo);
+});
+
+test("prefix collision uses next free letter and persists per repo", () => {
+  let s = reconcile(emptyStore(), [ob({ terminal: "a", repo: "reportfile" }), ob({ terminal: "b", repo: "readme" })], 1);
+  assert.deepEqual(s.prefixes, { reportfile: "RE", readme: "RA" });
+  s = reconcile(s, [ob({ terminal: "c", repo: "readme" })], 2);
+  assert.deepEqual(s.issues.map((i) => i.id), ["RE-1", "RA-1", "RA-2"]);
 });
