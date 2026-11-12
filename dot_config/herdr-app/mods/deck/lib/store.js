@@ -15,11 +15,12 @@ import { deriveStage, nextHolding } from "./stage.js";
  *   commitsAhead: number|null, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
  *   stage: Stage, holdingSince: number|null, awaitingAck: boolean,
- *   dismissed: boolean, createdAt: number, landedAt: number|null
+ *   dismissed: boolean, createdAt: number, landedAt: number|null,
+ *   observed: boolean, lastSeen: number
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
-/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, log: LogEvent[] }} Store */
+/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
  *   terminal: string, status: Status, title: string, cwd: string, repo: string|null,
@@ -30,10 +31,13 @@ import { deriveStage, nextHolding } from "./stage.js";
 
 const LANDED_TTL = 7 * 24 * 60 * 60 * 1000;
 const LOG_CAP = 200;
+const RETIRED_TTL = 30 * 24 * 60 * 60 * 1000;
+const RETIRED_CAP = 500;
+const NO_PROMPT = { kind: "none", text: "", options: [] };
 
 /** @returns {Store} */
 export function emptyStore() {
-  return { issues: [], counters: {}, prefixes: {}, log: [] };
+  return { issues: [], counters: {}, prefixes: {}, retired: {}, log: [] };
 }
 
 /** @param {string|null} branch */
@@ -123,11 +127,18 @@ export function reconcile(store, obs, now) {
   const prefixes = { ...(store.prefixes ?? {}) };
   const issues = store.issues.map((i) => ({ ...i }));
   const log = [...store.log];
+  const retired = { ...(store.retired ?? {}) };
   const byKey = new Map(issues.map((i) => [i.key, i]));
+  const seen = new Set();
 
   for (const o of obs) {
     const branch = cleanBranch(o.branch);
     const key = issueKey(o.terminal, branch);
+    if (key in retired) {
+      retired[key] = now; // still observed: keep it retired
+      continue;
+    }
+    seen.add(key);
     const prev = byKey.get(key) ?? null;
     let id;
     if (prev) id = prev.id;
@@ -137,11 +148,13 @@ export function reconcile(store, obs, now) {
       counters[prefix] = (counters[prefix] ?? 0) + 1;
       id = prefix + "-" + counters[prefix];
     }
-    const dismissed = prev?.dismissed ?? false;
+    const wasLanded = prev?.stage === "landed";
+    const sticky = wasLanded && o.status !== "working";
+    const dismissed = wasLanded && !sticky ? false : prev?.dismissed ?? false;
     // A failed gh call keeps the last known PR rather than dropping it.
     const pr = o.pr ?? (o.ghError ? prev?.pr ?? null : null);
     const awaitingAck = prev?.awaitingAck ?? false;
-    const landing = dismissed || pr?.state === "MERGED";
+    const landing = sticky || dismissed || pr?.state === "MERGED";
     const holdingSince = landing
       ? null
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || awaitingAck);
@@ -152,25 +165,51 @@ export function reconcile(store, obs, now) {
       ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
       holdingSince, awaitingAck: stillAck, dismissed,
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
+      observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
     };
-    next.stage = deriveStage(next);
+    next.stage = sticky ? "landed" : deriveStage(next);
     if (next.stage === "landed" && next.landedAt == null) next.landedAt = now;
+    if (next.stage !== "landed") next.landedAt = null;
     log.push(...diffEvents(prev, next, now));
     if (prev) issues[issues.indexOf(prev)] = next;
     else issues.push(next);
     byKey.set(key, next);
   }
 
-  return finish({ issues, counters, prefixes, log }, now);
+  // Terminals no longer observed: not holding, no live prompt, stage otherwise frozen.
+  for (let n = 0; n < issues.length; n++) {
+    const i = issues[n];
+    if (seen.has(i.key)) continue;
+    const next = { ...i, observed: false, holdingSince: null, awaitingAck: false, prompt: NO_PROMPT };
+    if (i.stage === "holding") next.stage = deriveStage(next);
+    issues[n] = next;
+  }
+
+  return finish({ issues, counters, prefixes, retired, log }, now);
 }
 
-/** Drop expired landed issues (their log events stay) and cap the log. */
+/**
+ * Drop expired issues (landed 7 days ago, or unobserved for 7 days) and retire
+ * their keys so a still-open terminal does not resurrect them; prune retired.
+ * Log events stay; the log is capped.
+ */
 function finish(store, now) {
-  const issues = store.issues.filter(
-    (i) => !(i.stage === "landed" && i.landedAt != null && i.landedAt < now - LANDED_TTL),
-  );
-  return { issues, counters: store.counters, prefixes: store.prefixes, log: store.log.slice(-LOG_CAP) };
+  const retired = { ...(store.retired ?? {}) };
+  const issues = store.issues.filter((i) => {
+    const expired = i.stage === "landed"
+      ? i.landedAt != null && i.landedAt < now - LANDED_TTL
+      : i.lastSeen != null && i.lastSeen < now - LANDED_TTL;
+    if (expired) retired[i.key] = now;
+    return !expired;
+  });
+  for (const k of Object.keys(retired)) if (retired[k] < now - RETIRED_TTL) delete retired[k];
+  const keys = Object.keys(retired);
+  if (keys.length > RETIRED_CAP) {
+    keys.sort((x, y) => retired[x] - retired[y]);
+    for (const k of keys.slice(0, keys.length - RETIRED_CAP)) delete retired[k];
+  }
+  return { issues, counters: store.counters, prefixes: store.prefixes, retired, log: store.log.slice(-LOG_CAP) };
 }
 
 /**

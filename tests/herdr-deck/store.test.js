@@ -95,7 +95,7 @@ test("landed issue older than 7 days dropped, log kept; vanished terminal kept",
   s = dismiss(s, "t7|fix/x", 10);
   s = reconcile(s, [], 10 + 6 * DAY);
   assert.equal(s.issues.length, 2);
-  s = reconcile(s, [], 10 + 8 * DAY);
+  s = reconcile(s, [ob({ terminal: "t9" })], 10 + 8 * DAY);
   assert.deepEqual(s.issues.map((i) => i.id), ["TF-2"]);
   assert.ok(s.log.some((e) => e.what === "landed" && e.id === "TF-1"));
 });
@@ -117,4 +117,103 @@ test("prefix collision uses next free letter and persists per repo", () => {
   assert.deepEqual(s.prefixes, { reportfile: "RE", readme: "RA" });
   s = reconcile(s, [ob({ terminal: "c", repo: "readme" })], 2);
   assert.deepEqual(s.issues.map((i) => i.id), ["RE-1", "RA-1", "RA-2"]);
+});
+
+const noPrompt = { kind: "none", text: "", options: [] };
+
+test("expired landed issue stays retired while terminal is still observed", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done" })], 1);
+  s = dismiss(s, "t7|fix/x", 10);
+  const later = 10 + 8 * DAY;
+  s = reconcile(s, [ob({ status: "done" })], later);
+  assert.equal(s.issues.length, 0);
+  assert.equal(s.retired["t7|fix/x"], later);
+  const logLen = s.log.length;
+  s = reconcile(s, [ob({ status: "done" })], later + 1000);
+  assert.equal(s.issues.length, 0);
+  assert.equal(s.counters.TF, 1);
+  assert.equal(s.log.length, logLen);
+  // a different terminal still gets the next id
+  s = reconcile(s, [ob({ terminal: "t9" })], later + 2000);
+  assert.equal(s.issues[0].id, "TF-2");
+});
+
+test("expired merged issue stays retired", () => {
+  let s = reconcile(emptyStore(), [ob({ pr: pr({ state: "MERGED" }) })], 1);
+  s = reconcile(s, [ob({ pr: pr({ state: "MERGED" }) })], 1 + 8 * DAY);
+  s = reconcile(s, [ob({ pr: pr({ state: "MERGED" }) })], 1 + 9 * DAY);
+  assert.equal(s.issues.length, 0);
+  assert.equal(s.counters.TF, 1);
+});
+
+test("retired entries expire after 30 unobserved days and are capped", () => {
+  let s = reconcile(emptyStore(), [ob()], 1);
+  s = dismiss(s, "t7|fix/x", 2);
+  s = reconcile(s, [], 2 + 8 * DAY);
+  assert.ok(s.retired["t7|fix/x"]);
+  s = reconcile(s, [], 2 + 8 * DAY + 31 * DAY);
+  assert.equal(s.retired["t7|fix/x"], undefined);
+  const big = { ...emptyStore(), retired: Object.fromEntries(Array.from({ length: 600 }, (_, n) => ["k" + n, 1000 + n])) };
+  const r = reconcile(big, [], 2000);
+  assert.equal(Object.keys(r.retired).length, 500);
+  assert.ok(r.retired.k599 && !r.retired.k0);
+});
+
+test("unobserved issue loses holding and prompt, then is dropped after 7 days", () => {
+  const prompt = { kind: "permission", text: "ok?", options: [{ label: "Yes", keys: ["y"] }] };
+  let s = reconcile(emptyStore(), [ob({ status: "blocked", prompt })], 1);
+  assert.equal(get(s, "t7|fix/x").stage, "holding");
+  s = reconcile(s, [], 2);
+  const i = get(s, "t7|fix/x");
+  assert.equal(i.holdingSince, null);
+  assert.equal(i.observed, false);
+  assert.equal(i.lastSeen, 1);
+  assert.deepEqual(i.prompt, noPrompt);
+  assert.notEqual(i.stage, "holding");
+  s = reconcile(s, [], 1 + 7 * DAY + 1);
+  assert.equal(s.issues.length, 0);
+  assert.ok(s.retired["t7|fix/x"]);
+});
+
+test("observed issue is flagged observed with lastSeen", () => {
+  const s = reconcile(emptyStore(), [ob()], 5);
+  assert.equal(get(s, "t7|fix/x").observed, true);
+  assert.equal(get(s, "t7|fix/x").lastSeen, 5);
+});
+
+test("landed is sticky until the agent works again", () => {
+  let s = reconcile(emptyStore(), [ob({ pr: pr({ state: "MERGED" }) })], 1);
+  s = reconcile(s, [ob({ pr: null, status: "idle" })], 2);
+  assert.equal(get(s, "t7|fix/x").stage, "landed");
+  assert.equal(get(s, "t7|fix/x").landedAt, 1);
+  s = reconcile(s, [ob({ pr: null, status: "working" })], 3);
+  assert.equal(get(s, "t7|fix/x").stage, "survey");
+});
+
+test("ghError keeps the previous PR", () => {
+  let s = reconcile(emptyStore(), [ob({ pr: pr() })], 1);
+  s = reconcile(s, [ob({ pr: null, ghError: "rate limited" })], 2);
+  assert.equal(get(s, "t7|fix/x").pr.number, 455);
+  assert.equal(get(s, "t7|fix/x").ghError, "rate limited");
+});
+
+test("a CLOSED PR does not land", () => {
+  const s = reconcile(emptyStore(), [ob({ pr: pr({ state: "CLOSED" }) })], 1);
+  assert.notEqual(get(s, "t7|fix/x").stage, "landed");
+});
+
+test("awaitingAck is cleared by idle", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done" })], 1);
+  s = markReplied(s, "t7|fix/x");
+  s = reconcile(s, [ob({ status: "idle" })], 2);
+  assert.equal(get(s, "t7|fix/x").awaitingAck, false);
+  assert.equal(get(s, "t7|fix/x").holdingSince, null);
+});
+
+test("prefixes and retired survive a JSON round-trip", () => {
+  let s = reconcile(emptyStore(), [ob(), ob({ terminal: "t2", repo: "readflow" })], 1);
+  s = JSON.parse(JSON.stringify(s));
+  s = reconcile(s, [ob({ terminal: "t3", repo: "readflow" })], 2);
+  assert.equal(get(s, "t3|fix/x").id, "RF-2");
+  assert.deepEqual(s.prefixes, { taskflow: "TF", readflow: "RF" });
 });
