@@ -1,5 +1,5 @@
 // The issue store: turns each poll's observations into stable issues. Pure; no herdr imports.
-import { deriveStage, nextHolding } from "./stage.js";
+import { deriveStage, nextHolding, STAGE_LABEL } from "./stage.js";
 import { samePrompt } from "./prompt.js";
 
 /** @typedef {"working"|"blocked"|"done"|"idle"} Status */
@@ -111,7 +111,7 @@ function diffEvents(prev, next, now) {
   if (next.stage !== prevStage) {
     if (next.stage === "holding") ev("is waiting on you", "hold");
     else if (next.stage === "landed") ev("landed", "ok");
-    else if (prev) ev("moved to " + cap(next.stage), "work");
+    else if (prev) ev("moved to " + (STAGE_LABEL[next.stage] ?? cap(next.stage)), "work");
   }
   if (next.pr && next.pr.number !== prev?.pr?.number) ev("opened PR #" + next.pr.number, "work");
   if (next.pr && prev?.pr && prev.pr.number === next.pr.number) {

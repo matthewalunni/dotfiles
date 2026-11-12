@@ -339,3 +339,10 @@ test("N4: same terminal, different root is a new issue", () => {
   s = reconcile(s, [ob({ terminal: "t1", branch: "feat-x", root: "/b", repo: "taskflow" })], 2);
   assert.deepEqual(s.issues.map((i) => i.id), ["TF-1", "TF-2"]);
 });
+
+test("log says Started", () => {
+  let s = reconcile(emptyStore(), [ob({ commitsAhead: 2 })], 1);
+  s = reconcile(s, [ob({ commitsAhead: 0 })], 2);
+  assert.ok(s.log.some((e) => e.what === "moved to Started"), JSON.stringify(s.log));
+  assert.ok(!s.log.some((e) => e.what === "moved to Survey"));
+});
