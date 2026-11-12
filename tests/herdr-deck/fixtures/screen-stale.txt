@@ -1,0 +1,120 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/deck-prompt/w · /rc
+
+⚠ Your login expires in 1 day · run /login to renew
+
+❯ Run the shell command: ls -la
+
+  Listed 1 directory
+
+⏺ I ran ls -la in /private/tmp/deck-prompt/w. The directory is empty: the output lists only the . and .. entries.
+
+✻ Sautéed for 5s · done 12:31 AM
+
+❯ <hc from="t1">Run the shell command: touch hello.txt</hc>
+
+  Ran 1 shell command
+
+⏺ I ran touch hello.txt, so /private/tmp/deck-prompt/w/hello.txt now exists as an empty file.
+
+✻ Sautéed for 4s · done 12:32 AM
+
+❯ <hc from="t1">Now write a haiku about files in 3 lines, then ask me one yes/no question</hc>
+
+⏺ Empty file waiting,
+  hello.txt holds its breath,
+  bytes yet to arrive.
+
+  Would you like me to write this haiku into hello.txt?
+
+✻ Baked for 2s · done 12:32 AM
+
+❯ <hc from="t1">Use the AskUserQuestion tool to ask me which color I prefer: red, green or blue.</hc>
+
+⏺ User answered Claude's questions:
+  ⎿  · Which color do you prefer? → Red
+
+⏺ You picked red.
+
+✻ Sautéed for 4s · done 12:32 AM
+
+❯ <hc from="t1">Reply with exactly this, no tools: a numbered list '1. alpha', '2. beta', '3. gamma' on separate lines, nothing else.</hc>
+
+⏺ 1. alpha
+  2. beta
+  3. gamma
+
+✻ Sautéed for 2s · done 12:32 AM
+
+❯ <hc from="t1">Pick 2. Now write two short sentences about rivers.</hc>
+
+⏺ I'll pick 2, beta.
+
+  Rivers carve their paths over thousands of years and shape valleys as they go. Every river eventually gives its water back to the sea.
+
+✻ Crunched for 2s · done 12:32 AM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  tmp/deck-prompt/w ctx:6%
+  ⏸ manual mode on · ← 4 agents

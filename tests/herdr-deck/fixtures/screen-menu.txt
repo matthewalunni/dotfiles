@@ -1,0 +1,51 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/deck-prompt/w · /rc
+
+⚠ Your login expires in 1 day · run /login to renew
+
+❯ Run the shell command: ls -la
+
+  Listed 1 directory
+
+⏺ I ran ls -la in /private/tmp/deck-prompt/w. The directory is empty: the output lists only the . and .. entries.
+
+✻ Sautéed for 5s · done 12:31 AM
+
+❯ <hc from="t1">Run the shell command: touch hello.txt</hc>
+
+  Ran 1 shell command
+
+⏺ I ran touch hello.txt, so /private/tmp/deck-prompt/w/hello.txt now exists as an empty file.
+
+✻ Sautéed for 4s · done 12:32 AM
+
+❯ <hc from="t1">Now write a haiku about files in 3 lines, then ask me one yes/no question</hc>
+
+⏺ Empty file waiting,
+  hello.txt holds its breath,
+  bytes yet to arrive.
+
+  Would you like me to write this haiku into hello.txt?
+
+✻ Baked for 2s · done 12:32 AM
+
+❯ <hc from="t1">Use the AskUserQuestion tool to ask me which color I prefer: red, green or blue.</hc>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Color
+
+Which color do you prefer?
+
+❯ 1. Red
+     The color red
+  2. Green
+     The color green
+  3. Blue
+     The color blue
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+[hc] only its screen: it is blocked; history is not scrolled in this state
