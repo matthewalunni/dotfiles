@@ -181,5 +181,9 @@ export function act(cx, fn, failTitle, onDone) {
  */
 export function keyOf(e) {
   const m = e?.modifiers ?? {};
-  return { key: String(e?.key ?? ""), shift: Boolean(m.shift), cmd: Boolean(m.platform || m.control || m.alt), held: Boolean(e?.is_held) };
+  // cmd: any of ⌘, ctrl, ⌥ (what Deck's shortcuts stand aside for); alt and mod (⌘ / ctrl alone) tell them apart.
+  return {
+    key: String(e?.key ?? ""), shift: Boolean(m.shift), cmd: Boolean(m.platform || m.control || m.alt),
+    alt: Boolean(m.alt), mod: Boolean(m.platform || m.control), held: Boolean(e?.is_held),
+  };
 }

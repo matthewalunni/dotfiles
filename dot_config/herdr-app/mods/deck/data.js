@@ -13,7 +13,7 @@ import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
-import { submitTask, backlogExec } from "./lib/newtask.js";
+import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -752,4 +752,33 @@ export function fileTask(form) {
       setShared(TAB_KEY, "overview");
     },
   }, Date.now());
+}
+
+/**
+ * The New task dialog's ⌘↵ Start now (lib/newtask.js startTask): the backlog
+ * Start's path (safe repo, toplevel, git worktree add -b, space.new on this
+ * computer, the agent appeared) for the dialog's entry-like form, then
+ * space.select to the new space. Nothing goes to the store: the new agent shows
+ * up as an issue on the next cycle. One start per dialog press is the
+ * dialog's busy guard (oneAtATime).
+ * @param {{id: string, title: string, brief: string, root: string|null, terminal?: boolean, pendingWorktree?: {path: string, branch: string}|null}} form
+ */
+export async function startNow(form) {
+  const root = typeof form?.root === "string" ? form.root : "";
+  try {
+    return await startTask(form, home(), {
+      exists: backlogExists(root),
+      toplevel: repoToplevel,
+      appeared: folderAppeared,
+      git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),
+      spaceNew: (args) => run("space.new", { ...args, machine: "" }),
+      select: (plan) => {
+        const at = (p) => typeof p === "string" && (p === plan.path || p.startsWith(plan.path + "/"));
+        const sp = (spaces() ?? []).find((s) => at(s.folder));
+        if (sp) run("space.select", { id: sp.id });
+      },
+    });
+  } finally {
+    refresh();
+  }
 }
