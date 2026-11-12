@@ -6,10 +6,10 @@
 
 const FROMS = new Set(["board", "list", "command", "terminal"]);
 const BACK = {
-  board: { child: "deck-issues", label: "← Board" },
-  list: { child: "deck-issues", label: "← Issues" },
-  command: { child: "deck-command", label: "← Command" },
-  terminal: { child: "deck-terminal", label: "← Terminal" },
+  board: { child: "deck-issues", label: "← Board", focus: true },
+  list: { child: "deck-issues", label: "← Issues", focus: true },
+  command: { child: "deck-command", label: "← Command", focus: true },
+  terminal: { child: "deck-terminal", label: "← Terminal", focus: false },
 };
 
 /**
@@ -53,6 +53,16 @@ export function openTarget(issue, agents) {
 }
 
 /**
+ * The right side to show once the agent list is known: "terminal" only when
+ * the agent's tab can actually be shown (openTarget), else "gone".
+ * @param {Issue|null|undefined} issue @param {{address: string, tab: string, space: string}[]|null|undefined} agents
+ * @returns {"terminal"|"gone"}
+ */
+export function sidePane(issue, agents) {
+  return "tab" in openTarget(issue, agents) ? "terminal" : "gone";
+}
+
+/**
  * The issue `d` steps from `key` in `order`, clamped at both ends (no wrap).
  * A key not in `order` lands on the first issue.
  * @param {Issue[]|null|undefined} order @param {string|null} key @param {number} d
@@ -78,7 +88,11 @@ export function issueFrom(view, mode, prev) {
   return mode === "board" ? "board" : "list";
 }
 
-/** esc's target and the breadcrumb's back label. @param {unknown} from */
+/**
+ * esc's target and the breadcrumb's back label. `focus` is whether going back
+ * gives the target the keyboard; false for the Terminal view, so a held esc
+ * can't reach (and interrupt) the agent. @param {unknown} from
+ */
 export function backTarget(from) {
   return { ...(BACK[/** @type {string} */ (from)] ?? BACK.list) };
 }

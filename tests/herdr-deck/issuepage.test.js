@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { issuePane, stepIssue, openPlan, issueFrom, backTarget, openTarget } from "../../dot_config/herdr-app/mods/deck/lib/issuepage.js";
+import { issuePane, stepIssue, openPlan, issueFrom, backTarget, openTarget, sidePane } from "../../dot_config/herdr-app/mods/deck/lib/issuepage.js";
 
 const iss = (key, o = {}) => ({ key, terminal: "t-" + key, observed: true, ...o });
 
@@ -59,9 +59,23 @@ test("issueFrom: where the page was opened from", () => {
   assert.equal(issueFrom("deck-issue", "list", null), "list");
 });
 test("backTarget: esc returns where the page came from", () => {
-  assert.deepEqual(backTarget("board"), { child: "deck-issues", label: "← Board" });
-  assert.deepEqual(backTarget("list"), { child: "deck-issues", label: "← Issues" });
-  assert.deepEqual(backTarget("command"), { child: "deck-command", label: "← Command" });
-  assert.deepEqual(backTarget("terminal"), { child: "deck-terminal", label: "← Terminal" });
-  assert.deepEqual(backTarget(undefined), { child: "deck-issues", label: "← Issues" });
+  assert.deepEqual(backTarget("board"), { child: "deck-issues", label: "← Board", focus: true });
+  assert.deepEqual(backTarget("list"), { child: "deck-issues", label: "← Issues", focus: true });
+  assert.deepEqual(backTarget("command"), { child: "deck-command", label: "← Command", focus: true });
+  assert.deepEqual(backTarget("terminal"), { child: "deck-terminal", label: "← Terminal", focus: false });
+  assert.deepEqual(backTarget(undefined), { child: "deck-issues", label: "← Issues", focus: true });
+});
+
+test("backTarget: going back to the Terminal view never takes terminal focus (a held esc must not reach the agent)", () => {
+  assert.equal(backTarget("terminal").focus, false);
+  for (const f of ["board", "list", "command"]) assert.equal(backTarget(f).focus, true);
+});
+
+test("sidePane: terminal only when the agent's tab can be shown, else gone", () => {
+  const a = [{ address: "t-a", tab: "tb1", space: "sp1" }];
+  assert.equal(sidePane(iss("a"), a), "terminal");
+  assert.equal(sidePane(iss("a"), []), "gone");
+  assert.equal(sidePane(iss("a"), null), "gone");
+  assert.equal(sidePane(iss("a", { observed: false }), a), "gone");
+  assert.equal(sidePane(null, a), "gone");
 });

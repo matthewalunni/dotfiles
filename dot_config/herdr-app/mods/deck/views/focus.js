@@ -10,7 +10,7 @@
 import { shared, setShared, agents, focused, run } from "herdr";
 import { showView, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { shownChild, takesFocus } from "../lib/views.js";
-import { openPlan, openTarget, issueFrom } from "../lib/issuepage.js";
+import { openPlan, openTarget, sidePane, issueFrom } from "../lib/issuepage.js";
 
 // The stack child may draw only on the next frame: focus once it has.
 const SETTLE_MS = 40;
@@ -45,9 +45,9 @@ export function focusAgent() {
  * handle, now and again from their own focusOnShow once drawn; Terminal: the
  * agent). No timer of its own: one here would race R's reply-box focus.
  */
-export function goTo(child) {
+export function goTo(child, { agent = true } = {}) {
   showView(child);
-  if (child === "deck-terminal") return focusAgent();
+  if (child === "deck-terminal") return agent ? focusAgent() : undefined;
   focusView(child);
 }
 
@@ -92,8 +92,8 @@ export function openIssue(issue, from) {
   setShared(SEL_KEY, plan.sel);
   setShared(TAB_KEY, "overview");
   setShared(ISSUE_FROM_KEY, plan.from);
-  showIssueSide(plan.pane);
   const t = openTarget(issue, agents());
+  showIssueSide(sidePane(issue, agents()));
   if ("tab" in t) {
     if (t.space && focused()?.space !== t.space) run("space.select", { id: t.space });
     run("tab.select", { id: t.tab });

@@ -61,7 +61,8 @@ export default class IssuePage extends View {
   }
 
   back() {
-    goTo(backTarget(shared(ISSUE_FROM_KEY)).child);
+    const b = backTarget(shared(ISSUE_FROM_KEY));
+    goTo(b.child, { agent: b.focus });
   }
 
   onKey(e, cx) {
