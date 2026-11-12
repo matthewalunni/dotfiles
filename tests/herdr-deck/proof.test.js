@@ -135,3 +135,18 @@ test("a .png symlink to a .command is judged by its resolved target", async () =
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("repo with workflows but no checks reported: CI not reported, NO DATA, locked", () => {
+  const claims = buildClaims([], [{ claim: "A", path: "a.png" }], { "a.png": true }, true);
+  assert.deepEqual(claims[0], { claim: "CI not reported", verdict: "NO DATA", source: "ci", path: null, detail: "not reported" });
+  const m = mergeState(openPr, null, claims);
+  assert.equal(m.canMerge, false);
+  assert.deepEqual(m.reasons, ["CI not reported: NO DATA"]);
+});
+
+test("no workflows, or checks present: no CI-not-reported claim", () => {
+  assert.equal(buildClaims([], [{ claim: "A", path: "a.png" }], { "a.png": true }, false).length, 1);
+  assert.equal(buildClaims([], [{ claim: "A", path: "a.png" }], { "a.png": true }).length, 1);
+  const c = buildClaims([ci("build", "pass")], [], {}, true);
+  assert.deepEqual(c.map((x) => x.claim), ["build"]);
+});

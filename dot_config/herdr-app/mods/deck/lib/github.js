@@ -157,3 +157,18 @@ export function parseDiff(text) {
   }
   return files;
 }
+
+const SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * Merge only the head the person saw: `shown` (the store's headSha the screen
+ * drew) must be a full SHA equal to `fresh` (GitHub's head right now).
+ * @param {string|null|undefined} shown @param {string|null|undefined} fresh
+ * @returns {{ ok: boolean, error: string|null }}
+ */
+export function headCheck(shown, fresh) {
+  if (typeof shown !== "string" || !SHA.test(shown) || typeof fresh !== "string" || !SHA.test(fresh)) {
+    return { ok: false, error: "unknown head commit" };
+  }
+  return shown === fresh ? { ok: true, error: null } : { ok: false, error: "Branch moved — review again" };
+}

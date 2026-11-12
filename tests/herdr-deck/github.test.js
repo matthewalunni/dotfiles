@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  GIT_CMDS, PR_FIELDS, parseGitState, parsePr, parseDiff,
+  GIT_CMDS, PR_FIELDS, parseGitState, parsePr, parseDiff, headCheck,
 } from "../../dot_config/herdr-app/mods/deck/lib/github.js";
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), "utf8");
@@ -126,4 +126,14 @@ test("parseDiff tolerates binary and rename headers", () => {
   assert.equal(f[1].hunks[0].lines.length, 3);
   assert.equal(f[2].del, 1);
   assert.equal(f[2].hunks[0].lines[0].code, "-- starts with dashes");
+});
+
+test("headCheck: merge only the head that was shown", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  assert.deepEqual(headCheck(a, a), { ok: true, error: null });
+  assert.deepEqual(headCheck(a, b), { ok: false, error: "Branch moved — review again" });
+  assert.deepEqual(headCheck(null, a), { ok: false, error: "unknown head commit" });
+  assert.deepEqual(headCheck(a, null), { ok: false, error: "unknown head commit" });
+  assert.deepEqual(headCheck("abc", "abc"), { ok: false, error: "unknown head commit" });
 });

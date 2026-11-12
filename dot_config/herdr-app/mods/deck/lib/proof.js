@@ -37,14 +37,20 @@ export function parseProofFile(text) {
 
 /**
  * CI claims first, then agent claims. Agent claims are PASS only with an existing evidence file; never FAIL.
+ * `hasWorkflows`: the repo has .github/workflows/*.yml|yaml, so zero checks means
+ * CI has not reported yet (a NO DATA claim that keeps the merge locked), not "no CI".
  * @param {Check[]} checks
  * @param {{ claim: string, path: string|null }[]} agentClaims
  * @param {Record<string, boolean>} exists
+ * @param {boolean} [hasWorkflows]
  * @returns {Claim[]}
  */
-export function buildClaims(checks, agentClaims, exists) {
+export function buildClaims(checks, agentClaims, exists, hasWorkflows = false) {
   /** @type {Claim[]} */
   const claims = [];
+  if (hasWorkflows === true && !(checks ?? []).length) {
+    claims.push({ claim: "CI not reported", verdict: "NO DATA", source: "ci", path: null, detail: "not reported" });
+  }
   for (const c of checks ?? []) {
     if (c.status === "pass") claims.push({ claim: c.name, verdict: "PASS", source: "ci", path: null, detail: c.detail || null });
     else if (c.status === "fail") claims.push({ claim: c.name, verdict: "FAIL", source: "ci", path: null, detail: c.detail || null });
@@ -75,7 +81,8 @@ export function mergeState(pr, ghError, claims) {
     if (c.verdict === "PASS") continue;
     if (c.source === "agent") reasons.push(`${c.claim}: NO DATA`);
     else if (c.verdict === "FAIL") reasons.push(`${c.claim}: failing`);
-    else reasons.push(`${c.claim}: still running`);
+    else if (c.detail === "running") reasons.push(`${c.claim}: still running`);
+    else reasons.push(`${c.claim}: NO DATA`);
   }
   return { canMerge: false, showAnyway: true, reasons };
 }
