@@ -13,10 +13,12 @@ import Review from "./views/review.js";
 import Machines from "./views/machines.js";
 import TermHints from "./views/termhints.js";
 import Keys from "./views/keys.js";
+import IssuePage, { ThreadView, GoneView, IssueHints } from "./views/issuepage.js";
 
 const VIEWS = {
   bar: Bar, command: Command, issues: Issues, confirm: Confirm, review: Review,
   machines: Machines, termhints: TermHints, keys: Keys,
+  issue: IssuePage, thread: ThreadView, issuegone: GoneView, issuehints: IssueHints,
 };
 
 export default class Deck extends View {

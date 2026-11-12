@@ -1,16 +1,17 @@
 // The top bar: brand, Command / Issues / Terminal nav, the holding chip, "? keys"
 // and the clock. The collector runs in this copy; main.js starts and stops it
 // (close() only reaches the root view). This copy also runs the keys.json
-// command loop (deck.go:*, deck.next-holding, deck.agent-issue).
+// command loop (deck.go:*, deck.next-holding, deck.agent-issue). The holding
+// chip, ⌘⇧J and ⌘⇧I open the issue page (views/issuepage.js).
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { shared, setShared, theme, nextCommand, notify } from "herdr";
+import { shared, theme, nextCommand, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
-import { focusTerminal, currentStore, VIEW_KEY, SEL_KEY, TAB_KEY } from "../data.js";
+import { currentStore, VIEW_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
-import { goTo, focusedAgent } from "./focus.js";
+import { goTo, focusedAgent, openIssue } from "./focus.js";
 
 const BARLOW = "Barlow Condensed";
 const MONO = "JetBrains Mono";
@@ -50,7 +51,7 @@ export function runCommand(c) {
   if (cmd === "next-holding") {
     // Nothing holding: stay put (the bar already says "0 holding").
     const next = nextHolding(issues, focusedIssue(issues)?.key ?? null);
-    if (next) focusTerminal(next);
+    if (next) openHere(next);
     return;
   }
   if (cmd === "agent-issue") {
@@ -59,13 +60,19 @@ export function runCommand(c) {
       notify({ title: "No Deck issue for the focused agent", level: "info" });
       return;
     }
-    setShared(SEL_KEY, issue.key);
-    setShared(TAB_KEY, "overview");
-    goTo("deck-issues");
+    // From the page's own terminal this is "back to overview": openIssue
+    // keeps where the page came from and puts the keyboard on the overview.
+    openHere(issue);
   }
 }
 
-/** "N holding · next <ID>  ⌘⇧J": opens that agent in the Terminal view. "0 holding" muted. */
+/** Opens `issue`'s page; j / k there use the default order (none handed over). */
+function openHere(issue) {
+  if (shared(VIEW_KEY) !== "deck-issue") globalThis.__deckIssueOrder = null;
+  openIssue(issue);
+}
+
+/** "N holding · next <ID>  ⌘⇧J": opens that issue's page. "0 holding" muted. */
 function holdingChip(k, holding, next) {
   const base = h_flex()
     .id("deck-holding")
@@ -88,7 +95,7 @@ function holdingChip(k, holding, next) {
       .text_color(k.hold)
       .cursor_pointer()
       .hover((s) => s.opacity(0.85))
-      .on_click(() => focusTerminal(next))
+      .on_click(() => openHere(next))
       .child(div().flex_none().w(6).h(6).rounded(6).bg(k.hold))
       .child(`${holding} holding · next ${next.id}`)
       .child(keyChip("⌘⇧J")),
@@ -132,7 +139,8 @@ export default class BarView extends View {
   render(cx) {
     const k = deckTokens(theme());
     // A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
-    const stored = shared(VIEW_KEY);
+    // The issue page underlines Issues.
+    const stored = shared(VIEW_KEY) === "deck-issue" ? "deck-issues" : shared(VIEW_KEY);
     const active = NAV.some((n) => n.child === stored) ? stored : "deck-command";
     const issues = currentStore().issues;
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;

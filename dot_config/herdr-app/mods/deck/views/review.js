@@ -7,8 +7,8 @@
 // key again (M, or ⇧M for ship) Merge without reviewing, Esc / Cancel close.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { props, closeOverlay, setShared } from "herdr";
-import { currentStore, showView, SEL_KEY, TAB_KEY } from "../data.js";
+import { props, closeOverlay, setShared, shared } from "herdr";
+import { currentStore, showView, SEL_KEY, TAB_KEY, VIEW_KEY } from "../data.js";
 import { openConfirm, dialogBeat, forgetDialog } from "./merge.js";
 import { MONO, tokens, heading, button, keyChip, keyOf } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
@@ -35,7 +35,8 @@ export default class ReviewGateView extends View {
     const p = props() ?? {};
     setShared(SEL_KEY, p.key);
     setShared(TAB_KEY, "pr");
-    showView("deck-issues");
+    // From the issue page, its own Pull request tab; else the Issues view's.
+    showView(shared(VIEW_KEY) === "deck-issue" ? "deck-issue" : "deck-issues");
     this.shut();
   }
 

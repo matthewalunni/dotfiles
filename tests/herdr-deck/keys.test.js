@@ -91,3 +91,33 @@ test("held j still moves", () => {
   assert.deepEqual(keyAction(k("l", { held: true }), ctx({ mode: "board" })), { type: "col", dx: 1 });
   assert.deepEqual(keyAction(k("n", { held: true }), ctx({ tab: "changes" })), { type: "file", d: 1 });
 });
+
+const page = (o = {}) => ctx({ view: "issue", ...o });
+test("issue page: esc leaves the reply box first, then goes back", () => {
+  assert.deepEqual(keyAction(k("escape"), page({ typing: true })), { type: "leave" });
+  assert.deepEqual(keyAction(k("escape"), page({ typing: false })), { type: "back" });
+  for (const key of ["j", "k", "t", "m", "1", "r"]) assert.equal(keyAction(k(key), page({ typing: true })), null, key);
+});
+test("issue page: j/k step issues, held too; T is the terminal", () => {
+  assert.deepEqual(keyAction(k("j"), page()), { type: "step", d: 1 });
+  assert.deepEqual(keyAction(k("k"), page()), { type: "step", d: -1 });
+  assert.deepEqual(keyAction(k("down"), page()), { type: "step", d: 1 });
+  assert.deepEqual(keyAction(k("j", { held: true }), page()), { type: "step", d: 1 });
+  assert.deepEqual(keyAction(k("t"), page()), { type: "terminal" });
+  assert.equal(keyAction(k("t", { held: true }), page()), null);
+});
+test("issue page: every detail key, none of the list's", () => {
+  assert.deepEqual(keyAction(k("2"), page()), { type: "answer", n: 2 });
+  assert.equal(keyAction(k("4"), page()), null);
+  assert.deepEqual(keyAction(k("r"), page()), { type: "reply" });
+  assert.deepEqual(keyAction(k("p"), page()), { type: "proof" });
+  assert.deepEqual(keyAction(k("o"), page()), { type: "github" });
+  assert.deepEqual(keyAction(k("m"), page()), { type: "merge" });
+  assert.deepEqual(keyAction(k("m", { shift: true }), page()), { type: "mergeShip" });
+  assert.deepEqual(keyAction(k("@"), page()), { type: "tab", tab: "pr" });
+  assert.deepEqual(keyAction(k("n"), page({ tab: "changes" })), { type: "file", d: 1 });
+  assert.deepEqual(keyAction(k("?"), page()), { type: "help" });
+  for (const key of ["enter", "/", "v", "h", "l"]) assert.equal(keyAction(k(key), page()), null, key);
+  assert.equal(keyAction(k("1", { held: true }), page()), null);
+  assert.equal(keyAction(k("m", { held: true }), page()), null);
+});

@@ -24,6 +24,8 @@ export const TAB_KEY = "deck.issueTab";
 /** Issues view mode: "list" (default) or "board". */
 export const MODE_KEY = "deck.issuesMode";
 export const VIEW_KEY = "deck.view";
+/** Where the issue page was opened from: "board" | "list" | "command" | "terminal" (esc goes back there). */
+export const ISSUE_FROM_KEY = "deck.issueFrom";
 /** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
 export const MACHINES_KEY = "deck.machines";
 
@@ -315,13 +317,14 @@ function startCycle(fastKey = null) {
 
 /**
  * The issue to refresh every FAST_MS: the selected one, only while the deck
- * layout shows the Issues view (VIEW_KEY, set by showView). Otherwise null and
+ * layout shows the Issues view or the issue page (VIEW_KEY, set by showView). Otherwise null and
  * only the full SLOW_MS cycle runs.
  * @returns {string|null}
  */
 function fastKey() {
   if (!String(shared("layout") ?? "").startsWith("deck")) return null;
-  if (shared(VIEW_KEY) !== "deck-issues") return null;
+  const view = shared(VIEW_KEY);
+  if (view !== "deck-issues" && view !== "deck-issue") return null;
   const sel = shared(SEL_KEY);
   if (!sel) return null;
   const it = currentStore().issues.find((i) => i.key === sel);

@@ -129,7 +129,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
         )
         .child(div().flex_1())
-        .child(div().text_color(k.muted).child("h j k l move · ↵ open · click a card to select, again to open")),
+        .child(div().text_color(k.muted).child("h j k l move · ↵ or click a card to open")),
     )
     .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)))
     .child(

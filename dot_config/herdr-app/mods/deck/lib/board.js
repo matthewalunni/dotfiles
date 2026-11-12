@@ -66,8 +66,3 @@ export function boardNote(issue) {
   if (issue.status === "working") return { text: "Working…", tone: "work" };
   return { text: STAGE_LABEL[issue.stage] ?? issue.stage, tone: "muted" };
 }
-
-/** Clicking a card opens it only when it is already the stored selection (a fallback highlight doesn't count). */
-export function cardClick(selKey, issueKey) {
-  return selKey === issueKey ? "open" : "select";
-}

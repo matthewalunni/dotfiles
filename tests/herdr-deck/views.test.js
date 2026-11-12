@@ -28,3 +28,6 @@ test("takesFocus: a new, recent show request for it counts once", () => {
   assert.equal(takesFocus({ shown: C, ask: null }, C, { child: "deck-issues", at: 1000 }, C, 1100), false);
   assert.equal(takesFocus({ shown: C, ask: null }, "deck-issues", ask, C, 1100), false);
 });
+test("shownChild: the issue page is a Deck view", () => {
+  assert.equal(shownChild("deck", "deck-issue"), "deck-issue");
+});

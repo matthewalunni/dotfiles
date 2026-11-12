@@ -2,24 +2,23 @@
 // telemetry per repo and the comms log.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
-import { shared, setShared } from "herdr";
+import { shared } from "herdr";
 import { pickDecision, STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
 import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm } from "../lib/present.js";
 import { keyAction } from "../lib/keys.js";
-import { currentStore, focusTerminal, openUrl, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
+import { currentStore, focusTerminal, openUrl, STORE_KEY } from "../data.js";
 import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
 import { mergeButtons, mergeKey } from "./merge.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, goTo, focusOnShow } from "./focus.js";
+import { registerFocus, focusOnShow, openIssue } from "./focus.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding · you" };
 const pad2 = (n) => String(n).padStart(2, "0");
 
-/** Open an issue in the Issues view (and give that view the keyboard). */
-function inspect(issue) {
-  setShared(SEL_KEY, issue.key);
-  setShared(TAB_KEY, "overview");
-  goTo("deck-issues");
+/** Open an issue's page (and give its overview the keyboard); j / k there follow this list. */
+function inspect(issue, order) {
+  globalThis.__deckIssueOrder = order.map((i) => i.key);
+  openIssue(issue, "command");
 }
 
 /** One claim as a readout: "NAME PASS". */
@@ -67,11 +66,11 @@ export default class CommandView extends View {
         if (row != null) this.scroll.scroll_to_item(row);
         break;
       }
-      case "open": inspect(issue); break;
+      case "open": inspect(issue, this.order); break;
       case "reply":
         // Opens the issue with its reply box focused (when it has one).
         globalThis.__deckReplyFocus = issue.key;
-        inspect(issue);
+        inspect(issue, this.order);
         break;
       case "terminal": if (issue.observed !== false) focusTerminal(issue); break;
       case "github": if (issue.pr?.url) act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"); break;
@@ -136,7 +135,7 @@ export default class CommandView extends View {
               .items_center()
               .gap(10)
               .child(readouts)
-              .child(button("band-inspect", "Inspect", "ghost", () => inspect(issue), false, "↵"))
+              .child(button("band-inspect", "Inspect", "ghost", () => inspect(issue, this.order), false, "↵"))
               .children(mergeButtons(this, issue, "band")),
           ),
       );
@@ -181,7 +180,7 @@ export default class CommandView extends View {
       .cursor_pointer()
       .when(on, (el) => el.bg(k.raised))
       .hover((s) => s.bg(k.raised))
-      .on_click(() => inspect(issue))
+      .on_click(() => inspect(issue, this.order))
       .child(div().flex_none().w(2).h(16).when(on, (el) => el.bg(k.brand)))
       .child(ring(c, stagePct(issue.stage)))
       .child(div().w(52).flex_none().text_color(k.muted).truncate().child(issue.id))

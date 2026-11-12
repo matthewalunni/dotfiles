@@ -1,21 +1,23 @@
 // Putting the keyboard on the Deck view that is shown.
 // - goTo(child): every way of showing a view (⌥⌘ keys, the bar's nav, the
 //   Issues sidebar's Command item, Inspect / ↵) goes through it.
-// - focusOnShow(...): Command and Issues call it on each draw; on their first
+// - openIssue(issue, from): every way of opening the issue page.
+// - focusOnShow(...): Command, Issues and the issue page call it on each draw; on their first
 //   draw (a fresh copy, e.g. after layout.switch to deck) and whenever they
 //   come back into sight, they focus their own handle a beat later.
 // The handle registry is on globalThis (like the collector guard): every copy
 // of the mod shares it, and a reloaded build's copies register again in init.
-import { shared, agents, run } from "herdr";
-import { showView, VIEW_KEY } from "../data.js";
+import { shared, setShared, agents, run } from "herdr";
+import { showView, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { shownChild, takesFocus } from "../lib/views.js";
+import { openPlan, issueFrom } from "../lib/issuepage.js";
 
 // The stack child may draw only on the next frame: focus once it has.
 const SETTLE_MS = 40;
 
 const reg = () => (globalThis.__deckFocus ??= new Map());
 
-/** @param {string} child the stack child ("deck-command" | "deck-issues") @param {any} handle */
+/** @param {string} child the stack child ("deck-command" | "deck-issues" | "deck-issue") @param {any} handle */
 export function registerFocus(child, handle) {
   reg().set(child, handle);
 }
@@ -67,4 +69,29 @@ export function focusOnShow(view, child, take, cx) {
       // closed meanwhile
     }
   });
+}
+
+/** The issue page's right side: the live pane, or "Agent not running" (deck-issue-side stack). */
+export function showIssueSide(pane) {
+  run("layout.select", { stack: "deck-issue-side", child: pane === "terminal" ? "deck-issue-pane" : "deck-issue-gone" });
+}
+
+/**
+ * Opens the issue page for `issue`: selects it, records where it was opened
+ * from (`from`, or worked out from the view shown when omitted), shows its
+ * agent's tab with agent.focus when its terminal is observed (never when it
+ * is gone), and puts the keyboard on the overview (goTo; the page's
+ * focusOnShow takes it again a beat later, after agent.focus).
+ * @param {any} issue @param {"board"|"list"|"command"|"terminal"} [from]
+ */
+export function openIssue(issue, from) {
+  const f = from ?? issueFrom(shared(VIEW_KEY), shared(MODE_KEY), shared(ISSUE_FROM_KEY));
+  const plan = openPlan(issue, f);
+  if (!plan) return;
+  setShared(SEL_KEY, plan.sel);
+  setShared(TAB_KEY, "overview");
+  setShared(ISSUE_FROM_KEY, plan.from);
+  showIssueSide(plan.pane);
+  if (plan.focus) run("agent.focus", { terminal: plan.focus });
+  goTo(plan.child);
 }

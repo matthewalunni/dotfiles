@@ -59,6 +59,116 @@
           }
         },
         {
+          "id": "deck-issue",
+          "type": "column",
+          "resizable": false,
+          "children": [
+            {
+              "id": "deck-issue-row",
+              "type": "row",
+              "resizable": false,
+              "divider": {
+                "width": 1,
+                "color": "border"
+              },
+              "children": [
+                {
+                  "id": "deck-issue-overview",
+                  "type": "block",
+                  "size": {
+                    "px": 540
+                  },
+                  "content": {
+                    "mod": "deck",
+                    "props": {
+                      "view": "issue"
+                    }
+                  }
+                },
+                {
+                  "id": "deck-issue-side",
+                  "type": "stack",
+                  "active": "deck-issue-pane",
+                  "children": [
+                    {
+                      "id": "deck-issue-pane",
+                      "type": "column",
+                      "resizable": false,
+                      "children": [
+                        {
+                          "id": "deck-issue-thread",
+                          "type": "block",
+                          "size": {
+                            "px": 40
+                          },
+                          "content": {
+                            "mod": "deck",
+                            "props": {
+                              "view": "thread"
+                            }
+                          }
+                        },
+                        {
+                          "id": "deck-issue-term",
+                          "type": "block",
+                          "content": {
+                            "tab": "active",
+                            "pane": {
+                              "gap": 8,
+                              "radius": 10,
+                              "background": "background",
+                              "lone": true,
+                              "border": {
+                                "width": 1,
+                                "color": "border"
+                              },
+                              "focus": {
+                                "width": 1,
+                                "color": "accent"
+                              },
+                              "header": {
+                                "content": {
+                                  "mod": "pane"
+                                },
+                                "height": 30,
+                                "position": "top",
+                                "reveal": "always"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": "deck-issue-gone",
+                      "type": "block",
+                      "content": {
+                        "mod": "deck",
+                        "props": {
+                          "view": "issuegone"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "deck-issue-hints",
+              "type": "block",
+              "size": {
+                "px": 36
+              },
+              "content": {
+                "mod": "deck",
+                "props": {
+                  "view": "issuehints"
+                }
+              }
+            }
+          ]
+        },
+        {
           "id": "deck-terminal",
           "type": "row",
           "resizable": false,
