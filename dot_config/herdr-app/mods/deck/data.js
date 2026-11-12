@@ -21,6 +21,8 @@ import { parseMachines } from "./lib/machines.js";
 export const STORE_KEY = "deck.store";
 export const SEL_KEY = "deck.selected";
 export const TAB_KEY = "deck.issueTab";
+/** Issues view mode: "list" (default) or "board". */
+export const MODE_KEY = "deck.issuesMode";
 export const VIEW_KEY = "deck.view";
 /** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
 export const MACHINES_KEY = "deck.machines";

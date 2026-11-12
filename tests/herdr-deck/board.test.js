@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boardColumns, moveBoard, nextHolding } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
+import { boardColumns, moveBoard, nextHolding, repoColor, boardNote } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
 
 const iss = (key, stage, o = {}) => ({ key, stage, holdingSince: null, lastSeen: 0, dismissed: false, ...o });
 
@@ -47,4 +47,17 @@ test("nextHolding wraps in holdingSince order", () => {
 test("nextHolding none", () => {
   assert.equal(nextHolding([iss("d", "build")], "d"), null);
   assert.equal(nextHolding([], null), null);
+});
+
+test("boardNote: holding question, working, failing check, merged, stage", () => {
+  assert.deepEqual(boardNote(iss("a", "holding", { prompt: { text: "\nRun tests?\nmore" } })), { text: "Run tests?", tone: "hold" });
+  assert.deepEqual(boardNote(iss("a", "build", { status: "working" })), { text: "Working…", tone: "work" });
+  assert.deepEqual(boardNote(iss("a", "verify", { status: "working", pr: { checks: [{ status: "fail" }, { status: "fail" }] } })), { text: "2 checks failing", tone: "fail" });
+  assert.deepEqual(boardNote(iss("a", "landed")), { text: "Merged", tone: "ok" });
+  assert.deepEqual(boardNote(iss("a", "survey", { status: "idle" })), { text: "Survey", tone: "muted" });
+});
+
+test("repoColor is stable per name", () => {
+  assert.equal(repoColor("readflow"), repoColor("readflow"));
+  assert.match(repoColor(null), /^#[0-9a-f]{6}$/);
 });

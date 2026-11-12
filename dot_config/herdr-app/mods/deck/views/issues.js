@@ -8,11 +8,13 @@ import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, 
 import { stampText } from "../lib/proof.js";
 import {
   currentStore, showView, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
-  STORE_KEY, SEL_KEY, TAB_KEY,
+  STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY,
 } from "../data.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act } from "./ui.js";
 import { mergeButtons } from "./merge.js";
 import { prTab } from "./pr.js";
+import { boardPane, modeToggle } from "./board.js";
+import { boardColumns } from "../lib/board.js";
 
 const STAGE_LABEL = { holding: "Holding for you", verify: "Verify", build: "Build", survey: "Survey", landed: "Landed" };
 const VIEWS = [
@@ -60,6 +62,7 @@ export default class IssuesView extends View {
     this.railScroll = ScrollHandle.new();
     this.bodyScroll = ScrollHandle.new();
     this.diffScroll = VirtualListScrollHandle.new();
+    this.boardOpen = false; // board mode: the detail replaces the board
     this.shown = null; // the issue the detail shows (set in render)
     this.draftKey = null; // the issue the reply draft was typed for
     this.input = InputState.new({ placeholder: "› reply…" });
@@ -244,6 +247,7 @@ export default class IssuesView extends View {
           .border_b(1)
           .border_color(k.line)
           .child(heading("Issues", 18))
+          .child(modeToggle("list", k, () => (this.boardOpen = false)))
           .when(Boolean(filterName), (el) =>
             el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(filterName).toUpperCase())),
           )
@@ -276,7 +280,7 @@ export default class IssuesView extends View {
       .when(Boolean(issue.pr), (el) => el.child(t("pr", `Pull request #${issue.pr.number}`)));
   }
 
-  header(issue, crumb, k) {
+  header(issue, crumb, k, back) {
     return h_flex()
       .flex_none()
       .h(48)
@@ -285,6 +289,7 @@ export default class IssuesView extends View {
       .px(20)
       .border_b(1)
       .border_color(k.line)
+      .when(Boolean(back), (el) => el.child(button("hdr-back", "← Board", "plain", back)))
       .child(div().flex_1().min_w(0).truncate().text_color(k.muted).child(crumb))
       .when(issue.observed !== false, (el) => el.child(button("hdr-terminal", "Terminal", "plain", () => focusTerminal(issue))))
       .when(Boolean(issue.pr?.url), (el) =>
@@ -544,8 +549,12 @@ export default class IssuesView extends View {
     // Only an issue the list shows can be the detail's: a filter that hides
     // the selected one moves the detail to the first visible issue.
     const visible = groupIssues(issues, this.filter).flatMap((g) => g.items);
-    const issue = visible.find((i) => i.key === selKey) ?? visible[0] ?? null;
+    const board = shared(MODE_KEY) === "board";
+    if (!board) this.boardOpen = false;
+    const order = board ? boardColumns(visible).flatMap((c) => c.items) : visible;
+    const issue = order.find((i) => i.key === selKey) ?? order[0] ?? null;
     this.shown = issue;
+    const back = board && this.boardOpen ? (_e, cx) => { this.boardOpen = false; cx.notify(); } : null;
     const tab = shared(TAB_KEY) === "pr" && issue?.pr ? "pr" : "overview";
 
     const root = h_flex().id("deck-issues").size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
@@ -557,12 +566,24 @@ export default class IssuesView extends View {
           .flex_1()
           .min_w(0)
           .h_full()
-          .child(this.header(issue, `${issue.repo ?? "no repo"} › ${issue.id} › Pull request`, k))
+          .child(this.header(issue, `${issue.repo ?? "no repo"} › ${issue.id} › Pull request`, k, back))
           .child(prTab(this, issue, k, cx, (el) => el.child(this.tabs(issue, "pr", k)))),
       );
     }
 
-    root.child(this.list(issues, issue, k));
+    if (board && !this.boardOpen) {
+      const filterName = !this.filter ? null
+        : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
+        : VIEWS.find((v) => v.value === this.filter.value)?.text;
+      return root.child(
+        boardPane(visible, issue, k, "board", (i, wasSelected) => {
+          if (wasSelected) this.boardOpen = true;
+          else this.select(i);
+          cx.notify();
+        }, () => (this.boardOpen = false), { filterName }),
+      );
+    }
+    if (!board) root.child(this.list(issues, issue, k));
     if (!issue) {
       const why = issues.length ? "No issues match this view." : "No agents yet. Start one with cmd-t.";
       return root.child(v_flex().flex_1().items_center().justify_center().text_color(k.muted).child(why));
@@ -572,7 +593,7 @@ export default class IssuesView extends View {
         .flex_1()
         .min_w(0)
         .h_full()
-        .child(this.header(issue, `${issue.repo ?? "no repo"} › ${issue.id}`, k))
+        .child(this.header(issue, `${issue.repo ?? "no repo"} › ${issue.id}`, k, back))
         .child(h_flex().flex_1().min_h(0).items_stretch().child(this.overview(issue, store, k)).child(this.rail(issue, k))),
     );
   }
