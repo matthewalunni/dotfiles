@@ -22,13 +22,15 @@ test("stage order and ring percentages", () => {
 });
 
 test("quickReplies offers a/b/c only when the question lists them", () => {
-  assert.deepEqual(quickReplies("Which one? a) red b) blue c) green"), ["a", "b", "c", "lgtm"]);
-  assert.deepEqual(quickReplies("Pick (a) or (b)?"), ["a", "b", "lgtm"]);
-  assert.deepEqual(quickReplies("Options:\na. first\nb. second"), ["a", "b", "lgtm"]);
-  assert.deepEqual(quickReplies("dial a / b / c?"), ["a", "b", "c", "lgtm"]);
-  assert.deepEqual(quickReplies("Shall I merge this as a draft?"), ["lgtm"]);
-  assert.deepEqual(quickReplies(""), ["lgtm"]);
-  assert.deepEqual(quickReplies(null), ["lgtm"]);
+  assert.deepEqual(quickReplies("Which one? a) red b) blue c) green"), ["a", "b", "c"]);
+  assert.deepEqual(quickReplies("Pick (a) or (b)?"), ["a", "b"]);
+  assert.deepEqual(quickReplies("Options:\na. first\nb. second"), ["a", "b"]);
+  assert.deepEqual(quickReplies("dial a / b / c?"), ["a", "b", "c"]);
+  assert.deepEqual(quickReplies("Shall I merge this as a draft?"), []);
+  assert.deepEqual(quickReplies("Pick a) or b)"), ["a", "b"]);
+  assert.deepEqual(quickReplies("ok?"), []);
+  assert.deepEqual(quickReplies(""), []);
+  assert.deepEqual(quickReplies(null), []);
 });
 
 test("matchesView filters by sidebar view and repo", () => {

@@ -28,7 +28,7 @@ export function quickReplies(text) {
   const offered = (l) =>
     new RegExp(`(^|\\s)${l}[).:](\\s|$)|\\(${l}\\)`, "im").test(s) || new RegExp(`(^|\\s)${l}\\s*/|/\\s*${l}([\\s?.!,]|$)`, "im").test(s);
   const letters = ["a", "b", "c"].filter(offered);
-  return letters.length >= 2 ? [...letters, "lgtm"] : ["lgtm"];
+  return letters.length >= 2 ? letters : [];
 }
 
 const hasFailingCheck = (i) => (i.pr?.checks ?? []).some((c) => c.status === "fail");

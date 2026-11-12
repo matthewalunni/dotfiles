@@ -1,0 +1,50 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { boardColumns, moveBoard, nextHolding } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
+
+const iss = (key, stage, o = {}) => ({ key, stage, holdingSince: null, lastSeen: 0, dismissed: false, ...o });
+
+test("five fixed columns, newest first, dismissed excluded", () => {
+  const cols = boardColumns([
+    iss("a", "build", { lastSeen: 1 }), iss("b", "build", { lastSeen: 5 }),
+    iss("c", "build", { lastSeen: 9, dismissed: true }),
+    iss("d", "holding", { holdingSince: 10 }), iss("e", "holding", { holdingSince: 20 }),
+  ]);
+  assert.deepEqual(cols.map((c) => [c.stage, c.label]), [
+    ["holding", "Holding"], ["survey", "Survey"], ["build", "Build"], ["verify", "Verify"], ["landed", "Landed"]]);
+  assert.deepEqual(cols[0].items.map((i) => i.key), ["e", "d"]);
+  assert.deepEqual(cols[2].items.map((i) => i.key), ["b", "a"]);
+});
+
+test("empty columns", () => {
+  const cols = boardColumns([iss("a", "holding", { holdingSince: 1 }), iss("b", "verify")]);
+  assert.equal(cols.length, 5);
+  assert.deepEqual(moveBoard(cols, { col: 0, row: 0 }, { dx: 1 }), { col: 3, row: 0 });
+  assert.deepEqual(moveBoard(cols, { col: 3, row: 0 }, { dx: 1 }), { col: 3, row: 0 });
+  assert.deepEqual(moveBoard(cols, { col: 3, row: 0 }, { dx: -1 }), { col: 0, row: 0 });
+  assert.deepEqual(moveBoard(cols, { col: 0, row: 0 }, { dx: -1 }), { col: 0, row: 0 });
+  // j/k on an empty column does not crash
+  assert.deepEqual(moveBoard(cols, { col: 1, row: 0 }, { dy: 1 }), { col: 1, row: 0 });
+  assert.deepEqual(moveBoard(boardColumns([]), { col: 0, row: 3 }, { dy: -1, dx: 1 }), { col: 0, row: 0 });
+});
+
+test("row clamps to column length when changing column", () => {
+  const cols = boardColumns([iss("a", "holding", { holdingSince: 1 }), iss("b", "holding", { holdingSince: 2 }),
+    iss("c", "holding", { holdingSince: 3 }), iss("d", "build")]);
+  assert.deepEqual(moveBoard(cols, { col: 0, row: 2 }, { dx: 1 }), { col: 2, row: 0 });
+  assert.deepEqual(moveBoard(cols, { col: 0, row: 2 }, { dy: 1 }), { col: 0, row: 2 });
+});
+
+test("nextHolding wraps in holdingSince order", () => {
+  const l = [iss("a", "holding", { holdingSince: 30 }), iss("b", "holding", { holdingSince: 10 }),
+    iss("c", "holding", { holdingSince: 20 }), iss("d", "build")];
+  assert.equal(nextHolding(l, null).key, "b");
+  assert.equal(nextHolding(l, "b").key, "c");
+  assert.equal(nextHolding(l, "a").key, "b");
+  assert.equal(nextHolding(l, "d").key, "b");
+});
+
+test("nextHolding none", () => {
+  assert.equal(nextHolding([iss("d", "build")], "d"), null);
+  assert.equal(nextHolding([], null), null);
+});
