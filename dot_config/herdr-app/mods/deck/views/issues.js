@@ -7,7 +7,7 @@ import { shared, setShared, notify } from "herdr";
 import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
-  currentStore, showView, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
+  currentStore, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
   STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY,
 } from "../data.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
@@ -17,7 +17,7 @@ import { boardPane, modeToggle } from "./board.js";
 import { boardColumns, cardClick, moveBoard } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
-import { registerFocus } from "./focus.js";
+import { registerFocus, goTo, focusOnShow } from "./focus.js";
 
 const STAGE_LABEL = { holding: "Holding for you", verify: "Verify", build: "Build", survey: "Survey", landed: "Landed" };
 const VIEWS = [
@@ -296,7 +296,7 @@ export default class IssuesView extends View {
       .py(14)
       .gap(2)
       .overflow_y_scrollbar()
-      .child(this.sideItem("side-command", null, "Command", null, false, () => showView("deck-command"), "⌥⌘1"))
+      .child(this.sideItem("side-command", null, "Command", null, false, () => goTo("deck-command"), "⌥⌘1"))
       .child(this.sideItem("side-issues", null, "Issues", issues.length, !this.filter, (_e, cx) => {
         this.filter = null;
         setShared(TAB_KEY, "overview");
@@ -699,6 +699,9 @@ export default class IssuesView extends View {
     const order = board ? boardColumns(visible).flatMap((c) => c.items) : visible;
     const issue = order.find((i) => i.key === selKey) ?? order[0] ?? null;
     this.shown = issue;
+    // Shown (first draw, back from another view): the keys are ours. Before
+    // the reply focus below, so R's reply box wins.
+    focusOnShow(this, "deck-issues", () => this.handle.focus(), cx);
     if (this.fileFor !== (issue?.key ?? null)) {
       this.fileFor = issue?.key ?? null;
       this.filePath = null;

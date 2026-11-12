@@ -6,11 +6,11 @@ import { shared, setShared } from "herdr";
 import { pickDecision } from "../lib/stage.js";
 import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm } from "../lib/present.js";
 import { keyAction } from "../lib/keys.js";
-import { currentStore, showView, focusTerminal, openUrl, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
+import { currentStore, focusTerminal, openUrl, STORE_KEY, SEL_KEY, TAB_KEY } from "../data.js";
 import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
 import { mergeButtons, mergeKey } from "./merge.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, focusView } from "./focus.js";
+import { registerFocus, goTo, focusOnShow } from "./focus.js";
 
 const STAGE_LABEL = { survey: "Survey", build: "Build", verify: "Verify", holding: "Holding · you", landed: "Landed" };
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -19,8 +19,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 function inspect(issue) {
   setShared(SEL_KEY, issue.key);
   setShared(TAB_KEY, "overview");
-  showView("deck-issues");
-  focusView("deck-issues");
+  goTo("deck-issues");
 }
 
 /** One claim as a readout: "NAME PASS". */
@@ -294,6 +293,8 @@ export default class CommandView extends View {
 
   render(cx) {
     shared(STORE_KEY); // re-render on store changes
+    // Shown (first draw, back from another view): the keys are ours.
+    focusOnShow(this, "deck-command", () => this.handle.focus(), cx);
     const k = tokens();
     const store = currentStore();
     const issues = store.issues;

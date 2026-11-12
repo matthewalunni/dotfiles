@@ -4,13 +4,13 @@
 // command loop (deck.go:*, deck.next-holding, deck.agent-issue).
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { shared, setShared, theme, agents, nextCommand, notify, run } from "herdr";
+import { shared, setShared, theme, nextCommand, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
-import { showView, focusTerminal, currentStore, VIEW_KEY, SEL_KEY, TAB_KEY } from "../data.js";
+import { focusTerminal, currentStore, VIEW_KEY, SEL_KEY, TAB_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
-import { focusView } from "./focus.js";
+import { goTo, focusedAgent } from "./focus.js";
 
 const BARLOW = "Barlow Condensed";
 const MONO = "JetBrains Mono";
@@ -30,9 +30,6 @@ const pad2 = (n) => String(n).padStart(2, "0");
 /** A press on a control inside the window_drag bar belongs to the control. */
 const own = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
 
-/** The focused agent's terminal address, or null. */
-const focusedAgent = () => (agents() ?? []).find((a) => a.focused)?.address ?? null;
-
 /** The issue the focused agent's terminal belongs to, or null. */
 function focusedIssue(issues) {
   const t = focusedAgent();
@@ -41,29 +38,14 @@ function focusedIssue(issues) {
 
 const GO = { command: "deck-command", issues: "deck-issues", terminal: "deck-terminal" };
 
-/** Shows a Deck view and puts the keyboard on it (Command / Issues: their handle). */
-function goTo(child, cx) {
-  showView(child);
-  if (child === "deck-terminal") {
-    const t = focusedAgent();
-    if (t) run("agent.focus", { terminal: t });
-    return;
-  }
-  focusView(child);
-  // The stack child may draw only on the next frame: focus again once it has.
-  cx.timer.after(40, () => focusView(child));
-}
-
 /**
- * One keys.json command. "go:<view>", "next-holding", "agent-issue", "keys"
- * (the keyboard map); the "go-<view>" spelling is accepted too.
+ * One keys.json command: "go:<view>", "next-holding" or "agent-issue".
  * @param {string} c
  */
-export function runCommand(c, cx) {
+export function runCommand(c) {
   const cmd = String(c ?? "").trim();
-  const go = /^go[:-](command|issues|terminal)$/.exec(cmd);
-  if (go) return goTo(GO[go[1]], cx);
-  if (cmd === "keys") return openKeys();
+  const go = /^go:(command|issues|terminal)$/.exec(cmd);
+  if (go) return goTo(GO[go[1]]);
   const issues = currentStore().issues;
   if (cmd === "next-holding") {
     // Nothing holding: stay put (the bar already says "0 holding").
@@ -79,7 +61,7 @@ export function runCommand(c, cx) {
     }
     setShared(SEL_KEY, issue.key);
     setShared(TAB_KEY, "overview");
-    goTo("deck-issues", cx);
+    goTo("deck-issues");
   }
 }
 
@@ -131,7 +113,7 @@ export default class BarView extends View {
           continue;
         }
         try {
-          runCommand(c, cx);
+          runCommand(c);
         } catch (e) {
           notify({ title: "Deck key failed", body: String(e?.message ?? e), level: "error" });
         }
@@ -155,9 +137,7 @@ export default class BarView extends View {
     const issues = currentStore().issues;
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;
     // "next" is the holding issue after the focused agent's (wrapping).
-    const focusedTerm = (agents() ?? []).find((a) => a.focused)?.address ?? null;
-    const currentKey = issues.find((i) => i.terminal === focusedTerm && i.observed !== false)?.key ?? null;
-    const next = nextHolding(issues, currentKey);
+    const next = nextHolding(issues, focusedIssue(issues)?.key ?? null);
     const now = new Date();
     const clock = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
 
@@ -179,7 +159,7 @@ export default class BarView extends View {
           .text_size(14)
           .text_color(on ? k.strong : k.muted)
           .hover((s) => s.text_color(k.strong))
-          .on_click(() => showView(child))
+          .on_click(() => goTo(child))
           .child(spaced(label))
           .child(keyChip(key)),
       );

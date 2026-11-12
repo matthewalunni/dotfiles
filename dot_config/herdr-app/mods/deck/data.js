@@ -598,6 +598,9 @@ export async function openEvidence(issue, path) {
 
 /** Show a child of the deck-main stack and remember it for the bar. */
 export function showView(child) {
+  // A show request the view's copy acts on at its next draw (views/focus.js
+  // focusOnShow): a hidden stack child may not have drawn since it went away.
+  globalThis.__deckShown = { child, at: Date.now() };
   setShared(VIEW_KEY, child);
   run("layout.select", { stack: "deck-main", child });
 }
