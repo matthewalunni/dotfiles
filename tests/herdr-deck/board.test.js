@@ -1,7 +1,7 @@
 import { deckTokens } from "../../dot_config/herdr-app/mods/deck/lib/tokens.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boardColumns, moveBoard, nextHolding, repoColor, boardNote } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
+import { boardColumns, boardLanes, moveBoard, nextHolding, repoColor, boardNote } from "../../dot_config/herdr-app/mods/deck/lib/board.js";
 
 const iss = (key, stage, o = {}) => ({ key, stage, holdingSince: null, lastSeen: 0, dismissed: false, ...o });
 
@@ -66,3 +66,23 @@ test("repoColor is stable per name", () => {
   assert.ok(pal.includes(repoColor(null, pal)));
 });
 
+
+test("lanes: one per project by name, no project last; columns walk lane by lane", () => {
+  const cols = boardColumns([
+    iss("a", "build", { project: "taskflow", lastSeen: 9 }),
+    iss("b", "build", { repo: "readflow", lastSeen: 1 }),
+    iss("c", "holding", { project: null, repo: null, holdingSince: 5 }),
+    iss("d", "build", { project: "taskflow", lastSeen: 3 }),
+    iss("e", "backlog", { kind: "backlog", repo: "readflow" }),
+  ]);
+  assert.deepEqual(cols[3].items.map((i) => i.key), ["b", "a", "d"]);
+  const lanes = boardLanes(cols);
+  assert.deepEqual(lanes.map((l) => [l.project, l.count]), [["readflow", 2], ["taskflow", 2], [null, 1]]);
+  assert.deepEqual(lanes[1].cells.map((c) => c.map((i) => i.key)), [[], [], [], ["a", "d"], [], []]);
+  assert.deepEqual(boardLanes(boardColumns([])), []);
+});
+
+test("an ended session's card says so", () => {
+  assert.deepEqual(boardNote(iss("a", "build", { observed: false })), { text: "Session ended", tone: "muted" });
+  assert.equal(boardNote(iss("a", "landed", { observed: false })).text, "Merged");
+});

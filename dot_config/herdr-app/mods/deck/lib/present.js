@@ -31,6 +31,19 @@ export function quickReplies(text) {
   return letters.length >= 2 ? letters : [];
 }
 
+/** The project an issue is filed under: its repo, else its Herdr space (see reconcile). @param {Issue} i */
+export function projectOf(i) {
+  return i?.project ?? i?.repo ?? null;
+}
+
+/** Project order: by name, ignoring case; no project last. */
+export function projectOrder(a, b) {
+  if (a === b) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return a.toLowerCase().localeCompare(b.toLowerCase()) || (a < b ? -1 : 1);
+}
+
 const hasFailingCheck = (i) => (i.pr?.checks ?? []).some((c) => c.status === "fail");
 const hasNoData = (i) => (i.claims ?? []).some((c) => c.verdict === "NO DATA");
 
@@ -50,7 +63,7 @@ export function matchesView(issue, filter) {
   if (filter?.kind === "view" && filter.value === "discarded") return discarded;
   if (discarded) return false;
   if (!filter) return true;
-  if (filter.kind === "repo") return (issue.repo ?? null) === filter.value;
+  if (filter.kind === "repo") return projectOf(issue) === filter.value;
   switch (filter.value) {
     case "holding": return issue.stage === "holding";
     case "failing": return hasFailingCheck(issue);
@@ -66,7 +79,8 @@ export function matchesView(issue, filter) {
  */
 export function groupIssues(issues, filter) {
   const shown = issues.filter((i) => matchesView(i, filter));
-  return LIST_ORDER.map((stage) => ({ stage, items: shown.filter((i) => i.stage === stage) })).filter((g) => g.items.length);
+  const byProject = (a, b) => projectOrder(projectOf(a), projectOf(b));
+  return LIST_ORDER.map((stage) => ({ stage, items: shown.filter((i) => i.stage === stage).sort(byProject) })).filter((g) => g.items.length);
 }
 
 const URGENCY = ["holding", "verify", "build", "survey", "landed"];
@@ -81,7 +95,7 @@ export function repoTelemetry(issues) {
   /** @type {Map<string|null, Stage[]>} */
   const by = new Map();
   for (const i of liveIssues(issues)) {
-    const r = i.repo ?? null;
+    const r = projectOf(i);
     if (!by.has(r)) by.set(r, []);
     by.get(r).push(i.stage);
   }
@@ -128,7 +142,7 @@ const firstLine = (s) => String(s ?? "").split("\n").map((l) => l.trim()).find(B
 export function issueNote(issue) {
   if (issue.stage === "holding") return firstLine(issue.prompt?.text) || "waiting on you";
   if (issue.stage === "landed") return issue.pr?.state === "MERGED" ? "merged" : "dismissed";
-  if (issue.observed === false) return "terminal gone";
+  if (issue.observed === false) return "session ended";
   if (issue.pr?.state === "OPEN") {
     const t = checkTally(issue.pr.checks);
     return t.total ? `PR #${issue.pr.number} · checks ${t.pass}/${t.total}` : `PR #${issue.pr.number}`;

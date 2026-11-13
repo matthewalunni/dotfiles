@@ -4,7 +4,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared } from "herdr";
 import { pickDecision, STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
-import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm, liveIssues } from "../lib/present.js";
+import { STAGES, stagePct, repoTelemetry, issueNote, minutesSince, hhmm, liveIssues, projectOf } from "../lib/present.js";
 import { keyAction } from "../lib/keys.js";
 import { currentStore, focusTerminal, openUrl, STORE_KEY } from "../data.js";
 import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, panel, segments, spaced, act, keyOf } from "./ui.js";
@@ -91,7 +91,7 @@ export default class CommandView extends View {
 
   band(issue, k) {
     const now = Date.now();
-    const meta = [issue.id, issue.repo ?? "no repo", issue.branch ?? "no branch", `T+${minutesSince(issue.holdingSince, now)}M`]
+    const meta = [issue.id, projectOf(issue) ?? "no project", issue.branch ?? "no branch", `T+${minutesSince(issue.holdingSince, now)}M`]
       .map((s) => String(s).toUpperCase())
       .join(" · ");
     const claims = issue.claims ?? [];
@@ -188,7 +188,7 @@ export default class CommandView extends View {
       .child(div().w(52).flex_none().text_color(k.muted).truncate().child(issue.id))
       .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(issue.title || "untitled"))
       .child(div().max_w(260).flex_none().truncate().text_color(c).child(issueNote(issue)))
-      .child(div().w(84).flex_none().text_right().truncate().text_color(k.muted).child(issue.repo ?? "—"));
+      .child(div().w(84).flex_none().text_right().truncate().text_color(k.muted).child(projectOf(issue) ?? "—"));
   }
 
   list(issues, k) {
@@ -255,7 +255,7 @@ export default class CommandView extends View {
             h_flex()
               .items_center()
               .gap(10)
-              .child(div().w(96).flex_none().truncate().text_color(r.repo ? k.strong : k.muted).child(r.repo ?? "no repo"))
+              .child(div().w(96).flex_none().truncate().text_color(r.repo ? k.strong : k.muted).child(r.repo ?? "no project"))
               .child(segments(r.segments.map((t) => tone(t, k))))
               .child(div().w(84).flex_none().text_right().text_color(r.state === "survey" ? k.muted : stageColor(r.state, k)).child(r.word)),
           ),

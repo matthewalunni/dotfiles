@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   STAGES, LIST_ORDER, stagePct, quickReplies, matchesView, groupIssues, repoTelemetry,
-  checkTally, prChip, minutesSince, hhmm, diffRows, issueNote,
+  checkTally, prChip, minutesSince, hhmm, diffRows, issueNote, projectOf,
 } from "../../dot_config/herdr-app/mods/deck/lib/present.js";
 import { parseDiff } from "../../dot_config/herdr-app/mods/deck/lib/github.js";
 
@@ -93,7 +93,7 @@ test("issueNote describes what the issue is doing", () => {
   assert.equal(issueNote(issue({ stage: "build", commitsAhead: 3 })), "3 commits");
   assert.equal(issueNote(issue({ stage: "build", commitsAhead: 1 })), "1 commit");
   assert.equal(issueNote(issue({ stage: "survey", status: "idle" })), "idle");
-  assert.equal(issueNote(issue({ stage: "survey", observed: false })), "terminal gone");
+  assert.equal(issueNote(issue({ stage: "survey", observed: false })), "session ended");
   assert.equal(issueNote(issue({ stage: "landed", pr: pr({ state: "MERGED" }) })), "merged");
 });
 
@@ -139,4 +139,14 @@ test("diffRows clips very long lines to 400 characters", () => {
   assert.equal(code.length, 400);
   assert.equal(code.endsWith("…"), true);
   assert.equal(diffRows([{ ...files[0], hunks: [{ header: "@@ -1 +1 @@", lines: [{ a: null, b: 1, sign: "+", code: "y".repeat(400) }] }] }], 10).rows[2].code.length, 400);
+});
+
+test("project: the repo filter, telemetry and list order use the issue's project", () => {
+  const a = issue({ key: "a", stage: "build", repo: null, project: "taskflow" });
+  const b = issue({ key: "b", stage: "build", repo: "alpha", project: "alpha" });
+  const c = issue({ key: "c", stage: "build", repo: "zed" });
+  assert.equal(projectOf(c), "zed");
+  assert.equal(matchesView(a, { kind: "repo", value: "taskflow" }), true);
+  assert.deepEqual(repoTelemetry([a, b]).map((r) => r.repo), ["taskflow", "alpha"]);
+  assert.deepEqual(groupIssues([c, a, b], null)[0].items.map((i) => i.key), ["b", "a", "c"]);
 });

@@ -12,7 +12,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run } from "herdr";
-import { groupIssues } from "../lib/present.js";
+import { groupIssues, projectOf } from "../lib/present.js";
 import { boardColumns } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
 import { issuePane, stepIssue, backTarget } from "../lib/issuepage.js";
@@ -143,7 +143,7 @@ export default class IssuePage extends View {
       issueDetail(this, issue, k, cx, {
         stacked: true,
         back: { label: back.label, onClick: () => this.back() },
-        crumb: `/ ${issue.repo ?? "no repo"} › ${issue.id}`,
+        crumb: `/ ${projectOf(issue) ?? "no project"} › ${issue.id}`,
         hint,
       }),
     );
@@ -158,7 +158,7 @@ export class ThreadView extends View {
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
-    const who = issue ? `${issue.repo ?? "no repo"} · ${issue.title || issue.id}` : "";
+    const who = issue ? `${projectOf(issue) ?? "no project"} · ${issue.title || issue.id}` : "";
     return h_flex()
       .size_full()
       .items_center()

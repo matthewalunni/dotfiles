@@ -179,7 +179,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
   const cwd = pane?.cwd || term?.foreground?.cwd || term?.cwd || "";
   /** @type {Observation} */
   const o = {
-    terminal: t, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
+    terminal: t, session: null, space: a.space_name || null, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
     commitsAhead: null, dirty: false, pr: null, ghError: null, claims: [], prompt: null, brief: null, replied: false,
   };
   try {
@@ -189,6 +189,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
       createdMs(t),
     ]);
     o.prompt = prompt;
+    o.session = after == null ? null : String(after);
     if (git) {
       o.repo = git.repo;
       o.root = git.root;

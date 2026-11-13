@@ -11,7 +11,8 @@ import { samePrompt } from "./prompt.js";
 
 /**
  * @typedef {{
- *   key: string, id: string, terminal: string, status: Status, title: string,
+ *   key: string, id: string, terminal: string, session?: string|null, space?: string|null, project?: string|null,
+ *   status: Status, title: string,
  *   cwd: string, repo: string|null, root: string|null, branch: string|null,
  *   commitsAhead: number|null, dirty?: boolean, pr: Pr|null, ghError: string|null,
  *   claims: Claim[], prompt: Prompt|null, brief: any,
@@ -26,13 +27,15 @@ import { samePrompt } from "./prompt.js";
 /** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
- *   terminal: string, status: Status, title: string, cwd: string, repo: string|null,
+ *   terminal: string, session?: string|null, space?: string|null, status: Status, title: string, cwd: string, repo: string|null,
  *   root: string|null, branch: string|null, commitsAhead: number|null, dirty?: boolean, pr: Pr|null,
  *   ghError: string|null, claims: Claim[], prompt: Prompt|null, brief: any, replied: boolean
  * }} Observation
  */
 
 const LANDED_TTL = 7 * 24 * 60 * 60 * 1000;
+// An ended session's card (not landed) clears itself after a day.
+const ENDED_TTL = 24 * 60 * 60 * 1000;
 const LOG_CAP = 200;
 const RETIRED_TTL = 30 * 24 * 60 * 60 * 1000;
 const RETIRED_CAP = 500;
@@ -48,10 +51,18 @@ export function emptyStore() {
 /** @param {string|null} branch */
 const cleanBranch = (branch) => (branch && branch !== "HEAD" ? branch : null);
 
-/** @param {string} terminal @param {string|null} branch */
-export function issueKey(terminal, branch) {
-  return terminal + "|" + (cleanBranch(branch) ?? "-");
+/**
+ * A session: one agent run in one terminal, told apart from a reused terminal ID
+ * by the terminal's creation time (`session`, null when unknown).
+ * @param {string} terminal @param {string|null} session
+ */
+export function sessionTag(terminal, session) {
+  return terminal + "|" + (session ?? "-");
 }
+
+const RETIRED_TAG = "s:";
+/** Unknown on either side (an issue from before sessions, or a failed lookup) matches. */
+const compatible = (a, b) => a == null || b == null || a === b;
 
 const SUFFIXES = ["flow", "vault", "code", "kit", "app", "ai", "iq", "hub", "lab"];
 
@@ -134,40 +145,47 @@ export function reconcile(store, obs, now) {
   const counters = { ...store.counters };
   const prefixes = { ...(store.prefixes ?? {}) };
   const backlogItems = store.issues.filter(isBacklog);
-  const issues = store.issues.filter((i) => !isBacklog(i)).map((i) => ({ ...i }));
+  let issues = store.issues.filter((i) => !isBacklog(i)).map((i) => ({ ...i }));
   const log = [...store.log];
   const retired = { ...(store.retired ?? {}) };
-  const byKey = new Map(issues.map((i) => [i.key, i]));
   const seen = new Set();
+  const liveTags = new Set();
+  const drop = new Set();
 
   for (const o of obs) {
     const branch = cleanBranch(o.branch);
-    const key = issueKey(o.terminal, branch);
-    if (key in retired) {
-      retired[key] = now; // still observed: keep it retired
+    const tag = RETIRED_TAG + sessionTag(o.terminal, o.session ?? null);
+    liveTags.add(tag);
+    if (tag in retired) {
+      retired[tag] = now; // the retired session is still running: keep it retired
       continue;
     }
-    seen.add(key);
-    let prev = byKey.get(key) ?? null;
-    if (!prev) {
-      // Same terminal, new branch: an issue that never got a PR (and has not
-      // landed) follows the terminal to the new key instead of leaving a ghost.
-      const moved = issues
-        .filter((i) => i.terminal === o.terminal && i.root === o.root && !seen.has(i.key) && i.stage !== "landed" && !i.pr)
-        .sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))[0];
-      if (moved) {
-        byKey.delete(moved.key);
-        prev = moved;
+    const project = o.repo ?? o.space ?? null;
+    // One session, one issue: the issue this terminal's agent had at the last
+    // poll, whatever its branch or folder is now. An agent that went away and
+    // came back (or a reused terminal ID) is a new session.
+    const same = issues
+      .filter((i) => i.terminal === o.terminal && !seen.has(i.key) && !drop.has(i.key))
+      .filter((i) => i.observed !== false && compatible(i.session, o.session))
+      .sort((a, b) => Number((b.project ?? b.repo ?? null) === project) - Number((a.project ?? a.repo ?? null) === project) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+    const prev = same[0] ?? null;
+    // Issues from before sessions (no `session` field) were one per branch:
+    // the extra ones for this terminal are duplicates of this session.
+    if (prev) {
+      for (const i of issues) {
+        if (i === prev || i.terminal !== o.terminal || "session" in i || seen.has(i.key)) continue;
+        if (!i.pr && i.stage !== "landed") drop.add(i.key);
       }
     }
-    let id;
-    if (prev) id = prev.id;
-    else {
-      const prefix = prefixFor(o.repo, prefixes);
-      if (o.repo) prefixes[o.repo] = prefix;
+    let id = prev?.id ?? null;
+    if (!id || (id.startsWith("XX-") && project)) {
+      const prefix = prefixFor(project, prefixes);
+      if (project) prefixes[project] = prefix;
       counters[prefix] = (counters[prefix] ?? 0) + 1;
       id = prefix + "-" + counters[prefix];
     }
+    const key = prev?.key ?? sessionTag(o.terminal, o.session ?? null) + "|" + now;
+    seen.add(key);
     const wasLanded = prev?.stage === "landed";
     // A failed gh call keeps the last known PR rather than dropping it.
     const pr = o.pr ?? (o.ghError ? prev?.pr ?? null : null);
@@ -184,7 +202,8 @@ export function reconcile(store, obs, now) {
       ? null
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
     const next = {
-      key, id, terminal: o.terminal, status: o.status, title: o.title, cwd: o.cwd,
+      key, id, terminal: o.terminal, session: o.session ?? prev?.session ?? null, space: o.space ?? null, project,
+      status: o.status, title: o.title, cwd: o.cwd,
       repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, dirty: o.dirty ?? false, pr,
       ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
@@ -202,10 +221,12 @@ export function reconcile(store, obs, now) {
     log.push(...diffEvents(prev, next, now));
     if (prev) issues[issues.indexOf(prev)] = next;
     else issues.push(next);
-    byKey.set(key, next);
   }
+  if (drop.size) issues = issues.filter((i) => !drop.has(i.key));
+  // A retired session that stopped running is forgotten: a new agent there is a new issue.
+  for (const k of Object.keys(retired)) if (k.startsWith(RETIRED_TAG) && !liveTags.has(k)) delete retired[k];
 
-  // Terminals no longer observed: not holding, no live prompt, stage otherwise frozen.
+  // Sessions no longer observed have ended: not holding, no live prompt, stage otherwise frozen.
   for (let n = 0; n < issues.length; n++) {
     const i = issues[n];
     if (seen.has(i.key)) continue;
@@ -246,8 +267,8 @@ function quietEnds(prev, o, now) {
 }
 
 /**
- * Drop expired issues (landed 7 days ago, or unobserved for 7 days) and retire
- * their keys so a still-open terminal does not resurrect them; prune retired.
+ * Drop expired issues (landed 7 days ago, ended a day ago, or unseen for 7 days);
+ * retire a still-running session so the next poll does not resurrect it; prune retired.
  * Log events stay; the log is capped.
  */
 function finish(store, now) {
@@ -256,8 +277,9 @@ function finish(store, now) {
     if (isBacklog(i)) return true; // backlog entries expire in mergeBacklog
     const expired = i.stage === "landed"
       ? i.landedAt != null && i.landedAt < now - LANDED_TTL
-      : i.lastSeen != null && i.lastSeen < now - LANDED_TTL;
-    if (expired) retired[i.key] = now;
+      : i.lastSeen != null && i.lastSeen < now - (i.observed === false ? ENDED_TTL : LANDED_TTL);
+    // A still-running session's issue is retired so the next poll does not bring it back.
+    if (expired && i.observed !== false) retired[RETIRED_TAG + sessionTag(i.terminal, i.session ?? null)] = now;
     return !expired;
   });
   for (const k of Object.keys(retired)) if (retired[k] < now - RETIRED_TTL) delete retired[k];

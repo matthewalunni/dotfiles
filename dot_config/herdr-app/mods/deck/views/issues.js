@@ -5,7 +5,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared, notify, home } from "herdr";
-import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince } from "../lib/present.js";
+import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince, projectOf } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
   currentStore, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
@@ -225,7 +225,7 @@ export function detailKey(host, a, issue, st, cx) {
 export function issueDetail(host, issue, k, cx, opts = {}) {
   if (issue.kind === "backlog") return backlogDetail(host, issue, k, opts);
   const tab = shared(TAB_KEY) === "pr" && issue.pr ? "pr" : "overview";
-  const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
+  const crumb = opts.crumb ?? `${projectOf(issue) ?? "no project"} › ${issue.id}`;
   const col = v_flex().flex_1().min_w(0).h_full();
   const hdr = header(issue, tab === "pr" ? crumb + " › Pull request" : crumb, k, opts.back ?? null, opts.hint ?? null, Boolean(opts.stacked));
   if (tab === "pr") return col.child(hdr).child(prTab(host, issue, k, cx, (el) => el.child(tabs(issue, "pr", k))));
@@ -253,7 +253,7 @@ const tilde = (p) => {
  */
 function backlogDetail(host, issue, k, opts) {
   const now = Date.now();
-  const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
+  const crumb = opts.crumb ?? `${projectOf(issue) ?? "no project"} › ${issue.id}`;
   const hdr = header(issue, crumb, k, opts.back ?? null, opts.hint ?? null, true);
   const filer = backlogFiler(issue, currentStore().issues);
   const plan = previewPlan(issue, home());
@@ -320,7 +320,7 @@ function backlogDetail(host, issue, k, opts) {
               .text_color(k.muted)
               .child(div().px(8).py(2).border_1().border_color(issue.discarded ? k.line : k.brand).text_color(issue.discarded ? k.muted : k.brand)
                 .child((issue.discarded ? "DISCARDED · " + age(issue.discardedAt, now) : "BACKLOG · " + age(issue.createdAt, now)).toUpperCase()))
-              .child(div().child(issue.repo ?? "no repo"))
+              .child(div().child(projectOf(issue) ?? "no project"))
               .child(div().child(issue.discarded ? "· kept 7 days" : "· not started")),
           ),
       )
@@ -811,12 +811,12 @@ export default class IssuesView extends View {
           return this.sideItem("side-view-" + v.value, viewMark(v.value), v.text, n, sameFilter(this.filter, f), toggle(f));
         }),
       )
-      .child(div().px(10).pt(16).pb(6).child(label("Repos")))
+      .child(div().px(10).pt(16).pb(6).child(label("Projects")))
       .children(
         repos.map((r) => {
           const f = { kind: "repo", value: r.repo };
           const n = issues.filter((i) => matchesView(i, f)).length;
-          return this.sideItem("side-repo-" + (r.repo ?? "-"), dot(r.state === "survey" ? k.muted : stageColor(r.state, k), 8), r.repo ?? "no repo", n, sameFilter(this.filter, f), toggle(f));
+          return this.sideItem("side-repo-" + (r.repo ?? "-"), dot(r.state === "survey" ? k.muted : stageColor(r.state, k), 8), r.repo ?? "no project", n, sameFilter(this.filter, f), toggle(f));
         }),
       );
   }
@@ -872,7 +872,7 @@ export default class IssuesView extends View {
       rows.push(div().p(16).text_color(k.muted).child(issues.length ? "No issues match this view." : "No agents yet. Start one with cmd-t."));
     }
     const filterName = !this.filter ? null
-      : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
+      : this.filter.kind === "repo" ? this.filter.value ?? "no project"
       : VIEWS.find((v) => v.value === this.filter.value)?.text;
     return v_flex()
       .w(440)
@@ -931,7 +931,7 @@ export default class IssuesView extends View {
 
     if (board) {
       const filterName = !this.filter ? null
-        : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
+        : this.filter.kind === "repo" ? this.filter.value ?? "no project"
         : VIEWS.find((v) => v.value === this.filter.value)?.text;
       // One click on a card opens its page.
       return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName }));

@@ -1,8 +1,8 @@
-// Issue board: six stage columns of cards (Backlog first), and the LIST / BOARD toggle.
+// Issue board: one lane per project across six stage columns (Backlog first), and the LIST / BOARD toggle.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { setShared } from "herdr";
-import { boardColumns, boardNote, repoColor } from "../lib/board.js";
+import { boardColumns, boardLanes, boardNote, repoColor } from "../lib/board.js";
 import { minutesSince, prChip } from "../lib/present.js";
 import { MODE_KEY, currentStore } from "../data.js";
 import { heading, label, stageColor, dot, keyChip } from "./ui.js";
@@ -75,44 +75,57 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .items_center()
           .gap(8)
           .text_color(k.muted)
-          .child(div().flex_none().w(7).h(7).bg(repoColor(i.repo, k.repo)))
-          .child(div().flex_1().min_w(0).truncate().child(i.repo ?? "no repo"))
+          .child(div().flex_1().min_w(0).truncate().child(entry ? "not started" : i.branch ?? "no branch"))
           .child(div().flex_none().child(pc.text)),
       );
   };
-  const column = (c) => {
-    const hot = c.stage === "holding";
-    const accent = c.stage === "survey" ? k.muted : stageColor(c.stage, k);
+  const accentOf = (c) => (c.stage === "survey" ? k.muted : stageColor(c.stage, k));
+  const head = (c) => {
+    const accent = accentOf(c);
+    return h_flex()
+      .flex_1()
+      .min_w(0)
+      .items_center()
+      .gap(8)
+      .px(12)
+      .pb(4)
+      .border_b(2)
+      .border_color(c.stage === "holding" ? k.hold : k.line)
+      .child(dot(accent, 9, true))
+      .child(label(c.label, accent))
+      .child(div().text_color(k.muted).child(String(c.items.length)));
+  };
+  const cell = (c, items) => {
+    const hot = c.stage === "holding" && items.length > 0;
     return v_flex()
       .flex_1()
       .min_w(0)
-      .h_full()
       .gap(8)
-      .p(10)
+      .p(6)
       .border_1()
-      .border_color(hot ? k.hold : k.line)
+      .border_color(hot ? k.hold : "transparent")
       .when(hot, (el) => el.bg(k.holdBg))
+      .children(items.map(card));
+  };
+  const lane = (l) =>
+    v_flex()
+      .flex_none()
+      .gap(6)
+      .pb(10)
+      .border_b(1)
+      .border_color(k.line)
       .child(
         h_flex()
-          .flex_none()
           .items_center()
           .gap(8)
-          .px(2)
-          .pb(4)
-          .child(dot(accent, 9, true))
-          .child(label(c.label, accent))
-          .child(div().text_color(k.muted).child(String(c.items.length))),
+          .px(6)
+          .pt(8)
+          .child(div().flex_none().w(8).h(8).bg(repoColor(l.project, k.repo)))
+          .child(div().text_color(l.project ? k.strong : k.muted).child(l.project ?? "no project"))
+          .child(div().text_color(k.muted).child(String(l.count))),
       )
-      .child(
-        v_flex()
-          .id("board-col-" + c.stage)
-          .flex_1()
-          .min_h(0)
-          .gap(8)
-          .overflow_y_scrollbar()
-          .children(c.items.map(card)),
-      );
-  };
+      .child(h_flex().items_start().gap(12).children(cols.map((c, n) => cell(c, l.cells[n]))));
+  const lanes = boardLanes(cols);
   return v_flex()
     .flex_1()
     .min_w(0)
@@ -135,7 +148,24 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .child(div().flex_1())
         .child(div().text_color(k.muted).truncate().child("h l column · j k card · ↵ open · S start · X discard")),
     )
-    .child(h_flex().flex_1().min_h(0).gap(12).px(16).py(14).children(cols.map(column)))
+    .child(
+      v_flex()
+        .flex_1()
+        .min_h(0)
+        .px(16)
+        .py(12)
+        .gap(4)
+        .child(h_flex().flex_none().gap(12).children(cols.map(head)))
+        .child(
+          v_flex()
+            .id("board-lanes")
+            .flex_1()
+            .min_h(0)
+            .overflow_y_scrollbar()
+            .when(lanes.length === 0, (el) => el.child(div().p(20).text_color(k.muted).child("No agents yet. Press N to start one.")))
+            .children(lanes.map(lane)),
+        ),
+    )
     .child(
       h_flex()
         .flex_none()
