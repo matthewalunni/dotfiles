@@ -9,7 +9,7 @@ import { BARLOW, MONO, tokens, spaced } from "./ui.js";
 const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
     ["⌥⌘1", "Command Center"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"],
-    ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"],
+    ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"], ["⌘esc", "Back from an issue (also from its thread)"],
     ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
   ] },
   { title: "Issues & Command", tone: "hold", rows: [

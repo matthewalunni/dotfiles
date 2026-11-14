@@ -184,7 +184,7 @@ export class ThreadView extends View {
           .child("Type into the agent")
           .child(keyChip("T")),
       )
-      .child(h_flex().flex_none().items_center().gap(6).child("· back to overview").child(keyChip("⌘⇧I")));
+      .child(h_flex().flex_none().items_center().gap(6).child("· back to overview").child(keyChip("⌘⇧I")).child("· back to board").child(keyChip("⌘esc")));
   }
 }
 
@@ -230,7 +230,7 @@ export class GoneView extends View {
 
 const HINTS = [
   ["esc", "back"], ["j k", "issue"], ["1–9", "answer"], ["R", "reply"],
-  ["T", "type in thread"], ["⌘⇧I", "back to overview"], ["M", "merge"],
+  ["T", "type in thread"], ["⌘⇧I", "back to overview"], ["⌘esc", "back, from the thread"], ["M", "merge"],
 ];
 
 const BACKLOG_HINTS = [["esc", "back"], ["j k", "issue"], ["S", "start agent (S again)"], ["X", "discard"]];

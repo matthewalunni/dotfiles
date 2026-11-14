@@ -7,13 +7,14 @@ import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { shared, theme, nextCommand, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
-import { currentStore, VIEW_KEY } from "../data.js";
+import { currentStore, VIEW_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
 import { navChild } from "../lib/views.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
 import { goTo, focusedAgent, openIssue } from "./focus.js";
+import { backTarget } from "../lib/issuepage.js";
 
 const BARLOW = "Barlow Condensed";
 const MONO = "JetBrains Mono";
@@ -42,7 +43,7 @@ function focusedIssue(issues) {
 const GO = { command: "deck-command", issues: "deck-issues", terminal: "deck-terminal" };
 
 /**
- * One keys.json command: "go:<view>", "next-holding", "agent-issue" or "new-task"
+ * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back" or "new-task"
  * (the New task dialog, as N; nothing while another Deck dialog is open).
  * @param {string} c
  */
@@ -51,6 +52,12 @@ export function runCommand(c) {
   const go = /^go:(command|issues|terminal)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
   if (cmd === "new-task") return void openNewTask();
+  // ⌘Esc: back out of the issue page (even from its terminal, where Esc is the agent's).
+  if (cmd === "back") {
+    if (shared(VIEW_KEY) !== "deck-issue") return;
+    const b = backTarget(shared(ISSUE_FROM_KEY));
+    return goTo(b.child, { agent: b.focus });
+  }
   const issues = currentStore().issues;
   if (cmd === "next-holding") {
     // Nothing holding: stay put (the bar already says "0 holding").
