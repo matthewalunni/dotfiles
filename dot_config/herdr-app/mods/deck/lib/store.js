@@ -162,13 +162,19 @@ export function reconcile(store, obs, now) {
     }
     const project = o.repo ?? o.space ?? null;
     // One session, one issue: the issue this terminal's agent had at the last
-    // poll, whatever its branch or folder is now. An agent that went away and
-    // came back (or a reused terminal ID) is a new session.
+    // poll, whatever its branch or folder is now. The same terminal (same
+    // created time) coming back after a gap keeps its issue; a reused terminal
+    // ID (a different created time) is a new session.
+    const sameSession = (i) => i.session != null && o.session != null && i.session === o.session;
     const same = issues
       .filter((i) => i.terminal === o.terminal && !seen.has(i.key) && !drop.has(i.key))
-      .filter((i) => i.observed !== false && compatible(i.session, o.session))
-      .sort((a, b) => Number((b.project ?? b.repo ?? null) === project) - Number((a.project ?? a.repo ?? null) === project) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+      .filter((i) => (i.observed !== false && compatible(i.session, o.session)) || sameSession(i))
+      .sort((a, b) => Number(b.observed !== false) - Number(a.observed !== false)
+        || Number((b.project ?? b.repo ?? null) === project) - Number((a.project ?? a.repo ?? null) === project)
+        || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
     const prev = same[0] ?? null;
+    // Extra issues of this same session (left by a polling gap) fold into it.
+    for (const i of same.slice(1)) if (sameSession(i) && !i.pr && i.stage !== "landed") drop.add(i.key);
     // Issues from before sessions (no `session` field) were one per branch:
     // the extra ones for this terminal are duplicates of this session.
     if (prev) {

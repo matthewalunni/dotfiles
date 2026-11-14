@@ -51,12 +51,26 @@ test("project is the repo, else the space; an XX issue gets a real ID once its p
   assert.deepEqual(s.issues.map((i) => [i.id, i.project]), [["TF-1", "taskflow"]]);
 });
 
-test("an agent that ends and starts again in the same terminal is a new issue", () => {
+test("an agent missing for a while in the same terminal keeps its issue; a reused terminal ID is a new one", () => {
   let s = reconcile(emptyStore(), [ob({ session: "100" })], 1);
   s = reconcile(s, [], 2);
   assert.equal(T(s, "t7").observed, false);
   s = reconcile(s, [ob({ session: "100" })], 3);
+  assert.deepEqual(s.issues.map((i) => [i.id, i.observed]), [["TF-1", true]]);
+  s = reconcile(s, [], 4);
+  s = reconcile(s, [ob({ session: "200" })], 5);
   assert.deepEqual(s.issues.map((i) => [i.id, i.observed]), [["TF-1", false], ["TF-2", true]]);
+});
+
+test("duplicates left by a polling gap fold into the live issue", () => {
+  const dup = { issues: [], counters: { TF: 2 }, prefixes: { taskflow: "TF" }, retired: {}, backlogTombs: {}, log: [] };
+  let s = reconcile(emptyStore(), [ob({ session: "100" })], 1);
+  s = reconcile(s, [], 2);
+  // what the old matcher did after the gap: a second issue for the same session
+  const live = { ...T(s, "t7"), key: "t7|100|3", id: "TF-2", observed: true, lastSeen: 3, createdAt: 3 };
+  s = { ...s, ...{ counters: dup.counters }, issues: [...s.issues, live] };
+  s = reconcile(s, [ob({ session: "100" })], 4);
+  assert.deepEqual(s.issues.map((i) => [i.id, i.observed]), [["TF-2", true]]);
 });
 
 test("a reused terminal ID (a different session) is a new issue", () => {
