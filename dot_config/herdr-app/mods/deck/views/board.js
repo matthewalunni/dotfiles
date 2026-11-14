@@ -103,7 +103,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
       .gap(8)
       .p(6)
       .border_1()
-      .border_color(hot ? k.hold : "transparent")
+      .border_color(hot ? k.hold : "#00000000")
       .when(hot, (el) => el.bg(k.holdBg))
       .children(items.map(card));
   };
