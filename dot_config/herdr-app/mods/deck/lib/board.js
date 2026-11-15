@@ -1,16 +1,17 @@
 // Board columns and navigation. Pure.
 
-import { STAGE_LABEL } from "./stage.js";
+import { STAGE_LABEL, boardColumn } from "./stage.js";
 import { backlogFiler } from "./backlog.js";
 import { projectOf, projectOrder } from "./present.js";
 
 /** @typedef {import("./store.js").Issue} Issue */
 
-const COLS = ["backlog", "holding", "survey", "build", "verify", "landed"].map((s) => [s, STAGE_LABEL[s]]);
+// No Holding column: waiting on you is a badge on the card.
+const COLS = ["backlog", "survey", "build", "verify", "landed"].map((s) => [s, STAGE_LABEL[s]]);
 const recency = (i) => i.holdingSince ?? i.lastSeen ?? 0;
 
 /**
- * Stage columns. Each column's cards are in project order (see boardLanes),
+ * Board columns (see boardColumn: a dragged card sits where it was put). Each column's cards are in project order (see boardLanes),
  * newest first within a project, so j/k walks a column lane by lane.
  * @param {Issue[]} issues
  */
@@ -19,7 +20,7 @@ export function boardColumns(issues) {
   const order = (a, b) => projectOrder(projectOf(a), projectOf(b)) || recency(b) - recency(a);
   return COLS.map(([stage, label]) => ({
     stage, label,
-    items: live.filter((i) => i.stage === stage).sort(order),
+    items: live.filter((i) => boardColumn(i) === stage).sort(order),
   }));
 }
 
@@ -86,12 +87,12 @@ export function boardNote(issue, issues) {
     const src = issue.source || "agent";
     return { text: by ? `from ${by.id} · ${src}` : src, tone: "muted" };
   }
-  if (issue.stage === "landed") return { text: "Merged", tone: "ok" };
-  if (issue.observed === false) return { text: "Session ended", tone: "muted" };
   if (issue.stage === "holding") {
     const q = String(issue.prompt?.text ?? "").split("\n").map((l) => l.trim()).find(Boolean);
     return { text: q || "Waiting on you", tone: "hold" };
   }
+  if (boardColumn(issue) === "landed") return { text: issue.pr?.state === "MERGED" || issue.stage === "landed" ? "Merged" : "Done", tone: "ok" };
+  if (issue.observed === false) return { text: "Session ended", tone: "muted" };
   const failing = (issue.pr?.checks ?? []).filter((c) => c.status === "fail").length;
   if (failing) return { text: `${failing} check${failing === 1 ? "" : "s"} failing`, tone: "fail" };
   if (issue.status === "working") return { text: "Working…", tone: "work" };

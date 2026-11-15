@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nextHolding, deriveStage, pickDecision, STAGE_LABEL } from "../../dot_config/herdr-app/mods/deck/lib/stage.js";
+import { nextHolding, deriveStage, pickDecision, STAGE_LABEL, boardColumn, pinHolds } from "../../dot_config/herdr-app/mods/deck/lib/stage.js";
 
 const pr = (state, checks = []) => ({ number: 1, title: "t", state, checks });
 const base = { holdingSince: null, dismissed: false, pr: null, commitsAhead: null, status: "idle" };
@@ -64,4 +64,31 @@ test("dirty after merge stays landed", () => {
 });
 test("labels say Started", () => {
   assert.deepEqual(STAGE_LABEL, { backlog: "Backlog", survey: "Started", build: "Build", verify: "Verify", holding: "Holding", landed: "Landed" });
+});
+
+test("boardColumn: the work column, ignoring holding", () => {
+  assert.equal(boardColumn({ stage: "holding", holdingSince: 5, pr: null, commitsAhead: 0, dirty: true }), "build");
+  assert.equal(boardColumn({ stage: "holding", holdingSince: 5, pr: { state: "OPEN", checks: [] } }), "verify");
+  assert.equal(boardColumn({ stage: "survey", holdingSince: null, pr: null }), "survey");
+  assert.equal(boardColumn({ kind: "backlog", stage: "backlog" }), "backlog");
+});
+
+test("a pin holds until a PR opens or merges after it", () => {
+  const pin = (column, prState = null) => ({ column, prState, at: 1 });
+  // Pinned, git state says otherwise: the pin wins.
+  assert.equal(boardColumn({ stage: "build", holdingSince: null, pr: null, pin: pin("survey") }), "survey");
+  assert.equal(boardColumn({ stage: "survey", holdingSince: null, pr: null, pin: pin("landed") }), "landed");
+  // A PR opened after the pin: Verify.
+  const open = { state: "OPEN", checks: [] };
+  assert.equal(boardColumn({ stage: "verify", holdingSince: null, pr: open, pin: pin("build") }), "verify");
+  // Pinned while the PR was already open: the pin holds.
+  assert.equal(boardColumn({ stage: "verify", holdingSince: null, pr: open, pin: pin("build", "OPEN") }), "build");
+  // Merged after the pin: Landed.
+  assert.equal(boardColumn({ stage: "landed", holdingSince: null, pr: { state: "MERGED", checks: [] }, pin: pin("build", "OPEN") }), "landed");
+  // A closed PR is no event.
+  assert.equal(pinHolds(pin("build", "OPEN"), { state: "CLOSED" }), true);
+  assert.equal(pinHolds(pin("build"), { state: "OPEN" }), false);
+  assert.equal(pinHolds(null, null), false);
+  // A bad pin is ignored.
+  assert.equal(boardColumn({ stage: "build", holdingSince: null, pr: null, pin: pin("holding") }), "build");
 });

@@ -38,6 +38,32 @@ export function deriveStage(f) {
   return "survey";
 }
 
+/** Columns a card can be dragged to. */
+export const PIN_COLUMNS = ["survey", "build", "verify", "landed"];
+
+/**
+ * Whether a board pin still holds: it is a real column and no PR opened or
+ * merged since it was set (a closed PR is no event).
+ * @param {{ column: string, prState: string|null, at: number }|null|undefined} pin @param {Pr|null|undefined} pr
+ */
+export function pinHolds(pin, pr) {
+  if (!pin || !PIN_COLUMNS.includes(pin.column)) return false;
+  const state = pr?.state ?? null;
+  return !((state === "OPEN" || state === "MERGED") && state !== (pin.prState ?? null));
+}
+
+/**
+ * A card's board column: where it was dragged (while the pin holds), else its
+ * work stage. Waiting on you is a badge, not a column, so holding maps to the
+ * stage underneath.
+ * @param {any} issue
+ */
+export function boardColumn(issue) {
+  if (issue.kind === "backlog") return issue.stage;
+  if (pinHolds(issue.pin, issue.pr)) return issue.pin.column;
+  return issue.stage === "holding" ? deriveStage({ ...issue, holdingSince: null }) : issue.stage;
+}
+
 /**
  * The holding issue waiting longest; ties prefer the one with a PR.
  * @param {Issue[]} issues

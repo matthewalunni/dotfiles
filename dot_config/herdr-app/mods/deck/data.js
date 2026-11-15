@@ -11,7 +11,7 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 
@@ -590,6 +590,18 @@ export function markDiffReviewed(issue, sha) {
 export function dismiss(issue) {
   if (!issue?.key || issue.kind === "backlog") return;
   save(dismissIn(currentStore(), issue.key, Date.now()));
+}
+
+/**
+ * The person put a card in a board column (drag or ⇧H/⇧L): it stays there
+ * until a PR opens or merges.
+ * @param {Issue} issue @param {string} column
+ */
+export function moveCard(issue, column) {
+  if (!issue?.key || issue.kind === "backlog") return;
+  const prev = currentStore();
+  const next = pinColumn(prev, issue.key, column, Date.now());
+  if (next !== prev) save(next);
 }
 
 /** Opens a web link in the default browser (http/https only). */

@@ -127,10 +127,10 @@ test("columns start with Backlog", () => {
   const s = mergeBacklog(emptyStore(), [ent("a1"), ent("a2")], 10);
   const d = discardBacklog(s, "B-2", 11);
   const cols = boardColumns([...d.issues, { key: "t|b", stage: "build", dismissed: false, lastSeen: 1, holdingSince: null }]);
-  assert.deepEqual(cols.map((c) => c.stage), ["backlog", "holding", "survey", "build", "verify", "landed"]);
+  assert.deepEqual(cols.map((c) => c.stage), ["backlog", "survey", "build", "verify", "landed"]);
   assert.equal(cols[0].label, "Backlog");
   assert.deepEqual(cols[0].items.map((i) => i.id), ["B-1"]);
-  assert.equal(cols[3].items.length, 1);
+  assert.equal(cols[2].items.length, 1);
 });
 
 test(".. in repo is rejected", () => {

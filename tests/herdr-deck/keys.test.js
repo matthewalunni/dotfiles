@@ -28,6 +28,14 @@ test("h/l only on the board", () => {
   assert.deepEqual(keyAction(k("l"), ctx({ mode: "board" })), { type: "col", dx: 1 });
   assert.deepEqual(keyAction(k("v"), ctx()), { type: "toggleMode" });
 });
+test("⇧H/⇧L move the selected card a column on the board, not a backlog card", () => {
+  assert.deepEqual(keyAction(k("H", { shift: true }), ctx({ mode: "board" })), { type: "pinCol", dx: -1 });
+  assert.deepEqual(keyAction(k("l", { shift: true }), ctx({ mode: "board" })), { type: "pinCol", dx: 1 });
+  assert.equal(keyAction(k("L", { shift: true }), ctx({ mode: "board", backlog: true })), null);
+  assert.equal(keyAction(k("L", { shift: true }), ctx({ mode: "board", hasIssue: false })), null);
+  assert.equal(keyAction(k("L", { shift: true }), ctx()), null);
+  assert.equal(keyAction(k("L", { shift: true, held: true }), ctx({ mode: "board" })), null);
+});
 test("n/p are files only on the changes tab", () => {
   assert.deepEqual(keyAction(k("n"), ctx()), { type: "newTask" }); // v1.4: off the PR tab, n is New task
   assert.deepEqual(keyAction(k("n"), ctx({ tab: "changes" })), { type: "file", d: 1 });

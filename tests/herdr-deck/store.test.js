@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed, pinColumn } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -424,4 +424,42 @@ test("log says Started", () => {
   s = reconcile(s, [ob({ commitsAhead: 0 })], 2);
   assert.ok(s.log.some((e) => e.what === "moved to Started"), JSON.stringify(s.log));
   assert.ok(!s.log.some((e) => e.what === "moved to Survey"));
+});
+
+test("pinColumn pins a card's board column; reconcile keeps it", () => {
+  let s = reconcile(emptyStore(), [ob({ dirty: true })], 1);
+  const k = K(s, "t7");
+  assert.equal(T(s, "t7").stage, "build");
+  s = pinColumn(s, k, "survey", 2);
+  assert.deepEqual(get(s, k).pin, { column: "survey", prState: null, at: 2 });
+  assert.equal(s.log.at(-1).what, "moved to Started by you");
+  s = reconcile(s, [ob({ dirty: true, commitsAhead: 3 })], 3);
+  assert.deepEqual(get(s, k).pin, { column: "survey", prState: null, at: 2 });
+  // Unknown column, unknown key, backlog: unchanged.
+  assert.equal(pinColumn(s, k, "holding", 4), s);
+  assert.equal(pinColumn(s, "nope", "build", 4), s);
+});
+
+test("a PR opening after the pin clears it; so does a merge", () => {
+  let s = reconcile(emptyStore(), [ob()], 1);
+  const k = K(s, "t7");
+  s = pinColumn(s, k, "build", 2);
+  s = reconcile(s, [ob({ pr: pr() })], 3);
+  assert.equal(get(s, k).pin, null);
+  s = pinColumn(s, k, "build", 4);
+  assert.equal(get(s, k).pin.prState, "OPEN");
+  s = reconcile(s, [ob({ pr: pr() })], 5);
+  assert.equal(get(s, k).pin.column, "build");
+  s = updatePr(s, k, { pr: pr({ state: "MERGED" }), ghError: null, claims: [] }, 6);
+  assert.equal(get(s, k).pin, null);
+});
+
+test("a card pinned to Landed clears after 7 days like a merged one", () => {
+  let s = reconcile(emptyStore(), [ob()], 1);
+  const k = K(s, "t7");
+  s = pinColumn(s, k, "landed", 2);
+  s = reconcile(s, [ob()], 3 + DAY);
+  assert.ok(get(s, k));
+  s = reconcile(s, [ob()], 3 + 8 * DAY);
+  assert.equal(get(s, k), undefined);
 });

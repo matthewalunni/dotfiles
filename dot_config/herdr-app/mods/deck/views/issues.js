@@ -8,7 +8,7 @@ import { shared, setShared, notify, home } from "herdr";
 import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince, projectOf } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
-  currentStore, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
+  currentStore, reply, pressOption, requestProof, dismiss, moveCard, openUrl, openEvidence, focusTerminal,
   discardEntry, restoreEntry, STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY, START_ERR_KEY,
 } from "../data.js";
 import { previewPlan, backlogFiler } from "../lib/backlog.js";
@@ -19,7 +19,7 @@ import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
 import { boardColumns, moveBoard } from "../lib/board.js";
-import { STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
+import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue } from "./focus.js";
@@ -693,6 +693,14 @@ export default class IssuesView extends View {
           const r = this.rowAt.get(next.key);
           if (r != null) this.listScroll.scroll_to_item(r);
         } else return;
+        break;
+      }
+      case "pinCol": {
+        if (!board || !issue) return;
+        const at = PIN_COLUMNS.indexOf(boardColumn(issue));
+        const to = PIN_COLUMNS[at < 0 ? 0 : Math.max(0, Math.min(PIN_COLUMNS.length - 1, at + a.dx))];
+        if (to === boardColumn(issue)) return;
+        moveCard(issue, to);
         break;
       }
       case "open":

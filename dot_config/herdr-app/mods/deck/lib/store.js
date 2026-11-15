@@ -1,5 +1,5 @@
 // The issue store: turns each poll's observations into stable issues. Pure; no herdr imports.
-import { deriveStage, nextHolding, STAGE_LABEL } from "./stage.js";
+import { deriveStage, nextHolding, pinHolds, PIN_COLUMNS, STAGE_LABEL } from "./stage.js";
 import { samePrompt } from "./prompt.js";
 
 /** @typedef {"working"|"blocked"|"done"|"idle"} Status */
@@ -20,7 +20,8 @@ import { samePrompt } from "./prompt.js";
  *   answered: Prompt|null, repliedAt: number|null, reviewedSha: string|null,
  *   quiet: boolean, quietPrompt: Prompt|null, quietAt: number|null,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
- *   observed: boolean, lastSeen: number
+ *   observed: boolean, lastSeen: number,
+ *   pin?: { column: string, prState: string|null, at: number }|null
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
@@ -218,6 +219,7 @@ export function reconcile(store, obs, now) {
       answered: stillAck ? prev?.answered ?? null : null, repliedAt: stillAck ? prev?.repliedAt ?? null : null,
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
       reviewedSha: prev?.reviewedSha ?? null,
+      pin: pinHolds(prev?.pin, pr) ? prev.pin : null,
       observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
     };
@@ -281,7 +283,10 @@ function finish(store, now) {
   const retired = { ...(store.retired ?? {}) };
   const issues = store.issues.filter((i) => {
     if (isBacklog(i)) return true; // backlog entries expire in mergeBacklog
-    const expired = i.stage === "landed"
+    const pinnedLanded = i.pin?.column === "landed" && pinHolds(i.pin, i.pr);
+    const expired = pinnedLanded
+      ? i.pin.at < now - LANDED_TTL
+      : i.stage === "landed"
       ? i.landedAt != null && i.landedAt < now - LANDED_TTL
       : i.lastSeen != null && i.lastSeen < now - (i.observed === false ? ENDED_TTL : LANDED_TTL);
     // A still-running session's issue is retired so the next poll does not bring it back.
@@ -341,7 +346,7 @@ export function updatePr(store, key, fresh, now) {
   if (!prev || isBacklog(prev)) return store;
   const pr = fresh.pr ?? (fresh.ghError ? prev.pr ?? null : null);
   const mergedNow = pr?.state === "MERGED" && prev.pr?.state !== "MERGED";
-  const next = { ...prev, pr, ghError: fresh.ghError, claims: fresh.claims };
+  const next = { ...prev, pr, ghError: fresh.ghError, claims: fresh.claims, pin: pinHolds(prev.pin, pr) ? prev.pin : null };
   if (mergedNow) Object.assign(next, { holdingSince: null, quiet: true, quietPrompt: prev.prompt ?? null, quietAt: now });
   const sticky = prev.stage === "landed" && (prev.quiet ?? true);
   next.stage = sticky ? "landed" : deriveStage(next);
@@ -349,6 +354,22 @@ export function updatePr(store, key, fresh, now) {
   if (next.stage !== "landed") next.landedAt = null;
   const log = [...store.log, ...diffEvents(prev, next, now)];
   return finish({ ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log }, now);
+}
+
+/**
+ * The person dragged a card to a board column: it stays there until a PR opens
+ * or merges (see pinHolds). Unchanged store for a backlog entry, an unknown
+ * key or a column cards cannot be dragged to.
+ * @param {Store} store @param {string} key @param {string} column @param {number} now
+ * @returns {Store}
+ */
+export function pinColumn(store, key, column, now) {
+  if (!PIN_COLUMNS.includes(column)) return store;
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || isBacklog(prev)) return store;
+  const next = { ...prev, pin: { column, prState: prev.pr?.state ?? null, at: now } };
+  const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by you", tone: "work" }];
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
 /**

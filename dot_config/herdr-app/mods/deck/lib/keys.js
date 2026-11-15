@@ -58,6 +58,7 @@ function action(ev, ctx) {
   }
 
   if (issues && ctx.mode === "board") {
+    if (shift && (k === "h" || k === "l")) return ctx.hasIssue && !ctx.backlog ? { type: "pinCol", dx: k === "h" ? -1 : 1 } : null;
     if (k === "h") return { type: "col", dx: -1 };
     if (k === "l") return { type: "col", dx: 1 };
   }

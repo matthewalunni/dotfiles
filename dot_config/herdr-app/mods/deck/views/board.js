@@ -1,10 +1,12 @@
-// Issue board: one lane per project across six stage columns (Backlog first), and the LIST / BOARD toggle.
+// Issue board: one lane per project across five columns (Backlog first), and the LIST / BOARD toggle.
+// Drag a card to another column (or ⇧H/⇧L) and it stays there until a PR opens or merges.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { setShared } from "herdr";
 import { boardColumns, boardLanes, boardNote, repoColor } from "../lib/board.js";
 import { minutesSince, prChip } from "../lib/present.js";
-import { MODE_KEY, currentStore } from "../data.js";
+import { MODE_KEY, currentStore, moveCard } from "../data.js";
+import { PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { heading, label, stageColor, dot, keyChip } from "./ui.js";
 import { newTaskButton } from "./newtask.js";
 
@@ -29,6 +31,10 @@ export function modeToggle(mode, k, after) {
   return h_flex().flex_none().items_center().gap(6).child(one("list", "LIST")).child(one("board", "BOARD")).child(keyChip("V"));
 }
 
+// The card being dragged (its key) and the column under the pointer.
+let drag = null;
+let over = null;
+
 const ago = (issue, now) => {
   const since = issue.holdingSince ?? issue.createdAt ?? issue.lastSeen;
   const m = minutesSince(since, now);
@@ -49,22 +55,25 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
     const note = boardNote(i, currentStore().issues);
     // A backlog card has no PR: the selected one shows its key.
     const pc = entry ? { text: on ? "S start" : "—" } : prChip(i);
+    const waiting = i.stage === "holding";
     return v_flex()
       .id("card-" + i.key)
       .flex_none()
-      .bg(k.panel)
+      .bg(drag === i.key ? k.raised : k.panel)
       .border_1()
-      .border_color(on ? k.brand : k.line)
+      .border_color(on ? k.brand : waiting ? k.hold : k.line)
       .px(11)
       .py(10)
       .gap(7)
       .cursor_pointer()
       .hover((s) => s.bg(k.raised))
+      .when(!entry, (el) => el.on_mouse_down("left", () => { drag = i.key; over = null; }))
       .on_click(() => onCard(i))
       .child(
         h_flex()
           .gap(8)
           .child(div().text_color(k.muted).child(i.id))
+          .when(waiting, (el) => el.child(div().text_color(k.hold).child("● waiting")))
           .child(div().flex_1())
           .child(div().text_color(k.muted).child(ago(i, now))),
       )
@@ -90,21 +99,39 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
       .px(12)
       .pb(4)
       .border_b(2)
-      .border_color(c.stage === "holding" ? k.hold : k.line)
+      .border_color(k.line)
       .child(dot(accent, 9, true))
       .child(label(c.label, accent))
       .child(div().text_color(k.muted).child(String(c.items.length)));
   };
-  const cell = (c, items) => {
-    const hot = c.stage === "holding" && items.length > 0;
+  const cell = (c, items, project) => {
+    const target = PIN_COLUMNS.includes(c.stage);
+    const hot = target && drag != null && over === c.stage;
     return v_flex()
+      .id("cell-" + (project ?? "-") + "-" + c.stage)
       .flex_1()
       .min_w(0)
+      .min_h(40)
       .gap(8)
       .p(6)
       .border_1()
-      .border_color(hot ? k.hold : "#00000000")
-      .when(hot, (el) => el.bg(k.holdBg))
+      .border_color(hot ? k.brand : "#00000000")
+      .when(target, (el) =>
+        el
+          .on_hover((h, cx) => {
+            if (drag == null) return;
+            if (h) over = c.stage;
+            else if (over === c.stage) over = null;
+            cx.notify();
+          })
+          .on_mouse_up("left", (_e, cx) => {
+            const it = drag && (issues ?? []).find((x) => x.key === drag);
+            drag = null;
+            over = null;
+            if (it && boardColumn(it) !== c.stage) moveCard(it, c.stage);
+            cx.notify();
+          }),
+      )
       .children(items.map(card));
   };
   const lane = (l) =>
@@ -124,12 +151,20 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .child(div().text_color(l.project ? k.strong : k.muted).child(l.project ?? "no project"))
           .child(div().text_color(k.muted).child(String(l.count))),
       )
-      .child(h_flex().items_start().gap(12).children(cols.map((c, n) => cell(c, l.cells[n]))));
+      .child(h_flex().items_start().gap(12).children(cols.map((c, n) => cell(c, l.cells[n], l.project))));
   const lanes = boardLanes(cols);
   return v_flex()
+    .id("board")
     .flex_1()
     .min_w(0)
     .h_full()
+    // A drop outside a column cancels the drag.
+    .on_mouse_up("left", (_e, cx) => {
+      if (drag == null) return;
+      drag = null;
+      over = null;
+      cx.notify();
+    })
     .child(
       h_flex()
         .flex_none()
@@ -146,7 +181,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
         )
         .child(div().flex_1())
-        .child(div().text_color(k.muted).truncate().child("h l column · j k card · ↵ open · S start · X discard")),
+        .child(div().text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move card · ↵ open · S start · X discard")),
     )
     .child(
       v_flex()
@@ -180,15 +215,13 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .child(div().child("→"))
         .child(h_flex().gap(6).child(div().child("Started")).child(div().text_color(k.text).child("S, S")))
         .child(div().text_color(k.line).child("|"))
-        .child(div().text_color(k.text).child("Then cards move by themselves:"))
-        .child(div().child("Started"))
-        .child(div().child("→"))
-        .child(h_flex().gap(6).child(div().child("Build")).child(div().text_color(k.text).child("first edit")))
-        .child(div().child("→"))
+        .child(div().text_color(k.text).child("Cards move on their own when:"))
         .child(h_flex().gap(6).child(div().child("Verify")).child(div().text_color(k.text).child("PR opened")))
-        .child(div().child("→"))
+        .child(div().child("·"))
         .child(h_flex().gap(6).child(div().child("Landed")).child(div().text_color(k.text).child("merged")))
+        .child(div().text_color(k.line).child("|"))
+        .child(div().text_color(k.text).child("Drag a card to move it; it stays put"))
         .child(div().flex_1())
-        .child(div().text_color(k.hold).child("● Holding whenever the agent waits for you, from any column")),
+        .child(div().text_color(k.hold).child("● waiting on you")),
     );
 }
