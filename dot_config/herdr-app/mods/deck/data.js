@@ -118,14 +118,14 @@ async function createdMs(t) {
 
 async function gitState(cwd) {
   const git = (cmd) => sh("git", ["-C", cwd, ...cmd], { timeout: T_GIT });
-  const [cTop, cBranch, cBase, cAhead, cStatus] = GIT_CMDS;
+  const [cTop, cBranch, cBase, cAhead, cStatus, cCommon] = GIT_CMDS;
   const toplevel = await git(cTop);
   if (toplevel.code !== 0) return parseGitState({ toplevel, branch: toplevel, base: toplevel, ahead: null });
-  const [branch, base, status] = await Promise.all([git(cBranch), git(cBase), git(cStatus)]);
+  const [branch, base, status, common] = await Promise.all([git(cBranch), git(cBase), git(cStatus), git(cCommon)]);
   // Count against the remote's default branch when known (origin/main), else local "main".
   const baseRef = okText(base) || "main";
   const ahead = await git(cAhead.map((a) => a.replace("<base>", baseRef)));
-  return parseGitState({ toplevel, branch, base, ahead, status });
+  return parseGitState({ toplevel, branch, base, ahead, status, common });
 }
 
 async function prState(root, branch, base) {

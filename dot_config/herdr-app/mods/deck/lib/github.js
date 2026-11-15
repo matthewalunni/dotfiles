@@ -17,6 +17,7 @@ export const GIT_CMDS = [
   ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
   ["rev-list", "--count", "<base>..HEAD"],
   ["status", "--porcelain", "--untracked-files=normal"],
+  ["rev-parse", "--path-format=absolute", "--git-common-dir"],
 ];
 
 export const PR_FIELDS =
@@ -25,16 +26,24 @@ export const PR_FIELDS =
 const okOut = (r) => (r && r.code === 0 ? String(r.stdout ?? "").trim() : "");
 
 /**
- * @param {{ toplevel: ExecResult, branch: ExecResult, base: ExecResult, ahead: ExecResult|null, status?: ExecResult|null }} out
+ * `common` (git-common-dir) names a linked worktree after its main repo
+ * (…/taskflow/.git → "taskflow") rather than its own folder.
+ * @param {{ toplevel: ExecResult, branch: ExecResult, base: ExecResult, ahead: ExecResult|null, status?: ExecResult|null, common?: ExecResult|null }} out
  * @returns {{ repo: string|null, root: string|null, branch: string|null, base: string, commitsAhead: number|null, dirty: boolean }}
  */
+function repoName(root, common) {
+  const parts = common.split("/").filter(Boolean);
+  if (parts.length >= 2 && parts.at(-1) === ".git") return parts.at(-2);
+  return root.split("/").filter(Boolean).pop() ?? null;
+}
+
 export function parseGitState(out) {
   const root = okOut(out.toplevel);
   if (!root) return { repo: null, root: null, branch: null, base: "main", commitsAhead: null, dirty: false };
   const base = okOut(out.base).replace(/^origin\//, "") || "main";
   const n = out.ahead ? Number.parseInt(okOut(out.ahead), 10) : NaN;
   return {
-    repo: root.split("/").filter(Boolean).pop() ?? null,
+    repo: repoName(root, okOut(out.common ?? null)),
     root,
     branch: okOut(out.branch) || null,
     base,

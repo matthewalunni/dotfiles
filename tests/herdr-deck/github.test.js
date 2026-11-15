@@ -16,6 +16,7 @@ test("GIT_CMDS and PR_FIELDS are verbatim", () => {
     ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
     ["rev-list", "--count", "<base>..HEAD"],
     ["status", "--porcelain", "--untracked-files=normal"],
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
   ]);
   assert.equal(PR_FIELDS, "number,title,state,url,reviewDecision,statusCheckRollup,files,additions,deletions,baseRefName,headRefName,commits,headRefOid");
 });
@@ -78,6 +79,16 @@ test("parseGitState", () => {
   assert.equal(fb.commitsAhead, null);
   const none = parseGitState({ toplevel: bad(128, "fatal: not a git repository"), branch: bad(128, ""), base: bad(128, ""), ahead: null });
   assert.deepEqual(none, { repo: null, root: null, branch: null, base: "main", commitsAhead: null, dirty: false });
+});
+
+test("a worktree is named after its main repo, not its folder", () => {
+  const g = { toplevel: ok("/h/.herdr/worktrees/taskflow/ready-oauth\n"), branch: ok("ready-oauth\n"), base: ok("origin/main\n"), ahead: ok("0\n") };
+  const s = parseGitState({ ...g, common: ok("/h/Projects/taskflow/.git\n") });
+  assert.equal(s.repo, "taskflow");
+  assert.equal(s.root, "/h/.herdr/worktrees/taskflow/ready-oauth");
+  // No common dir, or not a .git folder (a bare repo): the folder name.
+  assert.equal(parseGitState({ ...g, common: bad(128, "") }).repo, "ready-oauth");
+  assert.equal(parseGitState({ ...g, common: ok("/srv/taskflow.git\n") }).repo, "ready-oauth");
 });
 
 test("status failure is clean", () => {
