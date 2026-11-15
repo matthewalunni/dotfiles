@@ -162,3 +162,21 @@ test("tomb cap keeps old ids from coming back", () => {
   const small = mergeBacklog({ ...emptyStore(), backlogTombs: { x: { state: "started", at: 1000 } } }, [ent("old", { createdAt: 500 })], 9000);
   assert.equal(backlog(small).length, 1);
 });
+
+test("issueAt finds the agent started in a worktree", async () => {
+  const { issueAt } = await import("../../dot_config/herdr-app/mods/deck/lib/backlog.js");
+  const wt = "/h/.herdr/worktrees/taskflow/chip";
+  const issues = [
+    { kind: "backlog", key: "backlog|x", root: wt, cwd: wt },
+    { key: "a", root: "/h/Projects/taskflow", cwd: "/h/Projects/taskflow", createdAt: 9 },
+    { key: "b", root: wt, cwd: wt + "/packages", createdAt: 5 },
+    { key: "c", root: null, cwd: wt, createdAt: 7, observed: false },
+    { key: "d", root: null, cwd: wt + "-other", createdAt: 8 },
+  ];
+  assert.equal(issueAt(issues, wt)?.key, "b");
+  assert.equal(issueAt(issues, wt + "/"), issueAt(issues, wt));
+  assert.equal(issueAt([...issues, { key: "e", root: wt, cwd: wt, createdAt: 6 }], wt)?.key, "e");
+  assert.equal(issueAt(issues, "/nowhere"), null);
+  assert.equal(issueAt(issues, ""), null);
+  assert.equal(issueAt(null, wt), null);
+});

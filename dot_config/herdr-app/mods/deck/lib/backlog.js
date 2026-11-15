@@ -322,3 +322,16 @@ export function inboxTail(text, max) {
   const nl = s.indexOf("\n");
   return nl < 0 ? "" : s.slice(nl + 1);
 }
+
+/**
+ * The live agent issue working in `path` (a started worktree): its root is
+ * the path, or its folder is inside it. The newest when there are several.
+ * @param {any[]|null|undefined} issues @param {string} path @returns {any|null}
+ */
+export function issueAt(issues, path) {
+  const p = String(path ?? "").replace(/\/+$/, "");
+  if (!p) return null;
+  const inside = (x) => typeof x === "string" && (x === p || x.startsWith(p + "/"));
+  const hits = (issues ?? []).filter((i) => i.kind !== "backlog" && i.observed !== false && (i.root === p || inside(i.cwd)));
+  return hits.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0] ?? null;
+}

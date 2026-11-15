@@ -10,7 +10,7 @@ import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/gi
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
-import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
+import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree, issueAt } from "./lib/backlog.js";
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
@@ -731,11 +731,28 @@ export async function startBacklog(entry) {
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
       done: () => save(markStarted(currentStore(), it.key, Date.now())),
     });
-    return { ok: r.ok, error: r.error };
+    return { ok: r.ok, error: r.error, path: r.plan?.path ?? null };
   } finally {
     starting.delete(it.key);
     refresh();
   }
+}
+
+/**
+ * After a start: waits (up to `ms`) for the collector to turn the new agent in
+ * worktree `path` into an issue, and returns it (null if it did not show up).
+ * @param {string|null} path @param {number} [ms]
+ */
+export async function waitForIssueAt(path, ms = 20_000) {
+  if (!path) return null;
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const it = issueAt(currentStore().issues, path);
+    if (it) return it;
+    refresh();
+    await sh("sleep", ["0.5"], { timeout: T_GIT });
+  }
+  return null;
 }
 
 /** X: the entry moves to the Discarded filter (kept 7 days). @param {Issue} entry */

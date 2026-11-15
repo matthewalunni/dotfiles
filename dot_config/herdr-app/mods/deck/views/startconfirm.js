@@ -7,7 +7,8 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, openOverlay, closeOverlay, notify, setShared, home } from "herdr";
-import { currentStore, startBacklog, START_ERR_KEY } from "../data.js";
+import { currentStore, startBacklog, waitForIssueAt, START_ERR_KEY } from "../data.js";
+import { openIssue } from "./focus.js";
 import { previewPlan } from "../lib/backlog.js";
 import { dialogKey } from "../lib/dialogkeys.js";
 import { remember, dialogOpen, dialogBeat, forgetDialog } from "./merge.js";
@@ -58,21 +59,32 @@ export default class StartConfirmView extends View {
       } catch (e) {
         r = { ok: false, error: String(e?.message ?? e) };
       }
-      if (r.ok) notify({ title: `Started an agent on ${entry.id}`, body: "It shows up in Started.", level: "success" });
-      else {
+      if (!r.ok) {
         setShared(START_ERR_KEY, { key: entry.key, error: r.error ?? "unknown error" });
         notify({ title: `Could not start ${entry.id}`, body: r.error ?? "unknown error", level: "error" });
+        this.busy = false;
+        this.shut();
+        cx.notify();
+        return;
       }
+      // The card is gone now: open the new agent's page (its live terminal on
+      // the right) once the collector has picked it up. The dialog stays up
+      // meanwhile ("Opening…"): closing it would cancel this task.
+      this.opening = true;
+      cx.notify();
+      const issue = await waitForIssueAt(r.path ?? null);
+      if (issue) openIssue(issue);
+      else notify({ title: `Started an agent on ${entry.id}`, body: "It shows up in Started.", level: "success" });
       this.busy = false;
       this.shut();
-      cx.notify();
     });
   }
 
   render(_cx) {
     const k = tokens();
     const p = props() ?? {};
-    const entry = liveEntry(p.key);
+    const entry = liveEntry(p.key) ?? (this.opening ? this.entry : null);
+    if (entry) this.entry = entry;
     const plan = entry ? previewPlan(entry, home()) : null;
     const branch = plan && "branch" in plan ? plan.branch : null;
     const tilde = (x) => {
@@ -129,7 +141,7 @@ export default class StartConfirmView extends View {
           .justify_end()
           .gap(8)
           .child(button("start-cancel", "Cancel", "plain", () => this.shut(), false, "esc"))
-          .child(button("start-go", this.busy ? "Starting…" : "Start", "brand", (_e, cx) => this.start(cx), this.busy || !entry, "S")),
+          .child(button("start-go", this.opening ? "Opening…" : this.busy ? "Starting…" : "Start", "brand", (_e, cx) => this.start(cx), this.busy || !entry, "S")),
       );
   }
 }
