@@ -20,7 +20,7 @@ import { currentStore, STORE_KEY, SEL_KEY, TAB_KEY, ISSUE_FROM_KEY, VIEW_KEY } f
 import { MONO, tokens, label, keyChip, heading, keyOf } from "./ui.js";
 import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./issues.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide } from "./focus.js";
+import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide, keepFresh, drew } from "./focus.js";
 import { shownChild } from "../lib/views.js";
 
 /** The selected issue, or null (it was dismissed or expired). */
@@ -54,6 +54,7 @@ function typeInThread(issue) {
 
 export default class IssuePage extends View {
   init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
     initDetail(this);
     this.side = null; // the right side last selected ("terminal" | "gone")
     this.handle = cx.focus_handle();
@@ -106,6 +107,7 @@ export default class IssuePage extends View {
   }
 
   render(cx) {
+    drew(this);
     shared(STORE_KEY); // re-render on store changes
     const k = tokens();
     const issue = selectedIssue();
@@ -152,9 +154,12 @@ export default class IssuePage extends View {
 
 /** "Live thread" over the pane: what it is, and how the keyboard gets in and out. */
 export class ThreadView extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
@@ -190,9 +195,12 @@ export class ThreadView extends View {
 
 /** The right side when the issue's terminal is gone (a backlog entry: "No agent yet"). */
 export class GoneView extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
@@ -237,9 +245,12 @@ const BACKLOG_HINTS = [["esc", "back"], ["j k", "issue"], ["S", "start agent (S 
 
 /** The key strip along the page's bottom. */
 export class IssueHints extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const entry = selectedIssue()?.kind === "backlog";

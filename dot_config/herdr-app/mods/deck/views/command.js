@@ -11,7 +11,7 @@ import { BARLOW, MONO, tokens, tone, stageColor, label, heading, button, ring, p
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { openNewTask } from "./newtask.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, focusOnShow, openIssue } from "./focus.js";
+import { registerFocus, focusOnShow, openIssue, keepFresh, drew } from "./focus.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding · you" };
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -36,6 +36,7 @@ function readout(c, k) {
 
 export default class CommandView extends View {
   init(_p, cx) {
+    keepFresh(this, cx, "deck-command");
     this.scroll = ScrollHandle.new();
     this.busy = null;
     this.cur = null; // the row j/k moves (an issue key); default: the decision
@@ -293,6 +294,7 @@ export default class CommandView extends View {
   }
 
   render(cx) {
+    drew(this);
     shared(STORE_KEY); // re-render on store changes
     // Shown (first draw, back from another view): the keys are ours.
     focusOnShow(this, "deck-command", () => this.handle.focus(), cx);

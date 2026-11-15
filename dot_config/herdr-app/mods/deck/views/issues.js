@@ -23,7 +23,7 @@ import { boardColumns, moveBoard } from "../lib/board.js";
 import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, goTo, focusOnShow, openIssue } from "./focus.js";
+import { registerFocus, goTo, focusOnShow, openIssue, keepFresh, drew } from "./focus.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding for you" };
 const VIEWS = [
@@ -642,6 +642,7 @@ function rail(host, issue, k) {
 
 export default class IssuesView extends View {
   init(_p, cx) {
+    keepFresh(this, cx, "deck-issues");
     this.filter = null;
     this.listScroll = ScrollHandle.new();
     initDetail(this);
@@ -915,6 +916,7 @@ export default class IssuesView extends View {
   }
 
   render(cx) {
+    drew(this);
     shared(STORE_KEY); // re-render on store changes
     const k = tokens();
     const store = currentStore();

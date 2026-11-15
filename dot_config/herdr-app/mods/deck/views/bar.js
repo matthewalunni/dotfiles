@@ -13,7 +13,7 @@ import { navChild } from "../lib/views.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
-import { goTo, focusedAgent, openIssue } from "./focus.js";
+import { goTo, focusedAgent, openIssue, keepFresh, drew } from "./focus.js";
 import { backTarget } from "../lib/issuepage.js";
 
 const BARLOW = "Barlow Condensed";
@@ -115,6 +115,7 @@ function holdingChip(k, holding, next) {
 
 export default class BarView extends View {
   init(_p, cx) {
+    keepFresh(this, cx, null);
     // keys.json "deck.<command>" lands here (the bar is shown in every Deck view).
     // A rejected nextCommand() logs and the loop goes on; two rejections in a
     // row wait a tick first, so a broken channel can't spin.
@@ -148,6 +149,7 @@ export default class BarView extends View {
   }
 
   render(cx) {
+    drew(this);
     const k = deckTokens(theme());
     // A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
     // The issue page underlines Issues (lib/views.js navChild).
