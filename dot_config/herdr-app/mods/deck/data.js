@@ -11,7 +11,7 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn } from "./lib/store.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 
@@ -590,6 +590,18 @@ export function markDiffReviewed(issue, sha) {
 export function dismiss(issue) {
   if (!issue?.key || issue.kind === "backlog") return;
   save(dismissIn(currentStore(), issue.key, Date.now()));
+}
+
+/**
+ * Delete: the card goes and this agent session is never tracked again.
+ * Deck's record only: the terminal, branch and PR are untouched.
+ * @param {Issue} issue
+ */
+export function deleteIssue(issue) {
+  if (!issue?.key || issue.kind === "backlog") return;
+  const prev = currentStore();
+  const next = removeIssue(prev, issue.key, Date.now());
+  if (next !== prev) save(next);
 }
 
 /**

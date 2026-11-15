@@ -6,14 +6,16 @@
 
 /**
  * @param {{key: string, shift: boolean, cmd: boolean, held?: boolean}} ev
- * @param {{kind: "confirm"|"review"|"start", next?: "merge"|"ship"|"anyway"}|null} dialog
- * @returns {"confirm"|"review"|"proceed"|"cancel"|null}
+ * @param {{kind: "confirm"|"review"|"start"|"remove", next?: "merge"|"ship"|"anyway"}|null} dialog
+ * @returns {"confirm"|"review"|"proceed"|"cancel"|"dismiss"|"delete"|null}
  */
 export function dialogKey(ev, dialog) {
   if (!dialog || ev?.cmd || ev?.held) return null;
   const k = String(ev?.key ?? "").toLowerCase();
-  if (k === "escape") return dialog.kind === "confirm" || dialog.kind === "review" || dialog.kind === "start" ? "cancel" : null;
+  if (k === "escape") return dialog.kind === "confirm" || dialog.kind === "review" || dialog.kind === "start" || dialog.kind === "remove" ? "cancel" : null;
   if (dialog.kind === "start") return k === "s" ? "confirm" : null;
+  // Remove (D on an issue): D again dismisses, X deletes.
+  if (dialog.kind === "remove") return k === "escape" ? "cancel" : k === "d" ? "dismiss" : k === "x" ? "delete" : null;
   const ship = (dialog.next ?? "anyway") === "ship";
   const same = k === "m" && Boolean(ev.shift) === ship;
   if (dialog.kind === "confirm") return same ? "confirm" : null;

@@ -40,3 +40,13 @@ test("unknown dialog is null", () => {
   assert.equal(dialogKey(k("m"), { kind: "other" }), null);
   assert.equal(dialogKey(k("m"), null), null);
 });
+
+test("remove: D again dismisses, X deletes, esc cancels; nothing else", () => {
+  const r = { kind: "remove" };
+  assert.equal(dialogKey(k("d"), r), "dismiss");
+  assert.equal(dialogKey(k("x"), r), "delete");
+  assert.equal(dialogKey(k("escape"), r), "cancel");
+  for (const key of ["enter", "m", "s", "j"]) assert.equal(dialogKey(k(key), r), null);
+  assert.equal(dialogKey(k("x", { held: true }), r), null);
+  assert.equal(dialogKey(k("d", { cmd: true }), r), null);
+});

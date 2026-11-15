@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed, pinColumn } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -462,4 +462,23 @@ test("a card pinned to Landed clears after 7 days like a merged one", () => {
   assert.ok(get(s, k));
   s = reconcile(s, [ob()], 3 + 8 * DAY);
   assert.equal(get(s, k), undefined);
+});
+
+test("removeIssue deletes the card and stops tracking that session", () => {
+  let s = reconcile(emptyStore(), [ob(), ob({ terminal: "t9" })], 1);
+  const k = K(s, "t7");
+  s = removeIssue(s, k, 2);
+  assert.equal(get(s, k), undefined);
+  assert.equal(s.log.at(-1).what, "deleted by you");
+  // The same session keeps running: no card comes back.
+  s = reconcile(s, [ob({ status: "blocked" }), ob({ terminal: "t9" })], 3);
+  assert.equal(T(s, "t7"), undefined);
+  assert.equal(s.issues.length, 1);
+  // A new session in that terminal is a new card.
+  s = reconcile(s, [ob({ session: 99 }), ob({ terminal: "t9" })], 4);
+  assert.ok(T(s, "t7"));
+  // Unknown key or a backlog entry: unchanged.
+  assert.equal(removeIssue(s, "nope", 5), s);
+  const bl = { ...s, issues: [...s.issues, { kind: "backlog", key: "backlog|x", id: "B-1" }] };
+  assert.equal(removeIssue(bl, "backlog|x", 5), bl);
 });

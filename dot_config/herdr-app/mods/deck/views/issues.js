@@ -13,6 +13,7 @@ import {
 } from "../data.js";
 import { previewPlan, backlogFiler } from "../lib/backlog.js";
 import { startKey } from "./startconfirm.js";
+import { removeKey } from "./remove.js";
 import { openNewTask, newTaskButton } from "./newtask.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
@@ -172,6 +173,8 @@ export function detailKey(host, a, issue, st, cx) {
     case "start":
       // Opens the confirm; only its second S starts.
       return st.backlog && startKey(host, issue);
+    case "remove":
+      return !st.backlog && removeKey(host, issue);
     case "discard":
       if (!st.backlog || host.busy) return false;
       discardEntry(issue);
@@ -432,7 +435,7 @@ function actions(host, issue, k, stacked) {
   if (live && issue.root) {
     row.child(button("act-proof", "Request proof", "plain", (_e, cx) => runFor(host, cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
   }
-  if (issue.stage !== "landed" && issue.kind !== "backlog") row.child(button("act-dismiss", "Dismiss", "plain", () => dismiss(issue), busy));
+  if (issue.kind !== "backlog") row.child(button("act-dismiss", "Remove…", "plain", () => removeKey(host, issue), busy, "D"));
   row.children(mergeButtons(host, issue, "act"));
   if (stacked && issue.pr?.url) {
     row.child(button("act-github", "GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"), false, "O"));
@@ -931,6 +934,9 @@ export default class IssuesView extends View {
     const root = h_flex()
       .id("deck-issues")
       .track_focus(this.handle)
+      // A press anywhere here takes the keyboard back from a terminal (the
+      // reply box takes it again on its own press).
+      .on_mouse_down("left", () => { if (!this.typing) this.handle.focus(); })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
     root.child(this.sidebar(issues, k));

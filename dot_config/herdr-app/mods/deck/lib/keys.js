@@ -76,6 +76,7 @@ function action(ev, ctx) {
     return null;
   }
   switch (k) {
+    case "d": return { type: "remove" };
     case "r": return { type: "reply" };
     case "t": return { type: "terminal" };
     case "p": return { type: "proof" };

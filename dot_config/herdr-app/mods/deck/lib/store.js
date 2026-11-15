@@ -357,6 +357,22 @@ export function updatePr(store, key, fresh, now) {
 }
 
 /**
+ * The person deleted an issue: drop its card and retire its session, so the
+ * same agent run never makes a card again (a new session in that terminal
+ * does). Unchanged store for a backlog entry or an unknown key.
+ * @param {Store} store @param {string} key @param {number} now
+ * @returns {Store}
+ */
+export function removeIssue(store, key, now) {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || isBacklog(prev)) return store;
+  const retired = { ...(store.retired ?? {}) };
+  if (prev.observed !== false) retired[RETIRED_TAG + sessionTag(prev.terminal, prev.session ?? null)] = now;
+  const log = [...store.log, { t: now, key, id: prev.id, what: "deleted by you", tone: "warn" }];
+  return { ...store, issues: store.issues.filter((i) => i !== prev), retired, log };
+}
+
+/**
  * The person dragged a card to a board column: it stays there until a PR opens
  * or merges (see pinHolds). Unchanged store for a backlog entry, an unknown
  * key or a column cards cannot be dragged to.

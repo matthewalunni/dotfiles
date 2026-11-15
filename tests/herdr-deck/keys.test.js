@@ -129,3 +129,13 @@ test("issue page: every detail key, none of the list's", () => {
   assert.equal(keyAction(k("1", { held: true }), page()), null);
   assert.equal(keyAction(k("m", { held: true }), page()), null);
 });
+
+test("D opens remove for an agent issue, not a backlog card", () => {
+  assert.deepEqual(keyAction(k("d"), ctx()), { type: "remove" });
+  assert.deepEqual(keyAction(k("d"), ctx({ mode: "board" })), { type: "remove" });
+  assert.deepEqual(keyAction(k("d"), ctx({ view: "issue" })), { type: "remove" });
+  assert.equal(keyAction(k("d"), ctx({ backlog: true })), null);
+  assert.equal(keyAction(k("d"), ctx({ hasIssue: false })), null);
+  assert.equal(keyAction(k("d"), ctx({ typing: true })), null);
+  assert.equal(keyAction(k("d", { held: true }), ctx()), null);
+});
