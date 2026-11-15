@@ -51,4 +51,25 @@ Run this every time you finish a task, open a PR, or ask to merge, and start fro
 
 5. **Check it**: `node -e 'JSON.parse(require("fs").readFileSync(".herdr/proof.json","utf8"))'`, and `ls -l` each `path` to confirm it is non-empty. State in your summary which claims have no evidence.
 
+6. **Show the screenshots.** If you captured any images, open them beside your pane so Matt sees them without leaving Herdr: `herdr-show-images .herdr/proof/*.png` (any image paths work). It splits a column to the right of your pane with the images stacked; Matt closes it like any pane. If the command is missing or fails, say where the images are instead.
+
+7. **Prove database changes in Harlequin.** When the task writes to or changes a local database (new tables, migrations, rows written by the feature), or Matt asks you to prove it in the database, show it live in a Harlequin column beside your pane:
+
+   ```sh
+   command -v harlequin >/dev/null || uv tool install 'harlequin[postgres]'
+   pane=$(herdr-app ls | jq -r --arg t "$HC_TERMINAL_ID" \
+     '[.spaces[].tabs[].terminals[] | select(.terminal == $t) | .pane][0] // empty')
+   herdr-app do pane.split --direction right ${pane:+--pane $pane} \
+     --argv '["harlequin","-a","postgres","<connection string>"]'   # prints {"terminal": "tN", ...}
+   hc wait tN --output "Database Connected" --timeout 15
+   hc send tN "<select that shows the change>;" && hc keys tN ctrl+j   # ctrl+j runs the query
+   hc wait tN --output "Records" --timeout 10
+   hc read tN > .herdr/proof/db-<what>.txt                             # evidence for proof.json
+   ```
+
+   - Use the project's local connection string (for taskflow: `postgres://taskflow:taskflow@localhost:5433/taskflow`, from `docker-compose.yml`). Never point it at a production database.
+   - Write a query that proves the claim (join the rows the feature wrote, show the new columns), not `select *` on everything. Read-only queries only.
+   - Check the saved screen shows the expected rows before citing it as evidence. Leave the column open for Matt; he closes it like any pane.
+   - Use `pane.split` with your own pane, not `hc run --bg`: a background terminal is a hidden sub-agent, not a visible column.
+
 `git status` must not list `.herdr/`.
