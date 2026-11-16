@@ -59,15 +59,16 @@ Run this every time you finish a task, open a PR, or ask to merge, and start fro
    command -v harlequin >/dev/null || uv tool install 'harlequin[postgres]'
    pane=$(herdr-app ls | jq -r --arg t "$HC_TERMINAL_ID" \
      '[.spaces[].tabs[].terminals[] | select(.terminal == $t) | .pane][0] // empty')
+   cfg="$PWD/.harlequin.toml"   # the repo's own profile for its local database
    herdr-app do pane.split --direction right ${pane:+--pane $pane} \
-     --argv '["harlequin","-a","postgres","<connection string>"]'   # prints {"terminal": "tN", ...}
+     --argv "[\"harlequin\",\"--config-path\",\"$cfg\"]"   # prints {"terminal": "tN", ...}
    hc wait tN --output "Database Connected" --timeout 15
    hc send tN "<select that shows the change>;" && hc keys tN ctrl+j   # ctrl+j runs the query
    hc wait tN --output "Records" --timeout 10
    hc read tN > .herdr/proof/db-<what>.txt                             # evidence for proof.json
    ```
 
-   - Use the project's local connection string (for taskflow: `postgres://taskflow:taskflow@localhost:5433/taskflow`, from `docker-compose.yml`). Never point it at a production database.
+   - The repo root's `.harlequin.toml` holds the profile for the project's local database. If the repo has none, add one there (with the connection string from the project's `docker-compose.yml` or dev setup), never in the dotfiles. Never point it at a production database.
    - Write a query that proves the claim (join the rows the feature wrote, show the new columns), not `select *` on everything. Read-only queries only.
    - Check the saved screen shows the expected rows before citing it as evidence. Leave the column open for Matt; he closes it like any pane.
    - Use `pane.split` with your own pane, not `hc run --bg`: a background terminal is a hidden sub-agent, not a visible column.
