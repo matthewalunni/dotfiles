@@ -205,7 +205,10 @@ export function reconcile(store, obs, now) {
     const dismissed = wasLanded && !sticky ? false : prev?.dismissed ?? false;
     const landing = sticky || dismissed || mergedNow;
     const stillAck = ackHeld(prev, o, now);
-    const holdingSince = landing
+    // On a landed card (merged, or marked Done by you) an agent that just
+    // finished a turn isn't waiting on you; only a blocked prompt is.
+    const inLanded = pr?.state === "MERGED" || (pinHolds(prev?.pin, pr) && prev.pin.column === "landed");
+    const holdingSince = landing || (inLanded && o.status !== "blocked")
       ? null
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
     const next = {
@@ -384,6 +387,11 @@ export function pinColumn(store, key, column, now) {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev)) return store;
   const next = { ...prev, pin: { column, prState: prev.pr?.state ?? null, at: now } };
+  // Done: a finished turn stops counting as waiting (a blocked prompt still does).
+  if (column === "landed" && prev.stage === "holding" && prev.status !== "blocked") {
+    next.holdingSince = null;
+    next.stage = deriveStage(next);
+  }
   const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by you", tone: "work" }];
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }

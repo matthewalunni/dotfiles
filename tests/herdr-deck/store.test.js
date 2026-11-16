@@ -400,17 +400,17 @@ test("N1: merge quiets only the done screen showing at merge time", () => {
   assert.equal(T(s, "t7").stage, "holding");
 });
 
-test("N1: merge quiet ends on a different prompt or after 15 s", () => {
+test("N1: after a merge, finished turns never re-flag; a blocked prompt does", () => {
   const start = () => {
     let s = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ, pr: pr() })], 1);
     return reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000);
   };
   let s = reconcile(start(), [ob({ status: "done", prompt: { kind: "question", text: "Shipped.", options: [] }, pr: pr({ state: "MERGED" }) })], 2000);
-  assert.equal(T(s, "t7").holdingSince, 2000);
-  s = reconcile(start(), [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000 + 14999);
   assert.equal(T(s, "t7").holdingSince, null);
-  s = reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000 + 15000);
-  assert.equal(T(s, "t7").holdingSince, 16000);
+  s = reconcile(start(), [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 1000 + 15000);
+  assert.equal(T(s, "t7").holdingSince, null);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run git push?"), pr: pr({ state: "MERGED" }) })], 1000 + 16000);
+  assert.equal(T(s, "t7").holdingSince, 17000);
 });
 
 test("N4: same session in a different folder is the same issue", () => {
@@ -481,4 +481,35 @@ test("removeIssue deletes the card and stops tracking that session", () => {
   assert.equal(removeIssue(s, "nope", 5), s);
   const bl = { ...s, issues: [...s.issues, { kind: "backlog", key: "backlog|x", id: "B-1" }] };
   assert.equal(removeIssue(bl, "backlog|x", 5), bl);
+});
+
+test("a landed card is not waiting on you just because its agent finished a turn", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done", pr: pr({ state: "MERGED" }) })], 1);
+  s = reconcile(s, [ob({ status: "working", pr: pr({ state: "MERGED" }) })], 2);
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ, pr: pr({ state: "MERGED" }) })], 3);
+  assert.equal(T(s, "t7").holdingSince, null);
+  assert.equal(T(s, "t7").stage, "landed");
+  // A permission prompt still needs you.
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run git push?"), pr: pr({ state: "MERGED" }) })], 4);
+  assert.equal(T(s, "t7").stage, "holding");
+});
+
+test("Done (pinned to Landed) clears waiting now and keeps it off after the agent's turns", () => {
+  let s = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ })], 1);
+  const k = K(s, "t7");
+  assert.equal(get(s, k).stage, "holding");
+  s = pinColumn(s, k, "landed", 2);
+  assert.equal(get(s, k).holdingSince, null);
+  assert.notEqual(get(s, k).stage, "holding");
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ })], 3);
+  assert.equal(get(s, k).holdingSince, null);
+  s = reconcile(s, [ob({ status: "working" })], 4);
+  s = reconcile(s, [ob({ status: "done", prompt: doneQ })], 5);
+  assert.equal(get(s, k).holdingSince, null);
+  s = reconcile(s, [ob({ status: "blocked", prompt: ask("Run rm?") })], 6);
+  assert.equal(get(s, k).stage, "holding");
+  // Pinning elsewhere doesn't clear waiting.
+  let t = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ })], 1);
+  t = pinColumn(t, K(t, "t7"), "build", 2);
+  assert.equal(T(t, "t7").stage, "holding");
 });
