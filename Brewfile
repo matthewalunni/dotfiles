@@ -46,6 +46,9 @@ brew "watchman"
 brew "docker-compose"
 brew "lazydocker"
 
+# Databases
+brew "uv"  # installs harlequin (see install.sh)
+
 # Media
 brew "homebrew-ffmpeg/ffmpeg/ffmpeg"
 brew "imagemagick"

@@ -46,6 +46,12 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
     success "Homebrew packages installed"
 
+    if ! command -v harlequin &>/dev/null; then
+        info "Installing harlequin (Postgres TUI)..."
+        uv tool install 'harlequin[postgres]'
+        success "harlequin installed"
+    fi
+
     if [[ "$SHELL" != "$(command -v zsh)" ]]; then
         info "Setting default shell to zsh..."
         chsh -s "$(command -v zsh)"
