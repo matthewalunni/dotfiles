@@ -38,3 +38,15 @@ test("navChild: the issue page underlines Issues", () => {
   assert.equal(navChild("deck-work"), "deck-command");
   assert.equal(navChild(undefined), "deck-command");
 });
+
+test("drawSig changes with the selection, view and store events, not otherwise", async () => {
+  const { drawSig } = await import("../../dot_config/herdr-app/mods/deck/lib/views.js");
+  const base = { layout: "deck", "deck.view": "deck-issue", "deck.selected": "a", "deck.store": { issues: [1, 2], log: [{ t: 5, key: "a" }] } };
+  const sig = (o) => drawSig((k) => ({ ...base, ...o })[k]);
+  assert.equal(sig({}), sig({}));
+  assert.notEqual(sig({}), sig({ "deck.selected": "b" }));
+  assert.notEqual(sig({}), sig({ "deck.view": "deck-issues" }));
+  assert.notEqual(sig({}), sig({ layout: "main" }));
+  assert.notEqual(sig({}), sig({ "deck.store": { issues: [1, 2], log: [{ t: 5, key: "a" }, { t: 6, key: "b" }] } }));
+  assert.equal(drawSig(() => undefined), drawSig(() => null));
+});

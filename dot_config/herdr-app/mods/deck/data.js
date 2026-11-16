@@ -10,8 +10,8 @@ import { GIT_CMDS, PR_FIELDS, parseGitState, parsePr, headCheck } from "./lib/gi
 import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib/proof.js";
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
-import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed } from "./lib/store.js";
+import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree, issueAt } from "./lib/backlog.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 
@@ -118,14 +118,14 @@ async function createdMs(t) {
 
 async function gitState(cwd) {
   const git = (cmd) => sh("git", ["-C", cwd, ...cmd], { timeout: T_GIT });
-  const [cTop, cBranch, cBase, cAhead, cStatus] = GIT_CMDS;
+  const [cTop, cBranch, cBase, cAhead, cStatus, cCommon] = GIT_CMDS;
   const toplevel = await git(cTop);
   if (toplevel.code !== 0) return parseGitState({ toplevel, branch: toplevel, base: toplevel, ahead: null });
-  const [branch, base, status] = await Promise.all([git(cBranch), git(cBase), git(cStatus)]);
+  const [branch, base, status, common] = await Promise.all([git(cBranch), git(cBase), git(cStatus), git(cCommon)]);
   // Count against the remote's default branch when known (origin/main), else local "main".
   const baseRef = okText(base) || "main";
   const ahead = await git(cAhead.map((a) => a.replace("<base>", baseRef)));
-  return parseGitState({ toplevel, branch, base, ahead, status });
+  return parseGitState({ toplevel, branch, base, ahead, status, common });
 }
 
 async function prState(root, branch, base) {
@@ -179,7 +179,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
   const cwd = pane?.cwd || term?.foreground?.cwd || term?.cwd || "";
   /** @type {Observation} */
   const o = {
-    terminal: t, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
+    terminal: t, session: null, space: a.space_name || null, status, title: a.title ?? "", cwd, repo: null, root: null, branch: null,
     commitsAhead: null, dirty: false, pr: null, ghError: null, claims: [], prompt: null, brief: null, replied: false,
   };
   try {
@@ -189,6 +189,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
       createdMs(t),
     ]);
     o.prompt = prompt;
+    o.session = after == null ? null : String(after);
     if (git) {
       o.repo = git.repo;
       o.root = git.root;
@@ -591,6 +592,30 @@ export function dismiss(issue) {
   save(dismissIn(currentStore(), issue.key, Date.now()));
 }
 
+/**
+ * Delete: the card goes and this agent session is never tracked again.
+ * Deck's record only: the terminal, branch and PR are untouched.
+ * @param {Issue} issue
+ */
+export function deleteIssue(issue) {
+  if (!issue?.key || issue.kind === "backlog") return;
+  const prev = currentStore();
+  const next = removeIssue(prev, issue.key, Date.now());
+  if (next !== prev) save(next);
+}
+
+/**
+ * The person put a card in a board column (drag or ⇧H/⇧L): it stays there
+ * until a PR opens or merges.
+ * @param {Issue} issue @param {string} column
+ */
+export function moveCard(issue, column) {
+  if (!issue?.key || issue.kind === "backlog") return;
+  const prev = currentStore();
+  const next = pinColumn(prev, issue.key, column, Date.now());
+  if (next !== prev) save(next);
+}
+
 /** Opens a web link in the default browser (http/https only). */
 export async function openUrl(url) {
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false, error: "not a web link" };
@@ -706,11 +731,28 @@ export async function startBacklog(entry) {
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
       done: () => save(markStarted(currentStore(), it.key, Date.now())),
     });
-    return { ok: r.ok, error: r.error };
+    return { ok: r.ok, error: r.error, path: r.plan?.path ?? null };
   } finally {
     starting.delete(it.key);
     refresh();
   }
+}
+
+/**
+ * After a start: waits (up to `ms`) for the collector to turn the new agent in
+ * worktree `path` into an issue, and returns it (null if it did not show up).
+ * @param {string|null} path @param {number} [ms]
+ */
+export async function waitForIssueAt(path, ms = 20_000) {
+  if (!path) return null;
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const it = issueAt(currentStore().issues, path);
+    if (it) return it;
+    refresh();
+    await sh("sleep", ["0.5"], { timeout: T_GIT });
+  }
+  return null;
 }
 
 /** X: the entry moves to the Discarded filter (kept 7 days). @param {Issue} entry */

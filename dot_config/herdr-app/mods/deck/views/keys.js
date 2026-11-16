@@ -9,14 +9,14 @@ import { BARLOW, MONO, tokens, spaced } from "./ui.js";
 const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
     ["⌥⌘1", "Command Center"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"],
-    ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"],
+    ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"], ["⌘esc", "Back from an issue (also from its thread)"],
     ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
   ] },
   { title: "Issues & Command", tone: "hold", rows: [
-    ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["↵", "Open issue"],
+    ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["⇧H ⇧L", "Board: move the card a column"], ["↵", "Open issue"],
     ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
-    ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"], ["N", "New task"],
+    ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"], ["D", "Remove: dismiss (D) or delete (X)"], ["N", "New task"],
   ] },
   { title: "Pull request", tone: "work", rows: [
     ["⇧1 ⇧2", "Overview / Pull request"], ["n  p", "Next / previous file"],
@@ -30,7 +30,7 @@ const NOTE =
   "so only ⌘ shortcuts work there. Merge keys open the review gate and confirm; press the same key " +
   "again to go on (↵ in the gate reviews the diff). A key never merges on its own. S on a Backlog card " +
   "opens the start confirm; only a second S starts an agent.";
-const MOUSE_ONLY = "Dismiss, Restore and sidebar filters: mouse only.";
+const MOUSE_ONLY = "Restore and sidebar filters: mouse only. Drag a card to move it on the board.";
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {

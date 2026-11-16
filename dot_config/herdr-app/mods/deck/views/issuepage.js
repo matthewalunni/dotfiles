@@ -12,7 +12,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run } from "herdr";
-import { groupIssues } from "../lib/present.js";
+import { groupIssues, projectOf } from "../lib/present.js";
 import { boardColumns } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
 import { issuePane, stepIssue, backTarget } from "../lib/issuepage.js";
@@ -20,7 +20,7 @@ import { currentStore, STORE_KEY, SEL_KEY, TAB_KEY, ISSUE_FROM_KEY, VIEW_KEY } f
 import { MONO, tokens, label, keyChip, heading, keyOf } from "./ui.js";
 import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./issues.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide } from "./focus.js";
+import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide, keepFresh, drew } from "./focus.js";
 import { shownChild } from "../lib/views.js";
 
 /** The selected issue, or null (it was dismissed or expired). */
@@ -54,6 +54,7 @@ function typeInThread(issue) {
 
 export default class IssuePage extends View {
   init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
     initDetail(this);
     this.side = null; // the right side last selected ("terminal" | "gone")
     this.handle = cx.focus_handle();
@@ -106,6 +107,7 @@ export default class IssuePage extends View {
   }
 
   render(cx) {
+    drew(this);
     shared(STORE_KEY); // re-render on store changes
     const k = tokens();
     const issue = selectedIssue();
@@ -143,7 +145,7 @@ export default class IssuePage extends View {
       issueDetail(this, issue, k, cx, {
         stacked: true,
         back: { label: back.label, onClick: () => this.back() },
-        crumb: `/ ${issue.repo ?? "no repo"} › ${issue.id}`,
+        crumb: `/ ${projectOf(issue) ?? "no project"} › ${issue.id}`,
         hint,
       }),
     );
@@ -152,13 +154,16 @@ export default class IssuePage extends View {
 
 /** "Live thread" over the pane: what it is, and how the keyboard gets in and out. */
 export class ThreadView extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
-    const who = issue ? `${issue.repo ?? "no repo"} · ${issue.title || issue.id}` : "";
+    const who = issue ? `${projectOf(issue) ?? "no project"} · ${issue.title || issue.id}` : "";
     return h_flex()
       .size_full()
       .items_center()
@@ -184,15 +189,18 @@ export class ThreadView extends View {
           .child("Type into the agent")
           .child(keyChip("T")),
       )
-      .child(h_flex().flex_none().items_center().gap(6).child("· back to overview").child(keyChip("⌘⇧I")));
+      .child(h_flex().flex_none().items_center().gap(6).child("· back to overview").child(keyChip("⌘⇧I")).child("· back to board").child(keyChip("⌘esc")));
   }
 }
 
 /** The right side when the issue's terminal is gone (a backlog entry: "No agent yet"). */
 export class GoneView extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const issue = selectedIssue();
@@ -230,16 +238,19 @@ export class GoneView extends View {
 
 const HINTS = [
   ["esc", "back"], ["j k", "issue"], ["1–9", "answer"], ["R", "reply"],
-  ["T", "type in thread"], ["⌘⇧I", "back to overview"], ["M", "merge"],
+  ["T", "type in thread"], ["⌘⇧I", "back to overview"], ["⌘esc", "back, from the thread"], ["M", "merge"],
 ];
 
 const BACKLOG_HINTS = [["esc", "back"], ["j k", "issue"], ["S", "start agent (S again)"], ["X", "discard"]];
 
 /** The key strip along the page's bottom. */
 export class IssueHints extends View {
-  init() {}
+  init(_p, cx) {
+    keepFresh(this, cx, "deck-issue");
+  }
 
   render() {
+    drew(this);
     shared(STORE_KEY);
     const k = tokens();
     const entry = selectedIssue()?.kind === "backlog";

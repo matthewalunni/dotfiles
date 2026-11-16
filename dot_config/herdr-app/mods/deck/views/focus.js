@@ -9,7 +9,9 @@
 // of the mod shares it, and a reloaded build's copies register again in init.
 import { shared, setShared, agents, focused, run } from "herdr";
 import { showView, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
-import { shownChild, takesFocus } from "../lib/views.js";
+import { shownChild, takesFocus, drawSig } from "../lib/views.js";
+
+const FRESH_MS = 250;
 import { openPlan, openTarget, sidePane, issueFrom } from "../lib/issuepage.js";
 
 // The stack child may draw only on the next frame: focus once it has.
@@ -99,4 +101,25 @@ export function openIssue(issue, from) {
     run("tab.select", { id: t.tab });
   }
   goTo(plan.child);
+}
+
+/**
+ * Herdr does not always redraw a Deck view when shared state changes (a copy
+ * that was hidden comes back showing its old frame). So each view checks four
+ * times a second, while it is on screen (`child` shown, or always for null),
+ * whether what it draws from (drawSig) moved since its last draw, and redraws
+ * only then. Call from init; call `drew(this)` in render.
+ * @param {any} view @param {any} cx @param {string|null} child
+ */
+export function keepFresh(view, cx, child) {
+  view.drawnSig = null;
+  cx.timer.every(FRESH_MS, (cx) => {
+    if (child && shownChild(shared("layout"), shared(VIEW_KEY)) !== child) return;
+    if (drawSig(shared) !== view.drawnSig) cx.notify();
+  });
+}
+
+/** Records what this draw drew from (see keepFresh). */
+export function drew(view) {
+  view.drawnSig = drawSig(shared);
 }

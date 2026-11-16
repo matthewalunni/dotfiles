@@ -28,6 +28,14 @@ test("h/l only on the board", () => {
   assert.deepEqual(keyAction(k("l"), ctx({ mode: "board" })), { type: "col", dx: 1 });
   assert.deepEqual(keyAction(k("v"), ctx()), { type: "toggleMode" });
 });
+test("⇧H/⇧L move the selected card a column on the board, not a backlog card", () => {
+  assert.deepEqual(keyAction(k("H", { shift: true }), ctx({ mode: "board" })), { type: "pinCol", dx: -1 });
+  assert.deepEqual(keyAction(k("l", { shift: true }), ctx({ mode: "board" })), { type: "pinCol", dx: 1 });
+  assert.equal(keyAction(k("L", { shift: true }), ctx({ mode: "board", backlog: true })), null);
+  assert.equal(keyAction(k("L", { shift: true }), ctx({ mode: "board", hasIssue: false })), null);
+  assert.equal(keyAction(k("L", { shift: true }), ctx()), null);
+  assert.equal(keyAction(k("L", { shift: true, held: true }), ctx({ mode: "board" })), null);
+});
 test("n/p are files only on the changes tab", () => {
   assert.deepEqual(keyAction(k("n"), ctx()), { type: "newTask" }); // v1.4: off the PR tab, n is New task
   assert.deepEqual(keyAction(k("n"), ctx({ tab: "changes" })), { type: "file", d: 1 });
@@ -120,4 +128,14 @@ test("issue page: every detail key, none of the list's", () => {
   for (const key of ["enter", "/", "v", "h", "l"]) assert.equal(keyAction(k(key), page()), null, key);
   assert.equal(keyAction(k("1", { held: true }), page()), null);
   assert.equal(keyAction(k("m", { held: true }), page()), null);
+});
+
+test("D opens remove for an agent issue, not a backlog card", () => {
+  assert.deepEqual(keyAction(k("d"), ctx()), { type: "remove" });
+  assert.deepEqual(keyAction(k("d"), ctx({ mode: "board" })), { type: "remove" });
+  assert.deepEqual(keyAction(k("d"), ctx({ view: "issue" })), { type: "remove" });
+  assert.equal(keyAction(k("d"), ctx({ backlog: true })), null);
+  assert.equal(keyAction(k("d"), ctx({ hasIssue: false })), null);
+  assert.equal(keyAction(k("d"), ctx({ typing: true })), null);
+  assert.equal(keyAction(k("d", { held: true }), ctx()), null);
 });

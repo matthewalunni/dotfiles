@@ -5,24 +5,25 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared, notify, home } from "herdr";
-import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince } from "../lib/present.js";
+import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince, projectOf } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
-  currentStore, reply, pressOption, requestProof, dismiss, openUrl, openEvidence, focusTerminal,
+  currentStore, reply, pressOption, requestProof, dismiss, moveCard, openUrl, openEvidence, focusTerminal,
   discardEntry, restoreEntry, STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY, START_ERR_KEY,
 } from "../data.js";
 import { previewPlan, backlogFiler } from "../lib/backlog.js";
 import { startKey } from "./startconfirm.js";
+import { removeKey } from "./remove.js";
 import { openNewTask, newTaskButton } from "./newtask.js";
 import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
 import { boardColumns, moveBoard } from "../lib/board.js";
-import { STAGE_LABEL as STAGE_NAME } from "../lib/stage.js";
+import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
-import { registerFocus, goTo, focusOnShow, openIssue } from "./focus.js";
+import { registerFocus, goTo, focusOnShow, openIssue, keepFresh, drew } from "./focus.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding for you" };
 const VIEWS = [
@@ -172,6 +173,8 @@ export function detailKey(host, a, issue, st, cx) {
     case "start":
       // Opens the confirm; only its second S starts.
       return st.backlog && startKey(host, issue);
+    case "remove":
+      return !st.backlog && removeKey(host, issue);
     case "discard":
       if (!st.backlog || host.busy) return false;
       discardEntry(issue);
@@ -225,7 +228,7 @@ export function detailKey(host, a, issue, st, cx) {
 export function issueDetail(host, issue, k, cx, opts = {}) {
   if (issue.kind === "backlog") return backlogDetail(host, issue, k, opts);
   const tab = shared(TAB_KEY) === "pr" && issue.pr ? "pr" : "overview";
-  const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
+  const crumb = opts.crumb ?? `${projectOf(issue) ?? "no project"} › ${issue.id}`;
   const col = v_flex().flex_1().min_w(0).h_full();
   const hdr = header(issue, tab === "pr" ? crumb + " › Pull request" : crumb, k, opts.back ?? null, opts.hint ?? null, Boolean(opts.stacked));
   if (tab === "pr") return col.child(hdr).child(prTab(host, issue, k, cx, (el) => el.child(tabs(issue, "pr", k))));
@@ -253,7 +256,7 @@ const tilde = (p) => {
  */
 function backlogDetail(host, issue, k, opts) {
   const now = Date.now();
-  const crumb = opts.crumb ?? `${issue.repo ?? "no repo"} › ${issue.id}`;
+  const crumb = opts.crumb ?? `${projectOf(issue) ?? "no project"} › ${issue.id}`;
   const hdr = header(issue, crumb, k, opts.back ?? null, opts.hint ?? null, true);
   const filer = backlogFiler(issue, currentStore().issues);
   const plan = previewPlan(issue, home());
@@ -320,7 +323,7 @@ function backlogDetail(host, issue, k, opts) {
               .text_color(k.muted)
               .child(div().px(8).py(2).border_1().border_color(issue.discarded ? k.line : k.brand).text_color(issue.discarded ? k.muted : k.brand)
                 .child((issue.discarded ? "DISCARDED · " + age(issue.discardedAt, now) : "BACKLOG · " + age(issue.createdAt, now)).toUpperCase()))
-              .child(div().child(issue.repo ?? "no repo"))
+              .child(div().child(projectOf(issue) ?? "no project"))
               .child(div().child(issue.discarded ? "· kept 7 days" : "· not started")),
           ),
       )
@@ -432,7 +435,7 @@ function actions(host, issue, k, stacked) {
   if (live && issue.root) {
     row.child(button("act-proof", "Request proof", "plain", (_e, cx) => runFor(host, cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
   }
-  if (issue.stage !== "landed" && issue.kind !== "backlog") row.child(button("act-dismiss", "Dismiss", "plain", () => dismiss(issue), busy));
+  if (issue.kind !== "backlog") row.child(button("act-dismiss", "Remove…", "plain", () => removeKey(host, issue), busy, "D"));
   row.children(mergeButtons(host, issue, "act"));
   if (stacked && issue.pr?.url) {
     row.child(button("act-github", "GitHub ↗", "ghost", (_e, cx) => act(cx, () => openUrl(issue.pr.url), "Could not open GitHub"), false, "O"));
@@ -639,6 +642,7 @@ function rail(host, issue, k) {
 
 export default class IssuesView extends View {
   init(_p, cx) {
+    keepFresh(this, cx, "deck-issues");
     this.filter = null;
     this.listScroll = ScrollHandle.new();
     initDetail(this);
@@ -693,6 +697,14 @@ export default class IssuesView extends View {
           const r = this.rowAt.get(next.key);
           if (r != null) this.listScroll.scroll_to_item(r);
         } else return;
+        break;
+      }
+      case "pinCol": {
+        if (!board || !issue) return;
+        const at = PIN_COLUMNS.indexOf(boardColumn(issue));
+        const to = PIN_COLUMNS[at < 0 ? 0 : Math.max(0, Math.min(PIN_COLUMNS.length - 1, at + a.dx))];
+        if (to === boardColumn(issue)) return;
+        moveCard(issue, to);
         break;
       }
       case "open":
@@ -811,12 +823,12 @@ export default class IssuesView extends View {
           return this.sideItem("side-view-" + v.value, viewMark(v.value), v.text, n, sameFilter(this.filter, f), toggle(f));
         }),
       )
-      .child(div().px(10).pt(16).pb(6).child(label("Repos")))
+      .child(div().px(10).pt(16).pb(6).child(label("Projects")))
       .children(
         repos.map((r) => {
           const f = { kind: "repo", value: r.repo };
           const n = issues.filter((i) => matchesView(i, f)).length;
-          return this.sideItem("side-repo-" + (r.repo ?? "-"), dot(r.state === "survey" ? k.muted : stageColor(r.state, k), 8), r.repo ?? "no repo", n, sameFilter(this.filter, f), toggle(f));
+          return this.sideItem("side-repo-" + (r.repo ?? "-"), dot(r.state === "survey" ? k.muted : stageColor(r.state, k), 8), r.repo ?? "no project", n, sameFilter(this.filter, f), toggle(f));
         }),
       );
   }
@@ -872,7 +884,7 @@ export default class IssuesView extends View {
       rows.push(div().p(16).text_color(k.muted).child(issues.length ? "No issues match this view." : "No agents yet. Start one with cmd-t."));
     }
     const filterName = !this.filter ? null
-      : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
+      : this.filter.kind === "repo" ? this.filter.value ?? "no project"
       : VIEWS.find((v) => v.value === this.filter.value)?.text;
     return v_flex()
       .w(440)
@@ -904,6 +916,7 @@ export default class IssuesView extends View {
   }
 
   render(cx) {
+    drew(this);
     shared(STORE_KEY); // re-render on store changes
     const k = tokens();
     const store = currentStore();
@@ -923,6 +936,9 @@ export default class IssuesView extends View {
     const root = h_flex()
       .id("deck-issues")
       .track_focus(this.handle)
+      // A press anywhere here takes the keyboard back from a terminal (the
+      // reply box takes it again on its own press).
+      .on_mouse_down("left", () => { if (!this.typing) this.handle.focus(); })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
     root.child(this.sidebar(issues, k));
@@ -931,7 +947,7 @@ export default class IssuesView extends View {
 
     if (board) {
       const filterName = !this.filter ? null
-        : this.filter.kind === "repo" ? this.filter.value ?? "no repo"
+        : this.filter.kind === "repo" ? this.filter.value ?? "no project"
         : VIEWS.find((v) => v.value === this.filter.value)?.text;
       // One click on a card opens its page.
       return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName }));
