@@ -40,3 +40,5 @@ install-minimal.sh
 .config/herdr-app/layouts/.state
 .config/herdr-app/*.error
 .config/herdr-app/*.sock
+
+**/gpui-kit.d.ts
