@@ -42,6 +42,7 @@ _wt_create() {
 
   local name="$1" base="$2" root container wtpath
   [[ -n "$name" ]] || { print -u2 "worktree: a name is required"; return 2; }
+  local asked_branch="$branch"
   [[ -z "$branch" ]] && branch="$name"
 
   root="$(_wt_main_root)" || { print -u2 "worktree: not inside a git repository"; return 1; }
@@ -50,6 +51,16 @@ _wt_create() {
   wtpath="$root/$container/$name"
 
   if [[ -d "$wtpath" ]]; then
+    # A leftover directory (e.g. from a killed agent) may sit on another
+    # branch; handing it back would silently ignore the requested one.
+    if [[ -n "$asked_branch" ]]; then
+      local have
+      have="$(git -C "$wtpath" symbolic-ref --quiet --short HEAD 2>/dev/null)"
+      if [[ "$have" != "$asked_branch" ]]; then
+        print -u2 "worktree: $wtpath exists on '${have:-detached HEAD}', not '$asked_branch'; remove it first (wtrm $name)"
+        return 1
+      fi
+    fi
     print -r -- "$wtpath"
     return 0
   fi

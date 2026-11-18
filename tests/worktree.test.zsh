@@ -165,6 +165,11 @@ main() {
   # wtrm errors on an unknown name
   check "wtrm errors on unknown name" '! ( cd "$repo" && wtrm no-such-tree >/dev/null 2>&1 )'
 
+  # _wt_create -b must not hand back a leftover worktree that is on another branch
+  ( cd "$repo" && _wt_create -b first-branch claude-1 >/dev/null 2>&1 )
+  check "reuse with the same branch succeeds" '( cd "$repo" && _wt_create -b first-branch claude-1 >/dev/null 2>&1 )'
+  check "reuse with a different branch is refused" '! ( cd "$repo" && _wt_create -b other-branch claude-1 >/dev/null 2>&1 )'
+
   # worktree-cd refuses to run outside tmux
   check "functions are defined (worktree-cd)" '[[ $(typeset -f worktree-cd) ]]'
   check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd feat-x >/dev/null 2>&1 )'
