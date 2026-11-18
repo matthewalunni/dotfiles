@@ -28,7 +28,9 @@ autoload -Uz _zinit
 zinit light zsh-users/zsh-completions
 zinit light zsh-users/zsh-autosuggestions
 zinit light zdharma-continuum/fast-syntax-highlighting
-autoload -Uz compinit && compinit
+# Full compinit (with its security audit) at most once a day; otherwise trust the cache.
+autoload -Uz compinit
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then compinit; else compinit -C; fi
 zinit light Aloxaf/fzf-tab
 # fzf-tab previews, man-page keys, extra completions
 [[ -f ~/.config/zsh/completion.zsh ]] && source ~/.config/zsh/completion.zsh
