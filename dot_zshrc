@@ -176,7 +176,7 @@ fi
 if [[ "$(uname -r)" == *"microsoft"* ]]; then
     alias fd='fdfind'
     alias bat='batcat'
-    alias alacrittyconfig='nvim /mnt/c/Users/Matthew\ Alunni/AppData/Roaming/alacritty/alacritty.toml'
+    alacrittyconfig() { nvim "$(wslpath "$(cmd.exe /c 'echo %APPDATA%' 2>/dev/null | tr -d '\r')")/alacritty/alacritty.toml"; }
 fi
 
 # OS Specific Settings, Linux (non-WSL)
