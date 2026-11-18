@@ -14,8 +14,12 @@ brew "eza"
 brew "bat"
 brew "tlrc"
 brew "fd"
+brew "ripgrep"
+brew "jq"
 brew "tree"
 brew "bottom"
+brew "btop"
+brew "yazi"
 
 # Git
 brew "git"

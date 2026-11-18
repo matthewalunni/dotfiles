@@ -34,6 +34,7 @@ PACMAN_PKGS=(
     fzf
     fd
     ripgrep
+    jq
     bat
     fastfetch
 
