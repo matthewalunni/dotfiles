@@ -15,6 +15,16 @@ success() { printf '\e[1;32m✔ \e[0m%s\n' "$*"; }
 warn()    { printf '\e[1;33m! \e[0m%s\n' "$*"; }
 die()     { printf '\e[1;31m✘ \e[0m%s\n' "$*" >&2; exit 1; }
 
+# Make zsh the login shell. chsh only accepts shells listed in /etc/shells, and
+# a Homebrew zsh isn't there by default, so register it first.
+set_default_shell() {
+    local z; z="$(command -v zsh)" || { warn "zsh not found; leaving login shell alone"; return 0; }
+    [[ "$SHELL" == "$z" ]] && return 0
+    info "Setting default shell to zsh..."
+    grep -qxF "$z" /etc/shells 2>/dev/null || echo "$z" | sudo tee -a /etc/shells >/dev/null
+    if chsh -s "$z"; then success "Default shell set to zsh"; else warn "chsh failed; run: chsh -s $z"; fi
+}
+
 require() { command -v "$1" &>/dev/null || die "Required command not found: $1"; }
 
 apply_dotfiles() {
@@ -56,11 +66,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         success "harlequin installed"
     fi
 
-    if [[ "$SHELL" != "$(command -v zsh)" ]]; then
-        info "Setting default shell to zsh..."
-        chsh -s "$(command -v zsh)"
-        success "Default shell set to zsh"
-    fi
+    set_default_shell
 
     echo
     success "Installation complete!"
@@ -219,11 +225,7 @@ fi
 
 # ── step 6: set default shell to zsh ─────────────────────────────────────────
 
-if [[ "$SHELL" != "$(command -v zsh)" ]]; then
-    info "Setting default shell to zsh..."
-    chsh -s "$(command -v zsh)"
-    success "Default shell set to zsh"
-fi
+set_default_shell
 
 # ── step 7: apply chezmoi dotfiles ────────────────────────────────────────────
 
