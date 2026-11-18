@@ -170,6 +170,11 @@ main() {
   check "reuse with the same branch succeeds" '( cd "$repo" && _wt_create -b first-branch claude-1 >/dev/null 2>&1 )'
   check "reuse with a different branch is refused" '! ( cd "$repo" && _wt_create -b other-branch claude-1 >/dev/null 2>&1 )'
 
+  # near-miss dotenv names are not secrets
+  print -- 'x' > "$repo/.envrc"; print -- '.envrc' >> "$repo/.gitignore"
+  ( cd "$repo" && worktree envrc-test >/dev/null )
+  check ".envrc is not copied" '[[ ! -f "$repo/.worktrees/envrc-test/.envrc" ]]'
+
   # worktree-cd refuses to run outside tmux
   check "functions are defined (worktree-cd)" '[[ $(typeset -f worktree-cd) ]]'
   check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd feat-x >/dev/null 2>&1 )'

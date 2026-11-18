@@ -95,7 +95,7 @@ worktree() {
 #   .env, .env.local, apps/web/.env.*        — dotenv files anywhere
 #   Config/Secrets/Debug.xcconfig            — Xcode secrets directory
 #   Config/Secrets.xcconfig                  — Xcode secrets file
-_WT_SECRET_RE='(^|/)(\.env|Config/Secrets(/|\.))'
+_WT_SECRET_RE='(^|/)(\.env(\.[^/]*)?$|Config/Secrets(/|\.))'
 
 # Copy gitignored secret files from main root $1 into worktree $2 (skip container $3),
 # preserving each file's path relative to the root. Only gitignored files are copied.
@@ -105,6 +105,7 @@ _wt_copy_secrets() {
   local rel
   local -a files
   files=("${(@f)$(cd "$root" && git ls-files --others --ignored --exclude-standard \
+    | grep -vE '(^|/)(node_modules|Pods|vendor|\.build|\.venv)/' \
     | grep -E "$_WT_SECRET_RE")}")
 
   local count=0
