@@ -1,0 +1,17 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/bin/bash
+# Keeps Homebrew packages in step with the Brewfile on every `chezmoi apply`,
+# so a new tool added to the repo shows up without re-running install.sh.
+# Re-runs only when the Brewfile changes: {{ include "Brewfile" | sha256sum }}
+set -euo pipefail
+
+for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+  [ -x "$b" ] && eval "$("$b" shellenv)" && break
+done
+if ! command -v brew >/dev/null; then
+  echo "chezmoi: Homebrew not found; run install.sh first (skipping brew bundle)" >&2
+  exit 0
+fi
+
+brew bundle --file="{{ .chezmoi.sourceDir }}/Brewfile"
+{{- end }}
