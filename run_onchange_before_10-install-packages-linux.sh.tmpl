@@ -1,0 +1,52 @@
+{{- if eq .chezmoi.os "linux" -}}
+#!/bin/bash
+# Installs the CLI tools this repo's configs and scripts call, if missing, with
+# whichever package manager the machine has. Idempotent and best-effort: a
+# missing manager or a failed install warns instead of failing `chezmoi apply`.
+# chezmoi re-runs this whenever the script itself changes (edit the list below).
+set -uo pipefail
+
+# command:package            (same package name on pacman, apt and dnf)
+# command:package:apt-name   (when Debian/Ubuntu name it differently)
+tools=(
+  rg:ripgrep
+  jq:jq
+  fd:fd:fd-find
+  bat:bat
+  fzf:fzf
+  zoxide:zoxide
+  starship:starship
+  tmux:tmux
+  eza:eza
+  lazygit:lazygit
+  btop:btop
+  yazi:yazi
+)
+
+if   command -v pacman  >/dev/null; then mgr=pacman
+elif command -v apt-get >/dev/null; then mgr=apt
+elif command -v dnf     >/dev/null; then mgr=dnf
+else echo "chezmoi: no known package manager; install by hand: ${tools[*]%%:*}" >&2; exit 0; fi
+
+have() {
+  command -v "$1" >/dev/null && return 0
+  # Debian/Ubuntu install these under different command names
+  case $1 in fd) command -v fdfind >/dev/null ;; bat) command -v batcat >/dev/null ;; *) return 1 ;; esac
+}
+
+missing=()
+for t in "${tools[@]}"; do
+  IFS=: read -r cmd pkg apt <<<"$t"
+  have "$cmd" && continue
+  if [ "$mgr" = apt ]; then missing+=("${apt:-$pkg}"); else missing+=("$pkg"); fi
+done
+[ ${#missing[@]} -eq 0 ] && exit 0
+
+echo "chezmoi: installing missing tools: ${missing[*]}"
+case $mgr in
+  pacman) sudo pacman -S --needed --noconfirm "${missing[@]}" ;;
+  apt)    sudo apt-get install -y "${missing[@]}" ;;
+  dnf)    sudo dnf install -y "${missing[@]}" ;;
+esac || echo "chezmoi: package install failed; install by hand: ${missing[*]}" >&2
+exit 0
+{{- end }}
