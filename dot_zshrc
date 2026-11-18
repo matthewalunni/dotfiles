@@ -9,7 +9,15 @@ command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
 # Load system-wide profile (snap, locale, etc.)
 [[ -f /etc/profile ]] && source /etc/profile
 # After /etc/profile: its path_helper reorders PATH and would bury Homebrew
-[[ -d /opt/homebrew/bin ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
+if [[ -x /opt/homebrew/bin/brew ]]; then
+  # `brew shellenv` forks ruby (~0.1s); cache its output until brew itself changes.
+  _brew_env="${XDG_CACHE_HOME:-$HOME/.cache}/brew-shellenv.zsh"
+  if [[ ! -s $_brew_env || /opt/homebrew/bin/brew -nt $_brew_env ]]; then
+    mkdir -p "${_brew_env:h}" && /opt/homebrew/bin/brew shellenv > "$_brew_env"
+  fi
+  source "$_brew_env"
+  unset _brew_env
+fi
 
 ### Added by Zinit's installer
 if [[ ! -f $HOME/.local/share/zinit/zinit.git/zinit.zsh ]]; then
