@@ -45,15 +45,25 @@ eval "$(zoxide init zsh)"
 
 # NVM (Node Version Manager) — lazy-loaded for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-nvm() {
+_nvm_load() {
   unset -f nvm node npm npx
-  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-  nvm "$@"
+  local d
+  for d in /opt/homebrew/opt/nvm /usr/local/opt/nvm "$NVM_DIR"; do
+    if [ -s "$d/nvm.sh" ]; then
+      \. "$d/nvm.sh"
+      [ -s "$d/etc/bash_completion.d/nvm" ] && \. "$d/etc/bash_completion.d/nvm"
+      break
+    fi
+  done
+  if ! typeset -f nvm >/dev/null; then
+    echo "nvm: could not find nvm.sh (brew install nvm)" >&2
+    return 1
+  fi
 }
-node() { nvm; node "$@"; }
-npm()  { nvm; npm  "$@"; }
-npx()  { nvm; npx  "$@"; }
+nvm()  { _nvm_load && nvm  "$@"; }
+node() { _nvm_load && node "$@"; }
+npm()  { _nvm_load && npm  "$@"; }
+npx()  { _nvm_load && npx  "$@"; }
 
 
 # ========================
