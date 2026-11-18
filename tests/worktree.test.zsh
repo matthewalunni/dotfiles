@@ -175,6 +175,11 @@ main() {
   ( cd "$repo" && worktree envrc-test >/dev/null )
   check ".envrc is not copied" '[[ ! -f "$repo/.worktrees/envrc-test/.envrc" ]]'
 
+  # wtrm keeps an unmerged branch unless explicitly told to drop it
+  ( cd "$repo" && worktree unmerged >/dev/null && git commit -q --allow-empty -m work )
+  ( cd "$repo" && print -- "y\nn" | wtrm unmerged >/dev/null 2>&1 )
+  check "unmerged branch survives y then n" 'git -C "$repo" show-ref --verify --quiet refs/heads/unmerged'
+
   # worktree-cd refuses to run outside tmux
   check "functions are defined (worktree-cd)" '[[ $(typeset -f worktree-cd) ]]'
   check "worktree-cd errors outside tmux" '! ( unset TMUX; worktree-cd feat-x >/dev/null 2>&1 )'

@@ -188,8 +188,10 @@ wtrm() {
     cd "$root"
   fi
 
-  if ! git -C "$root" worktree remove "$wtpath" 2>/dev/null; then
-    print -n "wtrm: worktree is dirty. Force remove? [y/N] "
+  local err
+  if ! err="$(git -C "$root" worktree remove "$wtpath" 2>&1)"; then
+    print -u2 -- "${err}"
+    print -n "wtrm: force remove anyway? [y/N] "
     read -r ans
     [[ "$ans" == [yY]* ]] || return 1
     git -C "$root" worktree remove --force "$wtpath" || return 1
@@ -198,7 +200,16 @@ wtrm() {
   if [[ -n "$branch" ]]; then
     print -n "wtrm: delete branch '$branch'? [y/N] "
     read -r ans
-    [[ "$ans" == [yY]* ]] && git -C "$root" branch -D "$branch" || true
+    if [[ "$ans" == [yY]* ]]; then
+      if ! err="$(git -C "$root" branch -d "$branch" 2>&1)"; then
+        # -d refuses unmerged work; make losing it a separate, explicit choice
+        print -u2 -- "${err}"
+        print -n "wtrm: '$branch' has unmerged commits. Delete anyway? [y/N] "
+        read -r ans
+        [[ "$ans" == [yY]* ]] && git -C "$root" branch -D "$branch"
+      fi
+    fi
+    return 0
   fi
 }
 
