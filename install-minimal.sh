@@ -25,6 +25,8 @@ set_default_shell() {
     if chsh -s "$z"; then success "Default shell set to zsh"; else warn "chsh failed; run: chsh -s $z"; fi
 }
 
+[[ -f /etc/arch-release ]] || die "This script supports Arch Linux. On other distros, run 'chezmoi init --apply'; apply installs the CLI tools it needs."
+
 # ── pacman packages ───────────────────────────────────────────────────────────
 
 PACMAN_PKGS=(

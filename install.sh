@@ -73,6 +73,8 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     exit 0
 fi
 
+[[ -f /etc/arch-release ]] || die "This script supports Arch Linux (and macOS via install.sh). On other distros, run 'chezmoi init --apply'; apply installs the CLI tools it needs."
+
 # ── pacman packages ───────────────────────────────────────────────────────────
 
 PACMAN_PKGS=(
