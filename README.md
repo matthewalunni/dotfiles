@@ -5,7 +5,9 @@ Personal dotfiles managed with [chezmoi](https://www.chezmoi.io/).
 ## Quick Start
 
 ```bash
-# Initialize the repo
+# Initialize the repo. You're asked once for your git name/email and an
+# optional neovim config repo; answers stay in ~/.config/chezmoi/chezmoi.toml
+# (never in this repo). Leave them blank to keep your own git identity.
 chezmoi init <repo_url>
 
 # Apply changes from this repo to your home directory
@@ -93,8 +95,13 @@ the `Brewfile` with `brew bundle`.
 bash install.sh
 ```
 
-> **Note:** The macOS path assumes Apple Silicon (Homebrew in `/opt/homebrew`).
-> On an Intel Mac, change the `brew shellenv` line to `/usr/local/bin/brew`.
+The macOS path works on Apple Silicon and Intel Macs.
+
+You usually don't need to rerun it: `chezmoi apply` keeps tools in step by
+itself. On macOS it runs `brew bundle` whenever the `Brewfile` changes. On
+native Linux (pacman, apt or dnf) it installs any missing CLI tools this repo
+uses (ripgrep, jq, fd, bat, fzf, zoxide, ...). Add a tool to the `Brewfile` or
+to the list in `run_onchange_before_10-install-packages-linux.sh.tmpl`.
 
 ### `install-minimal.sh` — Terminal-only install
 
@@ -117,7 +124,8 @@ Terminal colors are managed via chezmoi templates. The active theme is set in
 `.chezmoidata.toml` and applied across Ghostty, Alacritty, tmux, and lazygit
 with a single `chezmoi apply`.
 
-Available themes: `tokyonight`, `earthcode`
+Available themes: `tokyonight`, `earthcode` (`earthcode-moss` is a Herdr-only
+theme and can't be set as the shell theme)
 
 ```bash
 # Edit the theme value in .chezmoidata.toml
@@ -354,3 +362,19 @@ config pointed at that agent's leased device, and starts the coding agent in it.
 - **Git worktree helpers**: `worktree` / `wtrm` / `worktree-create` commands (see above)
 - **sweep**: reaper for worktrees and branches whose work has landed (see above)
 - **agent**: isolated worktree + simulator environments for parallel iOS coding agents (see above)
+
+---
+
+## Personal Claude settings
+
+`~/.claude/settings.json` is generated from `dot_claude/settings.json.tmpl`,
+which holds only what this repo's workflow needs. Your own preferences (model,
+plugins, voice, permission rules, ...) go in `~/.claude/settings.overrides.json`
+and your auto mode rules in `~/.claude/automode.local.json`. Both are merged in
+by `chezmoi apply`, and neither is part of this repo.
+
+## Tests
+
+```bash
+tests/run.sh   # herdr deck (node) plus the zsh helper suites
+```
