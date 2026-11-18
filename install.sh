@@ -34,7 +34,11 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     if ! command -v brew &>/dev/null; then
         info "Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        eval "$(/opt/homebrew/bin/brew shellenv)"
+        # Apple Silicon installs to /opt/homebrew, Intel to /usr/local
+        for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+            [[ -x "$b" ]] && { eval "$("$b" shellenv)"; break; }
+        done
+        command -v brew &>/dev/null || die "Homebrew installed but brew was not found"
         success "Homebrew installed"
     fi
 
