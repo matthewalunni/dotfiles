@@ -113,9 +113,13 @@ bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "pbcopy"
 bind-key -T copy-mode-vi 'y' send -X copy-pipe-and-cancel "clip.exe"
 bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "clip.exe"
 {{- else }}
-bind-key -T copy-mode-vi 'y' send -X copy-pipe-and-cancel "wl-copy"
-bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "wl-copy"
+# Native Linux: use whichever clipboard tool this session can reach. Headless
+# or SSH boxes have none; there copy still lands in the tmux buffer (and in the
+# terminal clipboard via OSC 52, see set-clipboard below).
+bind-key -T copy-mode-vi 'y' send -X copy-pipe-and-cancel "if [ -n \"$WAYLAND_DISPLAY\" ] && command -v wl-copy >/dev/null; then wl-copy; elif [ -n \"$DISPLAY\" ] && command -v xclip >/dev/null; then xclip -selection clipboard -in; else cat >/dev/null; fi"
+bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "if [ -n \"$WAYLAND_DISPLAY\" ] && command -v wl-copy >/dev/null; then wl-copy; elif [ -n \"$DISPLAY\" ] && command -v xclip >/dev/null; then xclip -selection clipboard -in; else cat >/dev/null; fi"
 {{- end }}
+set -s set-clipboard on
 
 # Paste from tmux buffer
 bind p paste-buffer
