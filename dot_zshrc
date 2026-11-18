@@ -97,7 +97,7 @@ ff() {
 
 fs() {
   if [[ $# -eq 0 ]]; then
-    echo "Usage: rgfzf <pattern>"
+    echo "Usage: fs <pattern>"
     return 1
   fi
 
