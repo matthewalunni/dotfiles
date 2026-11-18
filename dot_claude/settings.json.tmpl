@@ -1,74 +1,22 @@
-{{/* autoMode stays on this machine: it is read from ~/.claude/automode.local.json (not in this public repo) when that file exists. */ -}}
-{
-  "model": "opus",
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash '/Users/matthewalunni/.claude/hooks/herdr-agent-state.sh' session",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash /Users/matthewalunni/.claude/statusline-command.sh"
-  },
-  "enabledPlugins": {
-    "frontend-design@claude-plugins-official": false,
-    "superpowers@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": false,
-    "skill-creator@claude-plugins-official": false,
-    "clangd-lsp@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
-    "chrome-devtools-mcp@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "posthog@claude-plugins-official": true,
-    "impeccable@impeccable": true,
-    "humanizer@humanizer": true
-  },
-  "extraKnownMarketplaces": {
-    "impeccable": {
-      "source": {
-        "source": "github",
-        "repo": "pbakaus/impeccable"
-      }
-    },
-    "humanizer": {
-      "source": {
-        "source": "github",
-        "repo": "blader/humanizer"
-      }
-    }
-  },
-  "effortLevel": "medium",
-  "modelSettings": {
-    "claude-opus-5": {
-      "effortLevel": "low"
-    }
-  },
-  "tui": "fullscreen",
-  "voice": {
-    "enabled": true,
-    "mode": "hold"
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "skipWorkflowUsageWarning": true,
-  "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true,
-{{- $local := joinPath .chezmoi.homeDir ".claude/automode.local.json" }}{{ if stat $local }}
-  "autoMode": {{ include $local | trim }},
-{{- end }}
-  "voiceEnabled": true
-}
+{{- /*
+  Generic Claude Code settings: only what this repo's own workflow needs.
+  Personal preferences (model, plugins, marketplaces, voice, auto mode, ...)
+  stay on your machine and are merged on top of this at apply time from:
+    ~/.claude/settings.overrides.json   any settings keys, JSON object
+    ~/.claude/automode.local.json       the "autoMode" value only
+  Neither file is in this repo. Both are optional.
+*/ -}}
+{{- $s := dict
+  "hooks" (dict "SessionStart" (list (dict
+    "matcher" "*"
+    "hooks" (list (dict
+      "type" "command"
+      "command" "f=\"$HOME/.claude/hooks/herdr-agent-state.sh\"; [ -f \"$f\" ] && bash \"$f\" session || true"
+      "timeout" 10)))))
+  "statusLine" (dict "type" "command" "command" "bash \"$HOME/.claude/statusline-command.sh\"")
+-}}
+{{- $overrides := joinPath .chezmoi.homeDir ".claude/settings.overrides.json" -}}
+{{- if stat $overrides }}{{ $s = mergeOverwrite $s (include $overrides | fromJson) }}{{ end -}}
+{{- $automode := joinPath .chezmoi.homeDir ".claude/automode.local.json" -}}
+{{- if stat $automode }}{{ $s = mergeOverwrite $s (dict "autoMode" (include $automode | fromJson)) }}{{ end -}}
+{{ toPrettyJson $s }}
