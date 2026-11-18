@@ -1,0 +1,8 @@
+{{- /* Your neovim config repo is per-machine data (nvim_repo), not part of this
+       public repo. Unset = no nvim config is cloned. */ -}}
+{{- if get . "nvim_repo" }}
+[".config/nvim"]
+    type = "git-repo"
+    url = {{ get . "nvim_repo" | quote }}
+    refreshPeriod = "168h"
+{{- end }}

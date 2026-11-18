@@ -1,0 +1,26 @@
+{{- /* Identity comes from per-machine chezmoi data (see .chezmoi.toml.tmpl).
+       When unset, no [user] section is written so git falls back to your own
+       identity instead of anyone else's. */ -}}
+{{- $name := get . "git_name" -}}
+{{- $email := get . "git_email" -}}
+{{- if or $name $email -}}
+[user]
+{{- if $email }}
+	email = {{ $email }}
+{{- end }}
+{{- if $name }}
+	name = {{ $name }}
+{{- end }}
+{{- end }}
+[core]
+	editor = nvim
+[http]
+	postBuffer = 524288000
+[pull]
+	rebase = true
+[credential "https://github.com"]
+	helper = 
+	helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !gh auth git-credential

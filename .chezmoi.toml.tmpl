@@ -1,0 +1,20 @@
+{{- /* Per-machine answers are asked once by `chezmoi init` and stored in
+       ~/.config/chezmoi/chezmoi.toml, never in this repo. Leave an answer
+       blank to keep whatever the machine already has. */ -}}
+{{- $interactive := stdinIsATTY -}}
+{{- $name := get . "git_name" | default "" -}}
+{{- $email := get . "git_email" | default "" -}}
+{{- $nvim := get . "nvim_repo" | default "" -}}
+{{- if $interactive -}}
+{{-   $name = promptStringOnce . "git_name" "Git user.name (blank = keep your existing git identity)" $name -}}
+{{-   $email = promptStringOnce . "git_email" "Git user.email (blank = keep your existing git identity)" $email -}}
+{{-   $nvim = promptStringOnce . "nvim_repo" "Neovim config git URL to clone into ~/.config/nvim (blank = skip)" $nvim -}}
+{{- end -}}
+
+[edit]
+command = "nvim"
+
+[data]
+git_name = {{ $name | quote }}
+git_email = {{ $email | quote }}
+nvim_repo = {{ $nvim | quote }}
