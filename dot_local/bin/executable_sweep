@@ -60,6 +60,12 @@ HERE=$(git rev-parse --show-toplevel)
 # common case for PR workflows, where ancestry alone reports a false negative).
 is_landed() {
     local branch="$1" base_commit tree synthetic
+    # A branch nobody has committed to yet is trivially an ancestor of BASE,
+    # but that is "just created", not "landed". Its reflog is a single
+    # "branch: Created from ..." entry.
+    [ "$(git reflog show --format=%gs "refs/heads/$branch" 2>/dev/null | grep -c .)" = 1 ] &&
+        git reflog show --format=%gs "refs/heads/$branch" 2>/dev/null | grep -q '^branch: Created from' &&
+        return 1
     git merge-base --is-ancestor "$branch" "$BASE" 2>/dev/null && return 0
     base_commit=$(git merge-base "$BASE" "$branch" 2>/dev/null) || return 1
     tree=$(git rev-parse "$branch^{tree}" 2>/dev/null) || return 1
@@ -85,10 +91,16 @@ while IFS= read -r line; do
     if [ -n "${br:-}" ] && is_landed "$br"; then status="${green}landed${reset}"; landed=1
     else status="${yellow}active${reset}"; landed=0; fi
 
+    # Ignored secrets (.env, Config/Secrets...) are copied into worktrees and
+    # exist nowhere else once the worktree is removed.
+    secrets=$(git -C "$wt" status --porcelain --ignored 2>/dev/null | sed -n 's/^!! //p' |
+        grep -cE '(^|/)(\.env|Config/Secrets(/|\.))')
+
     note=""
     if [ "$wt" = "$HERE" ]; then note=" ${dim}(you are here)${reset}"
     elif [ "${locked:-0}" = 1 ]; then note=" ${dim}(locked)${reset}"
     elif [ "$dirty" != 0 ]; then note=" ${red}(uncommitted work)${reset}"
+    elif [ "${secrets:-0}" != 0 ] && [ "$landed" = 1 ]; then note=" ${yellow}(holds ignored secrets; remove by hand)${reset}"
     elif [ "$landed" = 1 ]; then REMOVABLE+=("$wt|${br:-}")
     fi
 
