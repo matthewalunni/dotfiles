@@ -78,14 +78,14 @@ fi
 
 _bat_cmd=$(command -v batcat 2>/dev/null || command -v bat 2>/dev/null)
 
-# file preview with bat
-export FZF_DEFAULT_OPTS="
-  --height 80%
-  --layout=reverse
-  --border
+# file preview with bat (only when bat/batcat exists; otherwise a broken
+# --preview command would error on every fzf invocation)
+export FZF_DEFAULT_OPTS="--height 80% --layout=reverse --border"
+if [[ -n "$_bat_cmd" ]]; then
+  FZF_DEFAULT_OPTS+="
   --preview '$_bat_cmd --style=numbers --color=always --line-range :500 {}'
-  --preview-window=right:60%
-"
+  --preview-window=right:60%"
+fi
 
 # find a local file and open it in nvim
 ff() {
