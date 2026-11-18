@@ -17,7 +17,7 @@ accordion-padding = 30
 
 # Theme-green border on the focused window (JankyBorders)
 after-startup-command = [
-  'exec-and-forget {{ lookPath "borders" | default "borders" }} style=round width=5.0 hidpi=on active_color=0xee{{ trimPrefix "#" $t.green }} inactive_color=0xaa{{ trimPrefix "#" $t.border_inactive }}',
+  'exec-and-forget {{ if eq .chezmoi.arch "arm64" }}/opt/homebrew/bin{{ else }}/usr/local/bin{{ end }}/borders style=round width=5.0 hidpi=on active_color=0xee{{ trimPrefix "#" $t.green }} inactive_color=0xaa{{ trimPrefix "#" $t.border_inactive }}',
 ]
 
 # Keep the mouse on the focused monitor
