@@ -9,7 +9,7 @@
     
     "modules-left": ["custom/launcher", "hyprland/workspaces", "hyprland/window"],
     "modules-center": ["clock"],
-    "modules-right": ["custom/updates", "pulseaudio", "network", "cpu", "memory", "battery", "tray", "custom/power"],
+    "modules-right": ["pulseaudio", "network", "cpu", "memory", "battery", "tray"],
 
     "custom/launcher": {
         "format": " 󰣇 ",
@@ -135,5 +135,5 @@
         "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "scroll-step": 5,
         "tooltip-format": "{desc}\nVolume: {volume}%"
-    },
+    }
 }
