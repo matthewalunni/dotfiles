@@ -36,5 +36,11 @@ moved=$(herdr pane move "$second" --new-tab --no-focus \
 
 local focus=--no-focus
 [[ $focused == $second ]] && focus=--focus
-herdr pane move "$moved" --tab "$tab" --target-pane "$first" \
-  --split "$new_direction" --ratio "$ratio" "$focus" >/dev/null
+# If the move back fails the pane would be stranded alone in the scratch tab,
+# so fall back to restoring the original layout before reporting failure.
+if ! herdr pane move "$moved" --tab "$tab" --target-pane "$first" \
+  --split "$new_direction" --ratio "$ratio" "$focus" >/dev/null; then
+  herdr pane move "$moved" --tab "$tab" --target-pane "$first" \
+    --split "$direction" --ratio "$ratio" "$focus" >/dev/null
+  exit 1
+fi
