@@ -28,7 +28,7 @@ tools=(
 if   command -v pacman  >/dev/null; then mgr=pacman
 elif command -v apt-get >/dev/null; then mgr=apt
 elif command -v dnf     >/dev/null; then mgr=dnf
-else echo "chezmoi: no known package manager; install by hand: ${tools[*]%%:*}" >&2; exit 0; fi
+else mgr=; fi
 
 have() {
   command -v "$1" >/dev/null && return 0
@@ -50,7 +50,9 @@ install() {
   esac
 }
 
-if [ ${#missing[@]} -gt 0 ]; then
+if [ ${#missing[@]} -gt 0 ] && [ -z "$mgr" ]; then
+  echo "chezmoi: no known package manager; install by hand: ${missing[*]}" >&2
+elif [ ${#missing[@]} -gt 0 ]; then
 echo "chezmoi: installing missing tools: ${missing[*]}"
 # A fresh Debian/Ubuntu has empty package lists, so every name is "unable to
 # locate" until the first update.
@@ -98,7 +100,9 @@ if z=$(command -v zsh); then
   current=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)
   if [ "${current:-$SHELL}" != "$z" ]; then
     grep -qxF "$z" /etc/shells 2>/dev/null || echo "$z" | sudo tee -a /etc/shells >/dev/null
-    if chsh -s "$z"; then echo "chezmoi: login shell set to $z (takes effect in new terminals)"
+    # Through sudo (already needed for packages above): plain chsh asks for
+    # the account password, which cloud/container users often don't have.
+    if sudo chsh -s "$z" "$(id -un)"; then echo "chezmoi: login shell set to $z (takes effect in new terminals)"
     else echo "chezmoi: couldn't change login shell; run: chsh -s $z" >&2; fi
   fi
 fi

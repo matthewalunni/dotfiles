@@ -131,6 +131,22 @@ printf "usage: zz-cmdhelp-fixture\n  --alpha  new text, longer\n  --beta   x\n"'
   fi
 
   rm -rf $tmp
+  # --- fzf-tab flags match the installed fzf ---
+  # An fzf that rejects a flag/action exits at once and fzf-tab shows nothing.
+  fzf_opts() {  # fake fzf version ("" = no fzf) -> flags and bindings passed
+    local d=$(mktemp -d)
+    [[ -n $1 ]] && { print -r -- "#!/bin/sh"$'\n'"echo '$1 (test)'" > $d/fzf; chmod +x $d/fzf }
+    PATH=$d:/usr/bin:/bin zsh -fc "compdef() {}; source ${(q)COMPLETION}
+      zstyle -a ':fzf-tab:*' fzf-flags f; zstyle -a ':fzf-tab:*' fzf-bindings b; print -rl -- \$f \$b"
+    rm -rf $d
+  }
+  check "old fzf (0.44) gets no change-nth binding" \
+    '[[ $(fzf_opts 0.44.1) != *change-nth* && $(fzf_opts 0.44.1) == *inline-right* ]]'
+  check "current fzf (0.75) gets every option" \
+    '[[ $(fzf_opts 0.75.0) == *change-nth* && $(fzf_opts 0.75.0) == *inline-right* ]]'
+  check "no fzf gets neither newer option" \
+    '[[ $(fzf_opts "") != *change-nth* && $(fzf_opts "") != *inline-right* ]]'
+
   print "\n$PASS passed, $FAIL failed"
   (( FAIL == 0 ))
 }

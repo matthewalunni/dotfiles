@@ -18,6 +18,8 @@ fi
 if ! brew bundle --file="{{ .chezmoi.sourceDir }}/Brewfile"; then
   echo "chezmoi: brew bundle had failures (see above); dotfiles were still applied." >&2
   echo "chezmoi: a formula installed from another tap under the same name is the usual cause;" >&2
-  echo "chezmoi: \`brew uninstall <name>\` then \`chezmoi apply\` to retry." >&2
+  # Exiting 0 marks this script done, so `chezmoi apply` won't retry it until
+  # the Brewfile changes; point at the command that will.
+  echo "chezmoi: \`brew uninstall <name>\`, then retry with: brew bundle --file={{ .chezmoi.sourceDir }}/Brewfile" >&2
 fi
 {{- end }}
