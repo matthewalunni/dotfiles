@@ -28,7 +28,7 @@ export const TAB_KEY = "deck.issueTab";
 /** Issues view mode: "list" (default) or "board". */
 export const MODE_KEY = "deck.issuesMode";
 export const VIEW_KEY = "deck.view";
-/** Where the issue page was opened from: "board" | "list" | "command" | "terminal" (esc goes back there). */
+/** Where the issue page was opened from: "board" | "list" | "chat" | "terminal" (esc goes back there). */
 export const ISSUE_FROM_KEY = "deck.issueFrom";
 /** Shared list of other machines: {name, online, agents}[] from `hc machine ls --json`. */
 export const MACHINES_KEY = "deck.machines";

@@ -1,8 +1,8 @@
 // Putting the keyboard on the Deck view that is shown.
 // - goTo(child): every way of showing a view (⌥⌘ keys, the bar's nav, the
-//   Issues sidebar's Command item, Inspect / ↵) goes through it.
+//   Issues sidebar's Chat item, Inspect / ↵) goes through it.
 // - openIssue(issue, from): every way of opening the issue page.
-// - focusOnShow(...): Command, Issues and the issue page call it on each draw; on their first
+// - focusOnShow(...): Chat, Issues and the issue page call it on each draw; on their first
 //   draw (a fresh copy, e.g. after layout.switch to deck) and whenever they
 //   come back into sight, they focus their own handle a beat later.
 // The handle registry is on globalThis (like the collector guard): every copy
@@ -19,7 +19,7 @@ const SETTLE_MS = 40;
 
 const reg = () => (globalThis.__deckFocus ??= new Map());
 
-/** @param {string} child the stack child ("deck-command" | "deck-issues" | "deck-issue") @param {any} handle */
+/** @param {string} child the stack child ("deck-chat" | "deck-issues" | "deck-issue") @param {any} handle */
 export function registerFocus(child, handle) {
   reg().set(child, handle);
 }
@@ -43,7 +43,7 @@ export function focusAgent() {
 }
 
 /**
- * Shows a Deck view and puts the keyboard on it (Command / Issues: their
+ * Shows a Deck view and puts the keyboard on it (Chat / Issues: their
  * handle, now and again from their own focusOnShow once drawn; Terminal: the
  * agent). No timer of its own: one here would race R's reply-box focus.
  */
@@ -85,7 +85,7 @@ export function showIssueSide(pane) {
  * (nothing when it is gone), and puts the keyboard on the overview (goTo).
  * Never agent.focus / pane.focus: only T gives the terminal the keyboard, so a
  * digit pressed right after opening can't answer a prompt in the terminal.
- * @param {any} issue @param {"board"|"list"|"command"|"chat"|"terminal"} [from]
+ * @param {any} issue @param {"board"|"list"|"chat"|"terminal"} [from]
  */
 export function openIssue(issue, from) {
   const f = from ?? issueFrom(shared(VIEW_KEY), shared(MODE_KEY), shared(ISSUE_FROM_KEY));

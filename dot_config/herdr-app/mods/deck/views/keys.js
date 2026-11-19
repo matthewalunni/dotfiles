@@ -1,5 +1,5 @@
 // The "?" keyboard map, opened as a dialog with props { view: "keys" }:
-// three columns (Anywhere / Issues & Command / Pull request), the safety
+// three columns (Anywhere / Issues / Pull request), the safety
 // note and what stays mouse-only, as on the canvas Keyboard map board. Esc closes it (confirm.js pattern).
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -8,11 +8,11 @@ import { BARLOW, MONO, tokens, spaced } from "./ui.js";
 
 const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
-    ["⌥⌘1", "Command Center"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"], ["⌥⌘4", "Chat"],
+    ["⌥⌘1", "Chat"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"],
     ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"], ["⌘esc", "Back from an issue (also from its thread)"],
     ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
   ] },
-  { title: "Issues & Command", tone: "hold", rows: [
+  { title: "Issues", tone: "hold", rows: [
     ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["⇧H ⇧L", "Board: move the card a column"], ["↵", "Open issue"],
     ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],

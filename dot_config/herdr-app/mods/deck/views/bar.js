@@ -1,4 +1,4 @@
-// The top bar: brand, Command / Issues / Terminal / Chat nav, the holding chip, "? keys"
+// The top bar: brand, Chat / Issues / Terminal nav, the holding chip, "? keys"
 // and the clock. The collector and the chat source run in this copy; main.js starts and stops them
 // (close() only reaches the root view). This copy also runs the keys.json
 // command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
@@ -19,10 +19,9 @@ import { backTarget } from "../lib/issuepage.js";
 const BARLOW = "Barlow Condensed";
 const MONO = "JetBrains Mono";
 const NAV = [
-  { label: "COMMAND", key: "⌥⌘1", child: "deck-command" },
+  { label: "CHAT", key: "⌥⌘1", child: "deck-chat" },
   { label: "ISSUES", key: "⌥⌘2", child: "deck-issues" },
   { label: "TERMINAL", key: "⌥⌘3", child: "deck-terminal" },
-  { label: "CHAT", key: "⌥⌘4", child: "deck-chat" },
 ];
 // macOS draws the traffic lights over the bar's left edge.
 const LEFT_ROOM = 84;
@@ -41,7 +40,7 @@ function focusedIssue(issues) {
   return t ? issues.find((i) => i.terminal === t && i.observed !== false) ?? null : null;
 }
 
-const GO = { command: "deck-command", chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal" };
+const GO = { chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal" };
 
 /**
  * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back" or "new-task"
@@ -50,7 +49,7 @@ const GO = { command: "deck-command", chat: "deck-chat", issues: "deck-issues", 
  */
 export function runCommand(c) {
   const cmd = String(c ?? "").trim();
-  const go = /^go:(command|chat|issues|terminal)$/.exec(cmd);
+  const go = /^go:(chat|issues|terminal)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
   if (cmd === "new-task") return void openNewTask();
   // ⌘Esc: back out of the issue page (even from its terminal, where Esc is the agent's).
@@ -152,7 +151,7 @@ export default class BarView extends View {
   render(cx) {
     drew(this);
     const k = deckTokens(theme());
-    // A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
+    // A stale or unknown view (e.g. "deck-work" from v1) counts as Chat.
     // The issue page underlines Issues (lib/views.js navChild).
     const active = navChild(shared(VIEW_KEY));
     const issues = currentStore().issues;

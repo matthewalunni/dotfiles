@@ -190,8 +190,8 @@ test("findFiled: the newest matching 'you' entry filed since the press", () => {
 
 // ------------------------------------------------------------ N
 
-test("N opens a new task in Command and Issues (list and board)", () => {
-  for (const c of [ctx(), ctx({ mode: "board" }), ctx({ view: "command" }), ctx({ hasIssue: false }), ctx({ backlog: true })]) {
+test("N opens a new task in Chat and Issues (list and board)", () => {
+  for (const c of [ctx(), ctx({ mode: "board" }), ctx({ view: "chat" }), ctx({ hasIssue: false }), ctx({ backlog: true })]) {
     assert.deepEqual(keyAction(kk("n"), c), { type: "newTask" });
     assert.deepEqual(keyAction(kk("N", { shift: true }), c), { type: "newTask" });
   }
@@ -200,7 +200,7 @@ test("N opens a new task in Command and Issues (list and board)", () => {
 test("N does nothing while typing, with a dialog open, held, or on the issue page / PR tab", () => {
   assert.equal(keyAction(kk("n"), ctx({ typing: true })), null);
   assert.equal(keyAction(kk("n"), ctx({ dialog: true })), null);
-  assert.equal(keyAction(kk("n"), ctx({ view: "command", dialog: true })), null);
+  assert.equal(keyAction(kk("n"), ctx({ view: "chat", dialog: true })), null);
   assert.equal(keyAction(kk("n", { held: true }), ctx()), null);
   assert.equal(keyAction(kk("n", { cmd: true }), ctx()), null);
   assert.equal(keyAction(kk("n"), ctx({ view: "issue" })), null);

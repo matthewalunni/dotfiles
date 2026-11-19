@@ -36,18 +36,8 @@
     {
       "id": "deck-main",
       "type": "stack",
-      "active": "deck-command",
+      "active": "deck-chat",
       "children": [
-        {
-          "id": "deck-command",
-          "type": "block",
-          "content": {
-            "mod": "deck",
-            "props": {
-              "view": "command"
-            }
-          }
-        },
         {
           "id": "deck-chat",
           "type": "block",

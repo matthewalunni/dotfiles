@@ -8,11 +8,11 @@ test("shownChild: only in a deck layout", () => {
   assert.equal(shownChild("deck", "deck-issues"), "deck-issues");
   assert.equal(shownChild("deck", "deck-terminal"), "deck-terminal");
 });
-test("shownChild: a stale or missing view counts as Command", () => {
-  assert.equal(shownChild("deck", "deck-work"), "deck-command");
-  assert.equal(shownChild("deck", undefined), "deck-command");
+test("shownChild: a stale or missing view counts as Chat", () => {
+  assert.equal(shownChild("deck", "deck-work"), "deck-chat");
+  assert.equal(shownChild("deck", undefined), "deck-chat");
 });
-const C = "deck-command";
+const C = "deck-chat";
 test("takesFocus: on the first draw and on each return, not while it stays", () => {
   assert.equal(takesFocus({ shown: null, ask: null }, C, null, C, 0), true);
   assert.equal(takesFocus({ shown: C, ask: null }, C, null, C, 0), false);
@@ -35,14 +35,14 @@ test("navChild: the issue page underlines Issues", () => {
   assert.equal(navChild("deck-issue"), "deck-issues");
   assert.equal(navChild("deck-issues"), "deck-issues");
   assert.equal(navChild("deck-terminal"), "deck-terminal");
-  assert.equal(navChild("deck-work"), "deck-command");
-  assert.equal(navChild(undefined), "deck-command");
+  assert.equal(navChild("deck-work"), "deck-chat");
+  assert.equal(navChild(undefined), "deck-chat");
 });
 
 test("the Chat view is a Deck view and a nav item", () => {
   assert.equal(shownChild("deck", "deck-chat"), "deck-chat");
   assert.equal(navChild("deck-chat"), "deck-chat");
-  assert.equal(takesFocus({ shown: "deck-command", ask: null }, "deck-chat", null, "deck-chat", 0), true);
+  assert.equal(takesFocus({ shown: "deck-issues", ask: null }, "deck-chat", null, "deck-chat", 0), true);
 });
 
 test("drawSig changes with the selection, view and store events, not otherwise", async () => {

@@ -52,7 +52,6 @@ test("stepIssue: unknown key starts at the first; empty is null", () => {
 test("issueFrom: where the page was opened from", () => {
   assert.equal(issueFrom("deck-issues", "board", null), "board");
   assert.equal(issueFrom("deck-issues", "list", null), "list");
-  assert.equal(issueFrom("deck-command", "board", null), "command");
   assert.equal(issueFrom("deck-terminal", "list", null), "terminal");
   // Already on the page (⌘⇧I back from its terminal, ⌘⇧J): keep where it came from.
   assert.equal(issueFrom("deck-issue", "list", "board"), "board");
@@ -61,7 +60,6 @@ test("issueFrom: where the page was opened from", () => {
 test("backTarget: esc returns where the page came from", () => {
   assert.deepEqual(backTarget("board"), { child: "deck-issues", label: "← Board", focus: true });
   assert.deepEqual(backTarget("list"), { child: "deck-issues", label: "← Issues", focus: true });
-  assert.deepEqual(backTarget("command"), { child: "deck-command", label: "← Command", focus: true });
   assert.deepEqual(backTarget("terminal"), { child: "deck-terminal", label: "← Terminal", focus: false });
   assert.deepEqual(backTarget(undefined), { child: "deck-issues", label: "← Issues", focus: true });
 });
@@ -75,7 +73,7 @@ test("the chat origin: opened from the Chat view, esc goes back there with the k
 
 test("backTarget: going back to the Terminal view never takes terminal focus (a held esc must not reach the agent)", () => {
   assert.equal(backTarget("terminal").focus, false);
-  for (const f of ["board", "list", "command"]) assert.equal(backTarget(f).focus, true);
+  for (const f of ["board", "list", "chat"]) assert.equal(backTarget(f).focus, true);
 });
 
 test("sidePane: terminal only when the agent's tab can be shown, else gone", () => {

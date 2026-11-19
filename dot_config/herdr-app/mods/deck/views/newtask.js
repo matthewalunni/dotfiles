@@ -1,5 +1,5 @@
 // New task, opened as a dialog with props { view: "newtask", repo? } by N
-// (Command, Issues list or board), the + New task button in the Issues header,
+// (Chat, Issues list or board), the + New task button in the Issues header,
 // and from any layout by the global ⌘⇧N (the deck-new mod opens this same view,
 // without a repo: the selected issue's is the default then). Repo chips (the
 // repos of the issues and backlog entries, plus Choose folder…), a Title input,

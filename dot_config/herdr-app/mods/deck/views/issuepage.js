@@ -114,7 +114,7 @@ export default class IssuePage extends View {
     showIssue(this, issue);
     // Shown (opened, or a j / k step): the keys are ours (goTo focused us already; again once drawn).
     focusOnShow(this, "deck-issue", () => this.handle.focus(), cx);
-    // R on the Command Center: open with the reply box focused.
+    // R from a list: open with the reply box focused.
     if (issue && globalThis.__deckReplyFocus === issue.key) {
       globalThis.__deckReplyFocus = null;
       if (detailKeys(issue, true).canReply) cx.timer.after(60, () => this.input.focus());
