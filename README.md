@@ -97,11 +97,18 @@ bash install.sh
 
 The macOS path works on Apple Silicon and Intel Macs.
 
+On any other Linux (Ubuntu, Debian, Fedora), it installs chezmoi and applies
+the dotfiles; apply does the rest. This is also what GitHub Codespaces runs
+when dotfiles are enabled, from its clone of the repo.
+
 You usually don't need to rerun it: `chezmoi apply` keeps tools in step by
 itself. On macOS it runs `brew bundle` whenever the `Brewfile` changes. On
-native Linux (pacman, apt or dnf) it installs any missing CLI tools this repo
-uses (ripgrep, jq, fd, bat, fzf, zoxide, ...). Add a tool to the `Brewfile` or
-to the list in `run_onchange_before_10-install-packages-linux.sh.tmpl`.
+Linux (pacman, apt or dnf) it installs any missing CLI tools this repo uses
+(ripgrep, jq, fd, bat, fzf, zoxide, ...), fetches official release builds into
+`~/.local/bin` for what the distro lacks (starship, lazygit, yazi, fastfetch,
+and fzf when the packaged one is older than 0.58), and makes zsh the login
+shell. Add a tool to the `Brewfile` or to the list in
+`run_onchange_before_10-install-packages-linux.sh.tmpl`.
 
 ### `install-minimal.sh` — Terminal-only install
 

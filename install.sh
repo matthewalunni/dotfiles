@@ -78,7 +78,26 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     exit 0
 fi
 
-[[ -f /etc/arch-release ]] || die "This script supports Arch Linux (and macOS via install.sh). On other distros, run 'chezmoi init --apply'; apply installs the CLI tools it needs."
+# ── other Linux (Ubuntu, Debian, Fedora, GitHub Codespaces) ──────────────────
+# Codespaces runs this script from its own clone of the repo when dotfiles are
+# enabled, so it must not just bail out. Only chezmoi is needed here: apply's
+# run_onchange script installs the CLI tools and switches the login shell.
+if [[ ! -f /etc/arch-release ]]; then
+    if ! command -v chezmoi &>/dev/null; then
+        info "Installing chezmoi into ~/.local/bin..."
+        sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+    if [[ -f "$script_dir/.chezmoi.toml.tmpl" ]]; then
+        info "Applying dotfiles from $script_dir..."
+        chezmoi init --apply --source="$script_dir"
+    else
+        apply_dotfiles
+    fi
+    success "Installation complete!"
+    exit 0
+fi
 
 # ── pacman packages ───────────────────────────────────────────────────────────
 

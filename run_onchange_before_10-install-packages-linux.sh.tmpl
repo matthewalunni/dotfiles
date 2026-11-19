@@ -23,6 +23,9 @@ tools=(
   lazygit:lazygit
   btop:btop
   yazi:yazi
+  unzip:unzip
+  man:man-db
+  col:util-linux:bsdextrautils   # cmd-help's man-page previews
 )
 
 if   command -v pacman  >/dev/null; then mgr=pacman
@@ -42,7 +45,7 @@ for t in "${tools[@]}"; do
   have "$cmd" && continue
   if [ "$mgr" = apt ]; then missing+=("${apt:-$pkg}"); else missing+=("$pkg"); fi
 done
-install() {
+pkg_install() {
   case $mgr in
     pacman) sudo pacman -S --needed --noconfirm "$@" ;;
     apt)    sudo apt-get install -y "$@" ;;
@@ -60,39 +63,88 @@ echo "chezmoi: installing missing tools: ${missing[*]}"
 # All three managers refuse the whole batch if one name is unknown (yazi,
 # lazygit, starship aren't packaged everywhere), which used to leave even
 # ripgrep uninstalled. Try the batch, then each package on its own.
-if ! install "${missing[@]}"; then
+if ! pkg_install "${missing[@]}"; then
   failed=()
-  for pkg in "${missing[@]}"; do install "$pkg" || failed+=("$pkg"); done
-  [ ${#failed[@]} -eq 0 ] || echo "chezmoi: not available from $mgr; install by hand: ${failed[*]}" >&2
+  for pkg in "${missing[@]}"; do pkg_install "$pkg" || failed+=("$pkg"); done
+  [ ${#failed[@]} -eq 0 ] || echo "chezmoi: not available from $mgr: ${failed[*]}"
 fi
 fi
 
-# Distro fzf lags far behind (Ubuntu 24.04 ships 0.44); fzf-tab's menu in
-# ~/.config/zsh/completion.zsh needs 0.58+ (change-nth). When the installed one
-# is older, put the official release build in ~/.local/bin, which ~/.zshrc puts
-# ahead of /usr/bin. Bump fzf_min if completion.zsh starts needing newer.
-fzf_min=0.58.0
-fzf_ver=$(PATH="$HOME/.local/bin:$PATH" fzf --version 2>/dev/null | cut -d' ' -f1)
-if [ -z "$fzf_ver" ] || [ "$(printf '%s\n' "$fzf_min" "$fzf_ver" | sort -V | head -1)" != "$fzf_min" ]; then
-  case $(uname -m) in
-    x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;;
-    armv7l) arch=armv7 ;; armv6l) arch=armv6 ;; *) arch= ;;
-  esac
-  tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/junegunn/fzf/releases/latest 2>/dev/null)
-  tag=${tag##*/}
-  if [ -n "$arch" ] && [ -n "$tag" ] && [ "$tag" != latest ]; then
-    echo "chezmoi: fzf ${fzf_ver:-missing} is older than $fzf_min; installing fzf $tag into ~/.local/bin"
+# ---- Official release builds, for what the package manager can't give ------
+# Ubuntu/Debian don't package starship, lazygit or yazi (nor fastfetch before
+# Ubuntu 24.10 / Debian 13), and their fzf is too
+# old for fzf-tab's menu in ~/.config/zsh/completion.zsh (needs 0.58+ for
+# change-nth). Put GitHub's release binaries in ~/.local/bin, which ~/.zshrc
+# puts ahead of /usr/bin. Arch gets everything from pacman, so this no-ops.
+PATH="$HOME/.local/bin:$PATH"
+case $(uname -m) in
+  x86_64) cpu=x86_64 ;; aarch64|arm64) cpu=aarch64 ;; *) cpu= ;;
+esac
+
+latest_tag() {  # owner/repo -> v1.2.3, via the redirect (no API rate limit)
+  local t
+  t=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" 2>/dev/null) || return 1
+  t=${t##*/}
+  [ -n "$t" ] && [ "$t" != latest ] && echo "$t"
+}
+
+# release_install NAME URL MEMBER...: download a .tar.gz or .zip and put each
+# MEMBER (path inside the archive) into ~/.local/bin.
+release_install() {
+  local name=$1 url=$2; shift 2
+  local tmp; tmp=$(mktemp -d)
+  echo "chezmoi: installing $name from $url"
+  if curl -fsSL -o "$tmp/a" "$url" && case $url in
+       *.zip) unzip -q -o "$tmp/a" -d "$tmp/x" ;;
+       *)     mkdir "$tmp/x" && tar -xzf "$tmp/a" -C "$tmp/x" ;;
+     esac; then
     mkdir -p "$HOME/.local/bin"
-    if curl -fsSL "https://github.com/junegunn/fzf/releases/download/$tag/fzf-${tag#v}-linux_$arch.tar.gz" \
-         | tar -xz -C "$HOME/.local/bin" fzf; then
-      chmod +x "$HOME/.local/bin/fzf"
-    else
-      echo "chezmoi: fzf download failed; fzf-tab menus need fzf >= $fzf_min" >&2
-    fi
+    local m
+    for m in "$@"; do install -m 755 "$tmp/x/$m" "$HOME/.local/bin/" || { rm -rf "$tmp"; return 1; }; done
+    rm -rf "$tmp"
   else
-    echo "chezmoi: couldn't fetch a newer fzf (arch $(uname -m)); fzf-tab menus need fzf >= $fzf_min" >&2
+    rm -rf "$tmp"; echo "chezmoi: couldn't install $name; install it by hand" >&2; return 1
+  fi
+}
+
+if [ -z "$cpu" ]; then
+  echo "chezmoi: no release builds for $(uname -m); install fzf/starship/lazygit/yazi/fastfetch by hand" >&2
+elif ! command -v curl >/dev/null; then
+  echo "chezmoi: curl missing; install fzf/starship/lazygit/yazi/fastfetch by hand" >&2
+else
+  fzf_min=0.58.0  # bump if completion.zsh starts needing newer
+  fzf_ver=$(fzf --version 2>/dev/null | cut -d' ' -f1)
+  if [ -z "$fzf_ver" ] || [ "$(printf '%s\n' "$fzf_min" "$fzf_ver" | sort -V | head -1)" != "$fzf_min" ]; then
+    echo "chezmoi: fzf ${fzf_ver:-missing} is older than $fzf_min"
+    t=$(latest_tag junegunn/fzf) && { [ $cpu = x86_64 ] && a=amd64 || a=arm64
+      release_install fzf "https://github.com/junegunn/fzf/releases/download/$t/fzf-${t#v}-linux_$a.tar.gz" fzf; }
+  fi
+  if ! command -v starship >/dev/null && t=$(latest_tag starship/starship); then
+    release_install starship "https://github.com/starship/starship/releases/download/$t/starship-$cpu-unknown-linux-musl.tar.gz" starship
+  fi
+  if ! command -v lazygit >/dev/null && t=$(latest_tag jesseduffield/lazygit); then
+    [ $cpu = x86_64 ] && a=x86_64 || a=arm64
+    release_install lazygit "https://github.com/jesseduffield/lazygit/releases/download/$t/lazygit_${t#v}_linux_$a.tar.gz" lazygit
+  fi
+  if ! command -v fastfetch >/dev/null && t=$(latest_tag fastfetch-cli/fastfetch); then
+    # "polyfilled" builds run on older glibc too (Ubuntu 20.04/22.04).
+    [ $cpu = x86_64 ] && a=amd64 || a=aarch64
+    d=fastfetch-linux-$a-polyfilled
+    release_install fastfetch "https://github.com/fastfetch-cli/fastfetch/releases/download/$t/$d.tar.gz" "$d/usr/bin/fastfetch"
+  fi
+  if ! command -v yazi >/dev/null && t=$(latest_tag sxyazi/yazi); then
+    if command -v unzip >/dev/null; then
+      d=yazi-$cpu-unknown-linux-musl
+      release_install yazi "https://github.com/sxyazi/yazi/releases/download/$t/$d.zip" "$d/yazi" "$d/ya"
+    else
+      echo "chezmoi: yazi needs unzip to install; install it by hand" >&2
+    fi
   fi
 fi
+
+still=()
+for t in "${tools[@]}"; do have "${t%%:*}" || still+=("${t%%:*}"); done
+[ ${#still[@]} -eq 0 ] || echo "chezmoi: still missing, install by hand: ${still[*]}" >&2
 
 # Make zsh the login shell, so new terminals and `chezmoi cd` don't land in
 # bash. chsh only accepts shells listed in /etc/shells.
