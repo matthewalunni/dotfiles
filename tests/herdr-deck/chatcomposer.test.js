@@ -72,6 +72,50 @@ test("stepPick wraps within the list", () => {
   assert.equal(stepPick(0, 1, 0), 0);
 });
 
+test("agentChoices: the names cardsFor matches (ids), live issues only", async () => {
+  const { agentChoices } = await import("../../dot_config/herdr-app/mods/deck/lib/chatcomposer.js");
+  const issues = [
+    { key: "t9|-|1", id: "TF-1", stage: "build" },
+    { key: "backlog|B-1", id: "B-1", stage: "backlog", kind: "backlog" },
+  ];
+  assert.deepEqual(agentChoices(issues), ["TF-1", "B-1"]);
+});
+
+test("undoEnterNewline: the one newline (plus indent) an Enter just inserted, at the end or mid-text", async () => {
+  const { undoEnterNewline } = await import("../../dot_config/herdr-app/mods/deck/lib/chatcomposer.js");
+  assert.equal(undoEnterNewline("ab", "ab\n"), "ab");
+  assert.equal(undoEnterNewline("ab", "a\nb"), "ab");
+  assert.equal(undoEnterNewline("/cle", "/cle\n"), "/cle");
+  assert.equal(undoEnterNewline("  x", "  x\n  "), "  x");
+  assert.equal(undoEnterNewline("ab", "abc"), null);
+  assert.equal(undoEnterNewline("ab", "a\n\nb"), null);
+  assert.equal(undoEnterNewline("a\nb", "a\nb"), null);
+  assert.equal(undoEnterNewline(null, "x\n"), null);
+});
+
+test("submitPlan: with the list open Enter picks (never sends); with it closed Enter sends", async () => {
+  const { submitPlan } = await import("../../dot_config/herdr-app/mods/deck/lib/chatcomposer.js");
+  const list = { q: { trigger: "/", query: "cle", start: 0 }, items: ["/clear"], at: 0 };
+  // The input acted first: Enter's "\n" landed and closed the list; the list before that change counts.
+  assert.deepEqual(submitPlan({ text: "/cle\n", before: "/cle", changedJustNow: true, popBefore: list, pop: null, recentKey: false }),
+    { do: "pick", text: "/cle", list });
+  // Mid-text cursor: the inserted newline is removed, not sent.
+  assert.deepEqual(submitPlan({ text: "ask @T\nF", before: "ask @TF", changedJustNow: true, popBefore: null, pop: null, recentKey: false }),
+    { do: "send", text: "ask @TF" });
+  // Submit with no inserted newline: the open list picks.
+  assert.deepEqual(submitPlan({ text: "/cle", before: "/cl", changedJustNow: false, popBefore: null, pop: list, recentKey: false }),
+    { do: "pick", text: "/cle", list });
+  // A bare Enter with no list sends.
+  assert.deepEqual(submitPlan({ text: "hello\n", before: "hello", changedJustNow: true, popBefore: null, pop: null, recentKey: false }),
+    { do: "send", text: "hello" });
+  // The key handler already took this Enter: only the stray newline is undone.
+  assert.deepEqual(submitPlan({ text: "/clear \n", before: "/clear ", changedJustNow: true, popBefore: null, pop: null, recentKey: true }),
+    { do: "ignore", text: "/clear " });
+  // An older newline (a Shift+Enter some time ago) is left alone.
+  assert.deepEqual(submitPlan({ text: "a\nb", before: "ab", changedJustNow: false, popBefore: null, pop: null, recentKey: false }),
+    { do: "send", text: "a\nb" });
+});
+
 test("outgoing: trailing whitespace (an Enter's newline) is dropped; blank is nothing", () => {
   assert.equal(outgoing("hello\n"), "hello");
   assert.equal(outgoing("  two\nlines \n"), "  two\nlines");

@@ -25,6 +25,16 @@ export function chatAgent(terminals, agents) {
   return { address, status: STATUSES.has(raw) ? raw : null, focused: Boolean(a?.focused) };
 }
 
+/**
+ * Whether the Chat view should start the chat agent now: it is shown (every
+ * stack child inits when the layout loads, hidden ones too), no chat agent is
+ * live, and it has not tried yet (the Start button covers a failed try).
+ * @param {{ shown: boolean, agent: object|null, tried: boolean }} s
+ */
+export function shouldAutoStart({ shown, agent, tried }) {
+  return Boolean(shown && !agent && !tried);
+}
+
 /** When the status became unknown (kept while it stays unknown), else null. */
 export function nullSince(prev, status, now) {
   return status == null ? prev ?? now : null;

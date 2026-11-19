@@ -106,6 +106,15 @@ test("attachCards: an agent text block is followed by its cards (ids from the bl
   assert.deepEqual(out[5], { id: "s:2:github:9", type: "github", number: 9, issueKey: null });
 });
 
+test("shouldAutoStart: once, only while shown and only when no chat agent is live", async () => {
+  const { shouldAutoStart } = await import("../../dot_config/herdr-app/mods/deck/lib/chatview.js");
+  const agent = { address: "t9", status: "idle", focused: false };
+  assert.equal(shouldAutoStart({ shown: true, agent: null, tried: false }), true);
+  assert.equal(shouldAutoStart({ shown: true, agent: null, tried: true }), false);
+  assert.equal(shouldAutoStart({ shown: false, agent: null, tried: false }), false);
+  assert.equal(shouldAutoStart({ shown: true, agent, tried: false }), false);
+});
+
 test("chatViewKey: with the view focused, Enter approves and esc skips an approval; Enter otherwise types", () => {
   const ev = (key, o = {}) => ({ key, shift: false, cmd: false, held: false, ...o });
   assert.equal(chatViewKey(ev("enter"), { approval: true, canAnswer: true }), "approve");

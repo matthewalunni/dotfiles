@@ -7,7 +7,7 @@
 // host.answer(option, cx)).
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { createRegistry } from "../lib/chatregistry.js";
+import { createRegistry, BLOCK_TYPES } from "../lib/chatregistry.js";
 import { clipDetail } from "../lib/chatview.js";
 import { BARLOW, spaced, button, dot } from "./ui.js";
 import { githubCard, deckCard } from "./chatcards.js";
@@ -113,9 +113,6 @@ function approval(block, _cx, { k, host }) {
     );
 }
 
-registerBlock("text", text);
-registerBlock("action", action);
-registerBlock("divider", divider);
-registerBlock("approval", approval);
-registerBlock("github", githubCard);
-registerBlock("deck", deckCard);
+// One renderer per BLOCK_TYPES entry (registerBlock throws on a missing one, so the two cannot drift).
+const BUILT_IN = { text, action, divider, approval, github: githubCard, deck: deckCard };
+for (const type of BLOCK_TYPES) registerBlock(type, BUILT_IN[type]);

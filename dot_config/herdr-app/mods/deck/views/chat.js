@@ -8,12 +8,14 @@
 // prompt on the chat pane's screen, read every 1.5 s while this view is shown,
 // and answered (Approve / Skip) only while the chat pane does not have the
 // keyboard. A trust modal (status unknown) is never answered from here.
+// Opening the view starts the chat agent once (ensureChat); after a failure
+// the "not running" line keeps a Start button.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared, terminals, agents } from "herdr";
 import { shownChild } from "../lib/views.js";
 import { reviveChatLog } from "../lib/chat.js";
-import { chatAgent, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey } from "../lib/chatview.js";
+import { chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey } from "../lib/chatview.js";
 import { currentStore, STORE_KEY, VIEW_KEY } from "../data.js";
 import { CHAT_KEY, chatPrompt, answerChat, ensureChat } from "../chat.js";
 import { MONO, tokens, button, act, keyOf } from "./ui.js";
@@ -55,8 +57,15 @@ export default class ChatView extends View {
     this.drawnLog = 0;
     this.starting = false;
     this.startErr = null;
+    this.autoTried = false;
     cx.timer.every(POLL_MS, (cx) => {
-      if (isShown()) this.poll(cx);
+      if (!isShown()) return;
+      // Opening the view starts the chat agent (once; the Start button covers a failure).
+      if (shouldAutoStart({ shown: true, agent: chatAgent(terminals(), agents()), tried: this.autoTried })) {
+        this.autoTried = true;
+        this.start(cx);
+      }
+      this.poll(cx);
     });
     // The chat log is not in keepFresh's fingerprint: redraw when it grows.
     cx.timer.every(FRESH_MS, (cx) => {
@@ -135,8 +144,9 @@ export default class ChatView extends View {
   }
 
   onKey(e, cx) {
-    // Typing: every key is the composer's (its own handler took Enter, esc and the list keys).
-    if (this.composer.typing && !this.handle.is_focused()) return;
+    // The view's keys only while its own handle has the keyboard: in the
+    // composer every key is the composer's (its handler took Enter, esc and the list keys).
+    if (!this.handle.is_focused()) return;
     const a = chatViewKey(keyOf(e), { approval: Boolean(this.approval), canAnswer: this.canAnswer });
     if (!a) return;
     switch (a) {

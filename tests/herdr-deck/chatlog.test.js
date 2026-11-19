@@ -77,3 +77,16 @@ test("cardsFor tolerates bad input and keys with regex characters", () => {
   assert.deepEqual(cardsFor("a.b-1", [{ key: "a.b-1", pr: null }]), [{ type: "deck", issueKey: "a.b-1" }]);
   assert.deepEqual(cardsFor("axb-1", [{ key: "a.b-1", pr: null }]), []);
 });
+
+test("cardsFor matches the visible id (what @ completes and agents write), carrying the store key", async () => {
+  const { mentionName } = await import("../../dot_config/herdr-app/mods/deck/lib/chat.js");
+  const store = [{ key: "t9|-|1700000000000", id: "TF-1", pr: { number: 7 } }, { key: "backlog|B-1", id: "B-1", pr: null }];
+  assert.equal(mentionName(store[0]), "TF-1");
+  assert.equal(mentionName({ key: "only-key" }), "only-key");
+  assert.deepEqual(cardsFor("TF-1 and B-1, PR #7", store), [
+    { type: "deck", issueKey: "t9|-|1700000000000" },
+    { type: "deck", issueKey: "backlog|B-1" },
+    { type: "github", number: 7, issueKey: "t9|-|1700000000000" },
+  ]);
+  assert.deepEqual(cardsFor("t9|-|1700000000000", store), []);
+});

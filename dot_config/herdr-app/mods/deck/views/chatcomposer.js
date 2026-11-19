@@ -11,8 +11,9 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState, Textarea } from "gpui-base";
 import { createRegistry } from "../lib/chatregistry.js";
-import { completionQuery, applyCompletion, filterChoices, composerKey, stepPick, outgoing, SLASH_COMMANDS } from "../lib/chatcomposer.js";
-import { liveIssues } from "../lib/present.js";
+import {
+  completionQuery, applyCompletion, filterChoices, composerKey, stepPick, outgoing, submitPlan, agentChoices, SLASH_COMMANDS,
+} from "../lib/chatcomposer.js";
 import { currentStore } from "../data.js";
 import { sendToChat } from "../chat.js";
 import { keyOf } from "./ui.js";
@@ -27,7 +28,7 @@ export function registerCompletion(trigger, provider) {
   completions.register(trigger, provider);
 }
 
-registerCompletion("@", (query) => filterChoices(liveIssues(currentStore().issues).map((i) => i.id), "@", query));
+registerCompletion("@", (query) => filterChoices(agentChoices(currentStore().issues), "@", query));
 registerCompletion("/", (query) => filterChoices(SLASH_COMMANDS, "/", query));
 
 /** The completion list for the text typed so far: { q, items }, or null when none applies. */
@@ -56,15 +57,35 @@ export class Composer {
     this.input = TextareaState.new({ placeholder: "Message the chat agent…", rows: 2 });
     this.input.set_soft_wrap(true);
     this.input.set_auto_grow(2, 8);
+    // What the last change replaced: an Enter the input acted on first has
+    // already put its "\n" in (and closed the list) by the time submit arrives.
+    this.lastText = "";
+    this.textBefore = null;
+    this.popBefore = null;
+    this.changedAt = 0;
     this.input.on("change", (_e, cx) => {
+      this.textBefore = this.lastText;
+      this.popBefore = this.pop;
+      this.lastText = this.input.value();
+      this.changedAt = Date.now();
       this.error = null;
       this.refreshPop();
       cx.notify();
     });
-    // Should Enter reach the input itself: a plain one sends (the key handler normally takes it first).
+    // An Enter that reached the input: lib/chatcomposer.js submitPlan decides
+    // (with a list open it picks, never sends; the inserted newline is undone).
     this.input.on("submit", (e, cx) => {
-      if (e?.shift || e?.secondary || this.pop) return;
-      this.enter(cx);
+      if (e?.shift || e?.secondary) return;
+      const now = Date.now();
+      const plan = submitPlan({
+        text: this.input.value(), before: this.textBefore, changedJustNow: now - this.changedAt < ENTER_DEDUP_MS,
+        popBefore: this.popBefore, pop: this.pop, recentKey: now - this.enterAt < ENTER_DEDUP_MS,
+      });
+      this.popBefore = null;
+      if (plan.text !== this.input.value()) this.input.set_value(plan.text);
+      if (plan.do === "pick") this.pick(plan.list, plan.text);
+      else if (plan.do === "send") this.enter(cx);
+      cx.notify();
     });
     this.input.on("focus", (_e, cx) => {
       this.typing = true;
@@ -127,13 +148,12 @@ export class Composer {
     this.send(cx);
   }
 
-  /** Puts the highlighted completion in place of the word being typed. */
-  pick() {
-    const pop = this.pop;
+  /** Puts the highlighted completion of `pop` (the open list) in place of the word being typed in `text`. */
+  pick(pop = this.pop, text = this.input.value()) {
     if (!pop) return;
     this.enterAt = Date.now();
     this.pop = null;
-    this.input.set_value(applyCompletion(this.input.value(), pop.q, pop.items[pop.at]));
+    this.input.set_value(applyCompletion(text, pop.q, pop.items[pop.at]));
   }
 
   /** Sends the text (sendToChat); on failure the text stays and the error shows under the box. */

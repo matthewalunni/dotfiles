@@ -153,16 +153,27 @@ export function appendBlocks(log, blocks, now) {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * Cards for the deck issue keys and PR references mentioned in `text`, in order
- * of first appearance, without duplicates. Keys match as whole words; a PR is
- * written `#N` or `PR N`.
- * @param {string} text @param {Array<{key: string, pr: {number: number}|null}>} issues
+ * The name an issue is mentioned by: its visible id ("TF-1"; what the board
+ * shows, the agent writes and @ completes), else its store key.
+ * @param {{key: string, id?: string}} issue
+ */
+export function mentionName(issue) {
+  return typeof issue?.id === "string" && issue.id ? issue.id : String(issue?.key ?? "");
+}
+
+/**
+ * Cards for the deck issues (by mentionName) and PR references mentioned in
+ * `text`, in order of first appearance, without duplicates. Names match as
+ * whole words; a PR is written `#N` or `PR N`. Cards carry the store key.
+ * @param {string} text @param {Array<{key: string, id?: string, pr: {number: number}|null}>} issues
  */
 export function cardsFor(text, issues) {
   if (typeof text !== "string" || !text) return [];
   const found = [];
   for (const issue of issues) {
-    const m = new RegExp(`(?<![\\w-])${escapeRe(issue.key)}(?![\\w-])`).exec(text);
+    const name = mentionName(issue);
+    if (!name) continue;
+    const m = new RegExp(`(?<![\\w-])${escapeRe(name)}(?![\\w-])`).exec(text);
     if (m) found.push({ at: m.index, card: { type: "deck", issueKey: issue.key } });
   }
   for (const m of text.matchAll(/(?:#|\bPR\s+)(\d+)\b/g)) {
