@@ -127,3 +127,14 @@ test("chatViewKey: with the view focused, Enter approves and esc skips an approv
   assert.equal(chatViewKey(ev("enter", { cmd: true }), { approval: true, canAnswer: true }), null);
   assert.equal(chatViewKey(ev("?"), { approval: false, canAnswer: true }), "help");
 });
+
+test("chatViewKey: N opens a new task (shift too); not held, cmd or with a dialog open", () => {
+  const ev = (key, o = {}) => ({ key, shift: false, cmd: false, held: false, ...o });
+  const c = { approval: false, canAnswer: true, dialog: false };
+  assert.equal(chatViewKey(ev("n"), c), "newTask");
+  assert.equal(chatViewKey(ev("N", { shift: true }), c), "newTask");
+  assert.equal(chatViewKey(ev("n", { held: true }), c), null);
+  assert.equal(chatViewKey(ev("n", { cmd: true }), c), null);
+  assert.equal(chatViewKey(ev("n"), { ...c, dialog: true }), null);
+  assert.equal(chatViewKey(ev("n"), { approval: true, canAnswer: true, dialog: false }), "newTask");
+});

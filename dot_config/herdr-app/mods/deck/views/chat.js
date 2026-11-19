@@ -24,6 +24,8 @@ import { prsWanted, fetchPrs } from "./chatcards.js";
 import { Composer } from "./chatcomposer.js";
 import ChatRoster from "./chatroster.js";
 import { openKeys } from "./keys.js";
+import { openNewTask } from "./newtask.js";
+import { anyDialogOpen } from "./merge.js";
 import { registerFocus, focusOnShow, keepFresh, drew } from "./focus.js";
 
 const CHILD = "deck-chat";
@@ -147,7 +149,7 @@ export default class ChatView extends View {
     // The view's keys only while its own handle has the keyboard: in the
     // composer every key is the composer's (its handler took Enter, esc and the list keys).
     if (!this.handle.is_focused()) return;
-    const a = chatViewKey(keyOf(e), { approval: Boolean(this.approval), canAnswer: this.canAnswer });
+    const a = chatViewKey(keyOf(e), { approval: Boolean(this.approval), canAnswer: this.canAnswer, dialog: anyDialogOpen() });
     if (!a) return;
     switch (a) {
       case "approve":
@@ -162,6 +164,9 @@ export default class ChatView extends View {
         break;
       case "help":
         openKeys();
+        break;
+      case "newTask":
+        if (!openNewTask()) return;
         break;
       default:
         return;

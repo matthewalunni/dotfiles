@@ -127,8 +127,9 @@ export function attachCards(blocks, issues) {
  * Enter approves and esc skips a shown approval (only when it can be answered);
  * otherwise Enter or I puts the keyboard in the composer.
  * @param {{key: string, shift?: boolean, cmd?: boolean, held?: boolean}} ev
- * @param {{ approval: boolean, canAnswer: boolean }} ctx
- * @returns {"approve"|"skip"|"type"|"help"|null}
+ * N opens a new task (nothing while a Deck dialog is open: ctx.dialog).
+ * @param {{ approval: boolean, canAnswer: boolean, dialog?: boolean }} ctx
+ * @returns {"approve"|"skip"|"type"|"help"|"newTask"|null}
  */
 export function chatViewKey(ev, ctx) {
   if (ev?.cmd || ev?.held) return null;
@@ -137,6 +138,7 @@ export function chatViewKey(ev, ctx) {
     if (!ctx.canAnswer) return null;
     return k === "enter" ? "approve" : "skip";
   }
+  if (k === "n") return ctx.dialog ? null : "newTask";
   if (k === "enter" || k === "i") return "type";
   if (k === "?" || (k === "/" && ev?.shift)) return "help";
   return null;

@@ -197,6 +197,14 @@ test("N opens a new task in Chat and Issues (list and board)", () => {
   }
 });
 
+test("N from the Chat view: the view's own key map opens a new task", async () => {
+  const { chatViewKey } = await import("../../dot_config/herdr-app/mods/deck/lib/chatview.js");
+  for (const e of [kk("n"), kk("N", { shift: true })]) {
+    assert.equal(chatViewKey(e, { approval: false, canAnswer: false, dialog: false }), "newTask");
+    assert.equal(chatViewKey(e, { approval: false, canAnswer: false, dialog: true }), null);
+  }
+});
+
 test("N does nothing while typing, with a dialog open, held, or on the issue page / PR tab", () => {
   assert.equal(keyAction(kk("n"), ctx({ typing: true })), null);
   assert.equal(keyAction(kk("n"), ctx({ dialog: true })), null);
