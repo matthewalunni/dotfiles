@@ -111,6 +111,19 @@ export function emptyChatLog() {
 }
 
 /**
+ * A ChatLog from whatever shared state holds: the same object when it is intact,
+ * else (persisted state loses the Set) rebuilt from its blocks; empty when unusable.
+ * @param {any} raw @returns {ChatLog}
+ */
+export function reviveChatLog(raw) {
+  if (!raw || !Array.isArray(raw.blocks)) return emptyChatLog();
+  if (raw.ids instanceof Set && "session" in raw) return raw;
+  const blocks = raw.blocks;
+  const session = raw.session ?? (blocks.length ? blocks[blocks.length - 1].session ?? null : null);
+  return { blocks, ids: new Set(blocks.map((b) => b.id)), session };
+}
+
+/**
  * Append new blocks, skipping any whose id is already present (replays after a
  * restart or /clear). A block from a different session than the log's current
  * one is preceded by a "cleared" divider. Returns the same object when nothing
