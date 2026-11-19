@@ -208,3 +208,32 @@ export function chatViewKey(ev, ctx) {
   if (k === "?" || (k === "/" && ev?.shift)) return "help";
   return null;
 }
+
+/**
+ * The key of the terminal that has the focus: its space, tab, terminal and agent.
+ * Null when none does (a mod pane such as the chat's own block, or no focus at all).
+ * @param {{ space?: string, tab?: string, terminal?: string|null, agent?: string|null }|null|undefined} f herdr focused()
+ * @returns {string|null}
+ */
+export function terminalFocusKey(f) {
+  if (!f || !(f.terminal || f.agent)) return null;
+  return [f.space ?? "", f.tab ?? "", f.terminal ?? "", f.agent ?? ""].join("|");
+}
+
+/**
+ * A click on the sidebar's Spaces or Agents moves the focus to another terminal;
+ * the Chat view answers by opening the Terminal view. This tells a move from
+ * noise: focus on a mod pane (the chat block) keeps the baseline and never jumps,
+ * the first terminal focus only records it, and the chat agent's own terminal
+ * (a peek of it) is ignored.
+ * @param {string|null} prevKey the last terminal focus key seen
+ * @param {{ space?: string, tab?: string, terminal?: string|null, agent?: string|null }|null|undefined} f herdr focused()
+ * @param {string|null} chatTerminal the chat agent's terminal address, if running
+ * @returns {{ key: string|null, jump: boolean }}
+ */
+export function focusJump(prevKey, f, chatTerminal) {
+  const key = terminalFocusKey(f);
+  if (key === null) return { key: prevKey, jump: false };
+  if (chatTerminal && (f?.terminal === chatTerminal || f?.agent === chatTerminal)) return { key: prevKey, jump: false };
+  return { key, jump: prevKey !== null && key !== prevKey };
+}

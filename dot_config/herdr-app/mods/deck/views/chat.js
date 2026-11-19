@@ -16,12 +16,13 @@
 // the "not running" line keeps a Start button.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
-import { shared, terminals, agents } from "herdr";
+import { shared, terminals, agents, focused } from "herdr";
 import { shownChild } from "../lib/views.js";
 import { reviveChatLog } from "../lib/chat.js";
+import { findChatTerminal } from "../lib/chatsource.js";
 import {
   chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey,
-  composerLocked, followKey, followScroll, logMark, TRUST_NOTE,
+  composerLocked, followKey, followScroll, logMark, TRUST_NOTE, focusJump,
 } from "../lib/chatview.js";
 import { currentStore, STORE_KEY, VIEW_KEY } from "../data.js";
 import { CHAT_KEY, chatPrompt, answerChat, ensureChat, openChatTerminal } from "../chat.js";
@@ -32,7 +33,7 @@ import { Composer } from "./chatcomposer.js";
 import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
 import { anyDialogOpen } from "./merge.js";
-import { registerFocus, focusOnShow, keepFresh, drew } from "./focus.js";
+import { registerFocus, focusOnShow, keepFresh, drew, goTo } from "./focus.js";
 
 const CHILD = "deck-chat";
 const POLL_MS = 1500;
@@ -77,6 +78,15 @@ export default class ChatView extends View {
       this.poll(cx);
     });
     // The chat log is not in keepFresh's fingerprint: redraw when it changes.
+    // A click on the sidebar's Spaces or Agents moves the focus to another terminal:
+    // open the Terminal view on it. The baseline keeps moving while this view is hidden,
+    // so coming back to Chat never jumps.
+    this.termKey = focusJump(null, focused(), null).key;
+    cx.timer.every(FRESH_MS, () => {
+      const r = focusJump(this.termKey, focused(), findChatTerminal(terminals()));
+      this.termKey = r.key;
+      if (r.jump && isShown()) goTo("deck-terminal");
+    });
     cx.timer.every(FRESH_MS, (cx) => {
       if (isShown() && currentMark() !== this.drawnLog) cx.notify();
     });
