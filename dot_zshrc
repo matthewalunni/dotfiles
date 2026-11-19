@@ -38,7 +38,13 @@ zinit light zsh-users/zsh-autosuggestions
 zinit light zdharma-continuum/fast-syntax-highlighting
 # Full compinit (with its security audit) at most once a day; otherwise trust the cache.
 autoload -Uz compinit
-if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then compinit; else compinit -C; fi
+# (#q) glob qualifiers need extended_glob, which isn't set until further down;
+# without it the test below is always true and the audit runs every startup.
+() {
+  setopt local_options extended_glob
+  local dump=${ZDOTDIR:-$HOME}/.zcompdump
+  if [[ ! -s $dump || -n $dump(#qN.mh+24) ]]; then compinit; else compinit -C; fi
+}
 zinit light Aloxaf/fzf-tab
 # fzf-tab previews, man-page keys, extra completions
 [[ -f ~/.config/zsh/completion.zsh ]] && source ~/.config/zsh/completion.zsh
