@@ -13,5 +13,11 @@ if ! command -v brew >/dev/null; then
   exit 0
 fi
 
-brew bundle --file="{{ .chezmoi.sourceDir }}/Brewfile"
+# Never fail: this is a `before` script, so a non-zero exit aborts the whole
+# apply and, since chezmoi only records success, every apply after it too.
+if ! brew bundle --file="{{ .chezmoi.sourceDir }}/Brewfile"; then
+  echo "chezmoi: brew bundle had failures (see above); dotfiles were still applied." >&2
+  echo "chezmoi: a formula installed from another tap under the same name is the usual cause;" >&2
+  echo "chezmoi: \`brew uninstall <name>\` then \`chezmoi apply\` to retry." >&2
+fi
 {{- end }}

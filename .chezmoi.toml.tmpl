@@ -14,6 +14,11 @@
 [edit]
 command = "nvim"
 
+# `chezmoi cd` otherwise opens $SHELL, which is bash on a machine whose
+# login shell was never switched.
+[cd]
+command = "zsh"
+
 [data]
 git_name = {{ $name | quote }}
 git_email = {{ $email | quote }}

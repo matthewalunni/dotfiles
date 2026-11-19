@@ -52,21 +52,26 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         success "Homebrew installed"
     fi
 
+    # Before anything that can fail, so a bad package never leaves bash as
+    # the login shell.
+    set_default_shell
+
     # Get the source directory (and its Brewfile) before bundling
     brew list chezmoi &>/dev/null || brew install chezmoi
     apply_dotfiles
 
     info "Installing Homebrew packages..."
-    brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
-    success "Homebrew packages installed"
+    if brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"; then
+        success "Homebrew packages installed"
+    else
+        warn "Some Homebrew packages failed (see above); continuing"
+    fi
 
     if ! command -v harlequin &>/dev/null; then
         info "Installing harlequin (Postgres TUI)..."
         uv tool install 'harlequin[postgres]'
         success "harlequin installed"
     fi
-
-    set_default_shell
 
     echo
     success "Installation complete!"
