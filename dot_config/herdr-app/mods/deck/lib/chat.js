@@ -150,6 +150,20 @@ export function appendBlocks(log, blocks, now) {
   return out ?? log;
 }
 
+/** Blocks the shared log keeps (it is persisted in shared.json and read every frame); the archive keeps all. */
+export const CHAT_LOG_MAX = 500;
+
+/**
+ * The newest `max` blocks of `log`, ids rebuilt to match them, session kept.
+ * Returns the same object when it is within `max`. Never mutates `log`.
+ * @param {ChatLog} log @param {number} [max] @returns {ChatLog}
+ */
+export function capChatLog(log, max = CHAT_LOG_MAX) {
+  if (log.blocks.length <= max) return log;
+  const blocks = log.blocks.slice(log.blocks.length - max);
+  return { blocks, ids: new Set(blocks.map((b) => b.id)), session: log.session };
+}
+
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -164,7 +178,8 @@ export function mentionName(issue) {
 /**
  * Cards for the deck issues (by mentionName) and PR references mentioned in
  * `text`, in order of first appearance, without duplicates. Names match as
- * whole words; a PR is written `#N` or `PR N`. Cards carry the store key.
+ * whole words; a PR is written `#N` or `PR N` (not after a word character,
+ * `/`, `&` or `#`). Cards carry the store key.
  * @param {string} text @param {Array<{key: string, id?: string, pr: {number: number}|null}>} issues
  */
 export function cardsFor(text, issues) {
@@ -176,8 +191,10 @@ export function cardsFor(text, issues) {
     const m = new RegExp(`(?<![\\w-])${escapeRe(name)}(?![\\w-])`).exec(text);
     if (m) found.push({ at: m.index, card: { type: "deck", issueKey: issue.key } });
   }
-  for (const m of text.matchAll(/(?:#|\bPR\s+)(\d+)\b/g)) {
-    const number = Number(m[1]);
+  // Not glued to a word, path, entity or another # (abc#37, /pull#37, &#37;, ##37);
+  // `#` takes at most 5 digits, so a #123456 color is not a PR.
+  for (const m of text.matchAll(/(?<![\w/&#])(?:#(\d{1,5})|PR\s+(\d+))(?!\w)/g)) {
+    const number = Number(m[1] ?? m[2]);
     const owner = issues.find((i) => i.pr?.number === number);
     found.push({ at: m.index, card: { type: "github", number, issueKey: owner ? owner.key : null } });
   }

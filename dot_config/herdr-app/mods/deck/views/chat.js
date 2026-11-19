@@ -7,7 +7,10 @@
 // mentions. The approval card is not in the transcript: it is the permission
 // prompt on the chat pane's screen, read every 1.5 s while this view is shown,
 // and answered (Approve / Skip) only while the chat pane does not have the
-// keyboard. A trust modal (status unknown) is never answered from here.
+// keyboard. A trust modal (status unknown) is never answered from here: the
+// trust note's Open terminal button peeks the chat agent's terminal so the
+// person answers it there. While the approval card or the trust note shows, the
+// composer keeps its text instead of sending (Enter would answer the prompt).
 // Opening the view starts the chat agent once (ensureChat); after a failure
 // the "not running" line keeps a Start button.
 import { View, div } from "gpui-kit";
@@ -15,9 +18,12 @@ import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared, terminals, agents } from "herdr";
 import { shownChild } from "../lib/views.js";
 import { reviveChatLog } from "../lib/chat.js";
-import { chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey } from "../lib/chatview.js";
+import {
+  chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey,
+  composerLocked, followKey, followScroll, logMark, TRUST_NOTE,
+} from "../lib/chatview.js";
 import { currentStore, STORE_KEY, VIEW_KEY } from "../data.js";
-import { CHAT_KEY, chatPrompt, answerChat, ensureChat } from "../chat.js";
+import { CHAT_KEY, chatPrompt, answerChat, ensureChat, openChatTerminal } from "../chat.js";
 import { MONO, tokens, button, act, keyOf } from "./ui.js";
 import { renderBlock } from "./chatblocks.js";
 import { prsWanted, fetchPrs } from "./chatcards.js";
@@ -36,7 +42,8 @@ const MAX_BLOCKS = 200;
 const COLUMN = 700;
 
 const isShown = () => shownChild(shared("layout"), shared(VIEW_KEY)) === CHILD;
-const logLength = () => shared(CHAT_KEY)?.blocks?.length ?? 0;
+// The log is capped (its length stops changing), so redraws key on its last block too.
+const currentMark = () => logMark(shared(CHAT_KEY));
 
 export default class ChatView extends View {
   init(p, cx) {
@@ -55,8 +62,9 @@ export default class ChatView extends View {
     this.focusedPane = false;
     this.nullAt = null; // since when the chat agent's status is unknown
     this.away = 0; // how far the wheel took the transcript above its bottom (0: follow)
-    this.drawnRows = null;
-    this.drawnLog = 0;
+    this.trust = false; // the trust note is showing
+    this.drawnFollow = null; // followKey at the last draw
+    this.drawnLog = "";
     this.starting = false;
     this.startErr = null;
     this.autoTried = false;
@@ -69,9 +77,9 @@ export default class ChatView extends View {
       }
       this.poll(cx);
     });
-    // The chat log is not in keepFresh's fingerprint: redraw when it grows.
+    // The chat log is not in keepFresh's fingerprint: redraw when it changes.
     cx.timer.every(FRESH_MS, (cx) => {
-      if (isShown() && logLength() !== this.drawnLog) cx.notify();
+      if (isShown() && currentMark() !== this.drawnLog) cx.notify();
     });
   }
 
@@ -145,6 +153,30 @@ export default class ChatView extends View {
     this.away = 0;
   }
 
+  /** Whether the composer must hold its text: a prompt (approval card or trust note) is showing. */
+  sendLocked() {
+    return composerLocked({ approval: Boolean(this.approval), trust: this.trust });
+  }
+
+  /** The trust note, with the button that shows the chat agent's terminal (a peek). */
+  trustNote(k) {
+    return h_flex()
+      .w_full()
+      .items_center()
+      .gap(12)
+      .px(14)
+      .py(10)
+      .border_1()
+      .border_color(k.hold)
+      .rounded(8)
+      .child(div().flex_1().min_w(0).text_size(11).text_color(k.hold).line_height(1.5).child(TRUST_NOTE))
+      .child(
+        button("chat-open-terminal", "Open terminal", "plain", (_e, cx) => {
+          act(cx, async () => openChatTerminal(), "Could not open the chat agent's terminal");
+        }),
+      );
+  }
+
   onKey(e, cx) {
     // The view's keys only while its own handle has the keyboard: in the
     // composer every key is the composer's (its handler took Enter, esc and the list keys).
@@ -205,31 +237,34 @@ export default class ChatView extends View {
     const agent = chatAgent(terminals(), agents());
     this.nullAt = agent ? nullSince(this.nullAt, agent.status, now) : null;
     const trust = Boolean(agent) && trustWaiting(agent.status, this.nullAt, now);
+    this.trust = trust;
     this.focusedPane = Boolean(agent?.focused);
     this.canAnswer = Boolean(agent) && !agent.focused && !this.answering;
     this.approval = agent?.status === "blocked" ? approvalFrom(this.prompt) : null;
 
     const log = reviveChatLog(raw);
-    this.drawnLog = raw?.blocks?.length ?? 0;
+    this.drawnLog = logMark(raw);
     const { shown, hidden } = recentBlocks(log.blocks, MAX_BLOCKS);
     const ctx = { k, host: this };
     const col = (el) => div().flex_none().w_full().max_w(COLUMN).child(el);
     const note = (text, color = k.muted) => col(div().text_size(11).text_color(color).child(text));
 
+    const drawn = attachCards(shown, currentStore().issues);
     const rows = [];
     if (hidden) rows.push(note(`${hidden} earlier blocks are in the chat archive`));
     if (!log.blocks.length && agent) rows.push(note("Ask the chat agent about the board. It sees every agent.", k.text));
-    for (const b of attachCards(shown, currentStore().issues)) rows.push(col(renderBlock(b, cx, ctx)));
+    for (const b of drawn) rows.push(col(renderBlock(b, cx, ctx)));
     if (!agent) rows.push(col(this.notRunning(k)));
-    else if (trust) rows.push(note("waiting for trust confirmation in the chat pane", k.hold));
+    else if (trust) rows.push(col(this.trustNote(k)));
     if (this.approval) rows.push(col(renderBlock(this.approval, cx, ctx)));
     rows.push(div().flex_none().h(1)); // the bottom: what following scrolls to
 
-    // New rows: follow them down, unless the wheel has taken the reader up.
-    if (rows.length !== this.drawnRows) {
-      if (this.drawnRows == null || this.away === 0) this.scroll.scroll_to_item(rows.length - 1);
-      this.drawnRows = rows.length;
-    }
+    // Something new at the bottom: follow it down, unless the wheel has taken
+    // the reader up. Keyed on the last block (lib/chatview.js followKey), not the
+    // row count, which stops changing once the log passes MAX_BLOCKS.
+    const follow = followKey({ lastId: drawn.at(-1)?.id, approval: Boolean(this.approval), trust });
+    if (followScroll(this.drawnFollow, follow, this.away)) this.scroll.scroll_to_item(rows.length - 1);
+    this.drawnFollow = follow;
     if (prsWanted()) cx.timer.after(0, (cx) => fetchPrs(cx));
 
     const transcript = v_flex()

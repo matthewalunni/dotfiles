@@ -16,6 +16,7 @@ import {
 } from "../lib/chatcomposer.js";
 import { currentStore } from "../data.js";
 import { sendToChat } from "../chat.js";
+import { SEND_BLOCKED } from "../lib/chatview.js";
 import { keyOf } from "./ui.js";
 
 // One Enter can reach both the key handler and the input's submit event.
@@ -45,7 +46,7 @@ function completionsFor(text) {
 }
 
 export class Composer {
-  /** @param {{ leaveComposer: () => void, sent: () => void }} host */
+  /** @param {{ leaveComposer: () => void, sent: () => void, sendLocked: () => boolean }} host */
   constructor(host) {
     this.host = host;
     this.typing = false;
@@ -156,10 +157,19 @@ export class Composer {
     this.input.set_value(applyCompletion(text, pop.q, pop.items[pop.at]));
   }
 
-  /** Sends the text (sendToChat); on failure the text stays and the error shows under the box. */
+  /**
+   * Sends the text (sendToChat); on failure the text stays and the error shows
+   * under the box. Not while the view shows a prompt (host.sendLocked: the
+   * approval card or the trust note): the text stays and nothing is typed.
+   */
   send(cx) {
     const text = outgoing(this.input.value());
     if (!text || this.busy) return;
+    if (this.host.sendLocked()) {
+      this.error = SEND_BLOCKED;
+      cx.notify();
+      return;
+    }
     this.busy = true;
     this.error = null;
     this.host.sent();
@@ -226,7 +236,7 @@ export class Composer {
       .child(hint("@ mention an agent"))
       .child(hint("/ commands"))
       .child(div().flex_1())
-      .child(hint(this.busy ? "sending…" : "⏎ send"));
+      .child(hint(this.busy ? "sending…" : this.host.sendLocked() ? "answer the prompt above first" : "⏎ send"));
     const box = v_flex()
       .id("chat-composer")
       .w_full()

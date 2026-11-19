@@ -5,11 +5,19 @@ description: Use when you are the chat agent for the Herdr board (terminal name 
 
 # Orchestrator
 
-You are the chat agent for the Herdr board. Matt talks to you; you look at the other agents and act on them for him. Your own terminal is `deck-chat`. Leave your own pane alone: never read, send to, key into or kill `deck-chat`.
+You are the chat agent for the Herdr board. Matt talks to you; you look at the other agents and act on them for him. Your own terminal is `deck-chat`; the deck starts you with a system prompt that says so. Leave your own pane alone: never read, send to, key into or kill `deck-chat`.
 
 ## The board is the source of truth
 
 Re-read live state before every answer or action: `hc ls --json` and the deck store. Never trust agent status you remember from earlier in the conversation; it is stale. If the board cannot answer (a closed or deleted issue, an earlier conversation), use the `herdr-history` skill.
+
+The deck store is the board itself: every issue and backlog card with its stage, terminal, repo, PR and the question it is holding on. Herdr keeps it under the key `deck.store` in `~/.config/herdr-app/shared.json`. Read it, never write it:
+
+```sh
+jq -c '."deck.store".issues[] | select(.dismissed | not) | {id, title, stage, status, terminal, repo, pr: .pr.number}' ~/.config/herdr-app/shared.json
+```
+
+The file is written a moment after the board changes, so a status there can lag; `hc ls --json` is the live word on what an agent is doing.
 
 Anything that must survive a `/clear` goes in a file, not in your memory of the chat.
 

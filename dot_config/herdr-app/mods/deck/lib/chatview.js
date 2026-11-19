@@ -3,6 +3,8 @@
 import { findChatTerminal } from "./chatsource.js";
 import { samePrompt } from "./prompt.js";
 import { cardsFor } from "./chat.js";
+import { CHAT_NAME } from "./chatpaths.js";
+import { repoChoices } from "./newtask.js";
 
 const STATUSES = new Set(["working", "blocked", "done", "idle"]);
 
@@ -33,6 +35,69 @@ export function chatAgent(terminals, agents) {
  */
 export function shouldAutoStart({ shown, agent, tried }) {
   return Boolean(shown && !agent && !tried);
+}
+
+/** Why a message is not sent while the chat agent is on a prompt (or its state is unknown). */
+export const SEND_BLOCKED = "answer the chat agent's prompt first";
+
+/**
+ * Whether a message may be typed into the chat agent: only while it is
+ * working, idle or done. Blocked (a permission menu: Enter would pick the
+ * highlighted option, a digit a numbered one) or unknown (a trust modal, or
+ * not started yet) never.
+ * @param {unknown} status
+ */
+export function canSendToChat(status) {
+  return status === "working" || status === "idle" || status === "done";
+}
+
+/** Whether the composer holds its text instead of sending: an approval card or the trust note is showing. */
+export function composerLocked({ approval, trust }) {
+  return Boolean(approval || trust);
+}
+
+/**
+ * What following the transcript keys on: the last drawn block's id and the
+ * prompt rows under it (the approval card, the trust note). Not the row count:
+ * at the draw cap new blocks leave it unchanged.
+ * @param {{ lastId: string|null|undefined, approval: boolean, trust: boolean }} s
+ */
+export function followKey({ lastId, approval, trust }) {
+  return `${lastId ?? ""}|${approval ? "a" : ""}|${trust ? "t" : ""}`;
+}
+
+/** What the view's redraw check compares for the shared chat log: its length and last block id (the log is capped). */
+export function logMark(raw) {
+  const blocks = Array.isArray(raw?.blocks) ? raw.blocks : [];
+  return `${blocks.length}:${blocks.at(-1)?.id ?? ""}`;
+}
+
+/** Whether to scroll to the bottom: the first draw, or something new while the reader is at the bottom (`away` 0). */
+export function followScroll(prev, next, away) {
+  if (prev == null) return true;
+  return next !== prev && away === 0;
+}
+
+/** The command a viewer runs (`run(name, args)`) to show the chat agent's terminal: a peek over the tab. */
+export function chatOpenCommand(address) {
+  return address ? { name: "terminal.peek", args: { terminal: address } } : null;
+}
+
+/** The shell command that attaches any terminal to the chat agent (ctrl+\ detaches). */
+export const CHAT_ATTACH = `hc attach ${CHAT_NAME}`;
+
+/** The note while Claude waits on its trust modal; only the person answers it. */
+export const TRUST_NOTE =
+  `Claude is asking whether to trust its folder. Open its terminal to answer (or run ${CHAT_ATTACH} in any terminal); Deck never answers it.`;
+
+/**
+ * The working folders to try `gh pr view N` in: each distinct repo root on
+ * the board, in order (lib/newtask.js repoChoices); one try without a folder when there is none.
+ * @param {any[]} issues @returns {(string|null)[]}
+ */
+export function prCwds(issues) {
+  const roots = repoChoices(issues).map((r) => r.root);
+  return roots.length ? roots : [null];
 }
 
 /** When the status became unknown (kept while it stays unknown), else null. */

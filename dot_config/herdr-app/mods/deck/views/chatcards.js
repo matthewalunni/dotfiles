@@ -3,13 +3,15 @@
 // Start / Discard for a backlog entry). Registered in chatblocks.js.
 //
 // A PR that belongs to a deck issue is read from the store. Any other PR is
-// fetched once (gh pr view <n>) and kept in memory by number; a failed fetch
-// draws the number alone and is not retried.
+// fetched once (gh pr view <n>, in each repo root on the board until one has
+// it) and kept in memory by number; one no repo has draws the number alone
+// and is not retried.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { checkTally, minutesSince, issueNote } from "../lib/present.js";
 import { PR_FIELDS, parsePr } from "../lib/github.js";
 import { STAGE_LABEL } from "../lib/stage.js";
+import { prCwds } from "../lib/chatview.js";
 import { currentStore, sh, openUrl, pressOption, discardEntry } from "../data.js";
 import { tone, stageColor, button, dot, act } from "./ui.js";
 import { optionButton } from "./issues.js";
@@ -33,12 +35,19 @@ export function fetchPrs(cx) {
     prCache.set(n, { state: "loading" });
     cx.spawn(async (cx) => {
       let entry = { state: "failed" };
-      try {
-        const r = await sh("gh", ["pr", "view", String(n), "--json", PR_FIELDS], { timeout: T_GH });
-        const { pr } = parsePr(r);
-        if (pr) entry = { state: "ok", pr };
-      } catch {
-        // no PR: the card shows the number alone
+      // gh needs a repo: try each repo root on the board in turn (lib/chatview.js
+      // prCwds), first success wins; none found is cached too (not retried).
+      for (const cwd of prCwds(currentStore().issues)) {
+        try {
+          const r = await sh("gh", ["pr", "view", String(n), "--json", PR_FIELDS], cwd ? { cwd, timeout: T_GH } : { timeout: T_GH });
+          const { pr } = parsePr(r);
+          if (pr) {
+            entry = { state: "ok", pr };
+            break;
+          }
+        } catch {
+          // not in this repo: try the next
+        }
       }
       prCache.set(n, entry);
       cx.notify();

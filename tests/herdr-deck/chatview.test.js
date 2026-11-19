@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   chatAgent, nullSince, trustWaiting, TRUST_MS, approvalFrom, matchOption, clipDetail, wheelAway,
-  recentBlocks, attachCards, chatViewKey,
+  recentBlocks, attachCards, chatViewKey, canSendToChat, SEND_BLOCKED, composerLocked, followKey, followScroll,
+  chatOpenCommand, CHAT_ATTACH, TRUST_NOTE, prCwds, logMark,
 } from "../../dot_config/herdr-app/mods/deck/lib/chatview.js";
 
 const term = (o = {}) => ({ address: "t9", name: "deck-chat", state: "live", status: null, ...o });
@@ -137,4 +138,56 @@ test("chatViewKey: N opens a new task (shift too); not held, cmd or with a dialo
   assert.equal(chatViewKey(ev("n", { cmd: true }), c), null);
   assert.equal(chatViewKey(ev("n"), { ...c, dialog: true }), null);
   assert.equal(chatViewKey(ev("n"), { approval: true, canAnswer: true, dialog: false }), "newTask");
+});
+
+// ---- final review fixes
+
+test("canSendToChat: only while the chat agent is working, idle or done (never blocked or unknown)", () => {
+  for (const s of ["working", "idle", "done"]) assert.equal(canSendToChat(s), true, s);
+  for (const s of ["blocked", null, undefined, "weird"]) assert.equal(canSendToChat(s), false, String(s));
+  assert.equal(SEND_BLOCKED, "answer the chat agent's prompt first");
+});
+
+test("composerLocked: while an approval card or the trust note shows", () => {
+  assert.equal(composerLocked({ approval: false, trust: false }), false);
+  assert.equal(composerLocked({ approval: true, trust: false }), true);
+  assert.equal(composerLocked({ approval: false, trust: true }), true);
+});
+
+test("followKey / followScroll: following keys on the last block and the prompt rows, not the row count", () => {
+  const k1 = followKey({ lastId: "s:199", approval: false, trust: false });
+  const k2 = followKey({ lastId: "s:200", approval: false, trust: false }); // same row count past the cap
+  assert.notEqual(k1, k2);
+  assert.notEqual(followKey({ lastId: "s:200", approval: true, trust: false }), k2);
+  assert.notEqual(followKey({ lastId: "s:200", approval: false, trust: true }), k2);
+  assert.equal(followKey({ lastId: "s:200", approval: false, trust: false }), k2);
+  assert.equal(followScroll(null, k1, 500), true); // first draw: to the bottom
+  assert.equal(followScroll(k1, k2, 0), true);
+  assert.equal(followScroll(k1, k2, 40), false); // the reader scrolled up
+  assert.equal(followScroll(k2, k2, 0), false);
+});
+
+test("logMark: changes when a block is added to a capped log (same length)", () => {
+  const a = logMark({ blocks: [{ id: "s:1" }, { id: "s:2" }] });
+  const b = logMark({ blocks: [{ id: "s:2" }, { id: "s:3" }] });
+  assert.notEqual(a, b);
+  assert.equal(logMark(null), "0:");
+  assert.equal(logMark({ blocks: [{ id: "s:2" }, { id: "s:3" }] }), b);
+});
+
+test("chatOpenCommand: peeks the chat terminal; the trust note names the fallback hc attach", () => {
+  assert.deepEqual(chatOpenCommand("t9"), { name: "terminal.peek", args: { terminal: "t9" } });
+  assert.equal(chatOpenCommand(null), null);
+  assert.equal(CHAT_ATTACH, "hc attach deck-chat");
+  assert.ok(TRUST_NOTE.includes(CHAT_ATTACH));
+});
+
+test("prCwds: each distinct repo root from the store, in order; one try without a cwd when there is none", () => {
+  const issues = [
+    { key: "a", root: "/r/one" },
+    { key: "b", root: "/r/two" },
+    { key: "c", root: "/r/one" },
+  ];
+  assert.deepEqual(prCwds(issues), ["/r/one", "/r/two"]);
+  assert.deepEqual(prCwds([]), [null]);
 });

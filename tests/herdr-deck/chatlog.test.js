@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyChatLog, appendBlocks, cardsFor } from "../../dot_config/herdr-app/mods/deck/lib/chat.js";
+import { emptyChatLog, appendBlocks, cardsFor, capChatLog, CHAT_LOG_MAX } from "../../dot_config/herdr-app/mods/deck/lib/chat.js";
 
 const tb = (id, session, text = "hi") => ({ id, session, t: 1, type: "text", role: "user", text });
 
@@ -89,4 +89,31 @@ test("cardsFor matches the visible id (what @ completes and agents write), carry
     { type: "github", number: 7, issueKey: "t9|-|1700000000000" },
   ]);
   assert.deepEqual(cardsFor("t9|-|1700000000000", store), []);
+});
+
+test("cardsFor: a # glued to a word, a URL fragment, an entity or a 6-digit color is not a PR", () => {
+  for (const t of ["abc#37", "step#2", "see /pull#37", "&#37;", "color #123456", "##37"]) {
+    assert.deepEqual(cardsFor(t, []), [], t);
+  }
+  assert.deepEqual(cardsFor("(#37) and PR 38", []), [
+    { type: "github", number: 37, issueKey: null },
+    { type: "github", number: 38, issueKey: null },
+  ]);
+  assert.deepEqual(cardsFor("#37", []), [{ type: "github", number: 37, issueKey: null }]);
+});
+
+test("capChatLog keeps the newest max blocks, ids match them, the session is kept, the input untouched", () => {
+  const blocks = Array.from({ length: 7 }, (_, i) => tb(`s1:${i}`, "s1"));
+  const log = appendBlocks(emptyChatLog(), blocks, 1);
+  const capped = capChatLog(log, 5);
+  assert.deepEqual(capped.blocks.map((b) => b.id), ["s1:2", "s1:3", "s1:4", "s1:5", "s1:6"]);
+  assert.deepEqual([...capped.ids].sort(), capped.blocks.map((b) => b.id).sort());
+  assert.equal(capped.session, "s1");
+  assert.equal(log.blocks.length, 7);
+  assert.equal(log.ids.size, 7);
+  assert.equal(capChatLog(log, 10), log);
+  assert.equal(CHAT_LOG_MAX, 500);
+  const big = appendBlocks(emptyChatLog(), Array.from({ length: 600 }, (_, i) => tb(`s1:${i}`, "s1")), 1);
+  assert.equal(capChatLog(big).blocks.length, 500);
+  assert.equal(capChatLog(big).blocks[0].id, "s1:100");
 });

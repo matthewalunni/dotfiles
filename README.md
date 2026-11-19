@@ -380,8 +380,14 @@ normal Claude permission behavior.
 - Two skills in `dot_claude/skills/`: `orchestrator` (how the chat agent drives
   the board, which is the source of truth) and `herdr-history` (optional: where
   the two logs are and how to search them).
-- On the first run, Claude asks you to trust its directory. Answer those
-  prompts in the chat pane; the deck never answers them.
+- On the first run, Claude asks you to trust its directory. The chat agent runs
+  without a pane, so the Chat view shows a note with an Open terminal button
+  that peeks its terminal; answer there (or run `hc attach deck-chat` in any
+  terminal, ctrl+\ detaches). The deck never answers it, and the composer
+  sends nothing while that note or a permission card is showing.
+- The chat agent starts with a short system prompt that names it and points it
+  at the `orchestrator` skill. The view keeps the last 500 blocks; the archive
+  keeps all of them.
 
 ---
 

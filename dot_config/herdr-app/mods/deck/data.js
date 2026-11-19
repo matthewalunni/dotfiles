@@ -15,7 +15,7 @@ import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, mar
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 import { CLOSED_LOG, expandHome } from "./lib/chatpaths.js";
-import { closedRecord, appendExec } from "./lib/chatarchive.js";
+import { closedRecord, appendExec, noteDue } from "./lib/chatarchive.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -594,19 +594,31 @@ export function dismiss(issue) {
   save(dismissIn(currentStore(), issue.key, Date.now()));
 }
 
+/** Failure key -> when its "Could not write the log" notice was last shown (lib/chatarchive.js noteDue). */
+let logNotes = new Map();
+
+/** The failure notice, at most once per distinct failure (path + error) a minute. */
+function logFailed(path, error) {
+  const d = noteDue(logNotes, `${path}\n${error}`, Date.now());
+  logNotes = d.seen;
+  if (!d.due) return;
+  const n = { title: "Could not write the log", level: "warning" };
+  try { notify(error ? { ...n, body: error } : n); } catch {}
+}
+
 /**
- * Appends one line to a log file through a login shell (lib/chatarchive.js
- * appendExec). Never throws: a failed write only notifies, so it can never
- * stop the action it records.
+ * Appends one line to a log file through /bin/sh (lib/chatarchive.js
+ * appendExec). Never throws: a failed write only notifies (throttled), so it
+ * can never stop the action it records.
  * @param {string} path @param {string} line
  */
 export async function appendLog(path, line) {
   try {
     const ex = appendExec(path, line);
     const r = await sh(ex.cmd, ex.args, { timeout: T_GIT });
-    if (r.code !== 0) notify({ title: "Could not write the log", level: "warning" });
-  } catch {
-    try { notify({ title: "Could not write the log", level: "warning" }); } catch {}
+    if (r.code !== 0) logFailed(path, String(r.stderr ?? "").trim());
+  } catch (e) {
+    logFailed(path, String(e?.message ?? e ?? ""));
   }
 }
 

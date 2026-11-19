@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findChatTerminal, newestBorn, splitComplete, chatLaunch, listProjectFiles, parseFileList, utf8Length, advance, LIST_SH } from "../../dot_config/herdr-app/mods/deck/lib/chatsource.js";
-import { emptyChatLog, appendBlocks, reviveChatLog } from "../../dot_config/herdr-app/mods/deck/lib/chat.js";
-import { archiveLine } from "../../dot_config/herdr-app/mods/deck/lib/chatarchive.js";
+import {
+  findChatTerminal, newestBorn, splitComplete, chatLaunch, listProjectFiles, parseFileList, utf8Length, advance, LIST_SH,
+  firstOffset, sessionSeen, sessionFloor, logFloor, keepFrom, sendArgs, CHAT_SYSTEM_PROMPT, tailExec, sizeExec, TAIL_SH, SIZE_SH,
+} from "../../dot_config/herdr-app/mods/deck/lib/chatsource.js";
+import { emptyChatLog, appendBlocks, reviveChatLog, capChatLog } from "../../dot_config/herdr-app/mods/deck/lib/chat.js";
+import { archiveLine, archiveBlocks } from "../../dot_config/herdr-app/mods/deck/lib/chatarchive.js";
 import { CHAT_NAME } from "../../dot_config/herdr-app/mods/deck/lib/chatpaths.js";
 
 test("findChatTerminal picks the live terminal named deck-chat", () => {
@@ -46,8 +49,8 @@ test("parseFileList reads birth seconds and names", () => {
 
 test("listProjectFiles passes the dir only as a positional argument", () => {
   const { cmd, args } = listProjectFiles("/p q");
-  assert.equal(cmd, "/bin/zsh");
-  assert.equal(args[0], "-lc");
+  assert.equal(cmd, "/bin/sh");
+  assert.equal(args[0], "-c");
   assert.ok(!args[1].includes("/p q"));
   assert.ok(args.includes("/p q"));
 });
@@ -85,7 +88,8 @@ test("advance counts blank lines in the offset", () => {
 });
 
 test("listProjectFiles script tolerates an empty dir and reads sub-second birth", () => {
-  assert.ok(LIST_SH.includes("setopt nullglob"));
+  // POSIX sh: an unmatched glob stays literal, so the loop skips a name that does not exist.
+  assert.ok(LIST_SH.includes('[ -e "$f" ] || continue'));
   assert.ok(LIST_SH.includes("%FB"));
 });
 
@@ -117,10 +121,84 @@ test("archive round trip: replaying the archive rebuilds the live log", () => {
     for (const blk of next.blocks.slice(live.blocks.length)) archived.push(archiveLine(blk, 9));
     live = next;
   }
-  const parsed = archived.map((l) => JSON.parse(l)).map(({ at, ...x }) => x);
-  // Replaying the archived dividers too would double them (the bug); chat.js skips them.
-  const blocks = parsed.filter((x) => !(x.type === "divider" && x.kind === "cleared"));
+  // The same filter chat.js uses (archiveBlocks): replaying the archived
+  // dividers too would double them (the bug), so they are skipped.
+  const blocks = archiveBlocks(archived.join("\n") + "\n");
+  assert.ok(blocks.every((x) => !("at" in x)));
   const replayed = appendBlocks(emptyChatLog(), blocks, 9);
   assert.deepEqual(replayed.blocks.map((x) => x.id), live.blocks.map((x) => x.id));
   assert.equal(live.blocks.filter((x) => x.kind === "cleared").length, 1);
+});
+
+// ---- final review fixes
+
+test("firstOffset: resume a session the log has seen from 0; a new one from its end; an empty file from 0", () => {
+  assert.equal(firstOffset({ sessionSeen: true, size: 900 }), 0);
+  assert.equal(firstOffset({ sessionSeen: false, size: 900 }), 900);
+  assert.equal(firstOffset({ sessionSeen: false, size: 0 }), 0);
+  assert.equal(firstOffset({ sessionSeen: true, size: 0 }), 0);
+  assert.equal(firstOffset({ sessionSeen: false, size: Number.NaN }), 0);
+});
+
+test("sessionSeen / sessionFloor / keepFrom: any block of the session counts; the floor skips the cleared divider", () => {
+  const b = (id, session, t) => ({ id, session, t, type: "text", role: "user", text: "x" });
+  const log = appendBlocks(emptyChatLog(), [b("A:1", "A", 10), b("B:1", "B", 30), b("B:2", "B", 40)], 99);
+  assert.equal(sessionSeen(log, "A"), true);
+  assert.equal(sessionSeen(log, "B"), true);
+  assert.equal(sessionSeen(log, "C"), false);
+  assert.equal(sessionSeen(log, null), false);
+  assert.equal(sessionSeen(emptyChatLog(), "A"), false);
+  // B's "cleared" divider has t = 99 (now), not a transcript time: it is not the floor.
+  assert.equal(sessionFloor(log, "B"), 30);
+  assert.equal(sessionFloor(log, "C"), null);
+  const read = [b("B:0", "B", 20), b("B:1", "B", 30), b("B:3", "B", 50)];
+  assert.deepEqual(keepFrom(read, 30).map((x) => x.id), ["B:1", "B:3"]);
+  assert.equal(keepFrom(read, null), read);
+});
+
+test("resume after a restart: re-reading the file from 0 adds only what is new, even past the log cap", () => {
+  const b = (n) => ({ id: `S:${n}`, session: "S", t: 1000 + n, type: "text", role: "agent", text: "m" + n });
+  const seen = Array.from({ length: 8 }, (_, i) => b(i));
+  const log = capChatLog(appendBlocks(emptyChatLog(), seen, 1), 5); // S:3..S:7 kept
+  const reread = [...seen, b(8), b(9)]; // the whole file, two written while the deck was away
+  const next = appendBlocks(log, keepFrom(reread, sessionFloor(log, "S")), 2);
+  assert.deepEqual(next.blocks.slice(log.blocks.length).map((x) => x.id), ["S:8", "S:9"]);
+});
+
+test("archive replay into a capped log adds nothing older than what it holds (no out-of-order old blocks)", () => {
+  const b = (n, s = "S") => ({ id: `${s}:${n}`, session: s, t: 1000 + n, type: "text", role: "agent", text: "m" + n });
+  const all = [b(0, "R"), ...Array.from({ length: 8 }, (_, i) => b(i + 1))];
+  const log = capChatLog(appendBlocks(emptyChatLog(), all, 1), 5);
+  assert.deepEqual(log.blocks.map((x) => x.id), ["S:4", "S:5", "S:6", "S:7", "S:8"]); // R:0 and S's divider capped away
+  assert.equal(logFloor(log), 1004);
+  const next = appendBlocks(log, keepFrom(all, logFloor(log)), 2);
+  assert.equal(next, log);
+  assert.equal(logFloor(emptyChatLog()), null);
+});
+
+test("sendArgs: hc send deck-chat -- <text>, the text one argument, untouched", () => {
+  for (const t of ['say "hi" it\'s me', "two\nlines", "-n not a flag", "/compact", "$(rm -rf /)"]) {
+    assert.deepEqual(sendArgs(t), ["send", CHAT_NAME, "--", t]);
+  }
+});
+
+test("chatLaunch tells claude it is the deck chat agent (--append-system-prompt) before the repos", () => {
+  const { args } = chatLaunch(["/r/a"], "/h");
+  const i = args.indexOf("--append-system-prompt");
+  assert.ok(i > args.indexOf("claude"));
+  assert.equal(args[i + 1], CHAT_SYSTEM_PROMPT);
+  assert.ok(i < args.indexOf("--add-dir"));
+  assert.match(CHAT_SYSTEM_PROMPT, /deck-chat/);
+  assert.match(CHAT_SYSTEM_PROMPT, /orchestrator skill/);
+  assert.match(CHAT_SYSTEM_PROMPT, /source of truth/);
+});
+
+test("the chat shell scripts run in /bin/sh -c (no login shell), values only as positional args", () => {
+  const f = "/p q/$(x).jsonl";
+  assert.deepEqual(tailExec(f, 11, 256), { cmd: "/bin/sh", args: ["-c", TAIL_SH, "tail", f, "11", "256"] });
+  assert.deepEqual(sizeExec(f), { cmd: "/bin/sh", args: ["-c", SIZE_SH, "size", f] });
+  for (const s of [LIST_SH, TAIL_SH, SIZE_SH]) {
+    assert.ok(!s.includes("/p q"));
+    assert.ok(!s.includes("setopt"));
+  }
 });
