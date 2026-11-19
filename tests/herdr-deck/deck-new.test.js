@@ -14,6 +14,11 @@ test("⌘⇧N is a global binding that opens deck-new, and nothing more specific
   }
 });
 
+test("main layout: only ⌥⌘1–3 and ⌘⇧J switch to the deck (no leftover ⌥⌘4)", () => {
+  const keys = JSON.parse(read("keys.json"));
+  assert.deepEqual(Object.keys(keys["layout:main"]).sort(), ["cmd-alt-1", "cmd-alt-2", "cmd-alt-3", "cmd-shift-j"]);
+});
+
 test("deck-new is an overlay mod that is never docked", () => {
   const m = JSON.parse(read("mods/deck-new/mod.json"));
   assert.equal(m.place, "none");

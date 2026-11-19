@@ -124,7 +124,6 @@
     "cmd-alt-1": "layout.switch:deck",
     "cmd-alt-2": "layout.switch:deck",
     "cmd-alt-3": "layout.switch:deck",
-    "cmd-alt-4": "layout.switch:deck",
     "cmd-shift-j": "layout.switch:deck"
   },
   "layout:deck": {

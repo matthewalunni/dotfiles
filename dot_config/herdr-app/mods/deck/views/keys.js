@@ -1,5 +1,5 @@
 // The "?" keyboard map, opened as a dialog with props { view: "keys" }:
-// three columns (Anywhere / Issues / Pull request), the safety
+// four columns (Anywhere / Issues / Pull request / Chat), the safety
 // note and what stays mouse-only, as on the canvas Keyboard map board. Esc closes it (confirm.js pattern).
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -23,6 +23,13 @@ const COLS = [
     ["P", "Request proof (⇧P on the PR tab)"], ["M", "Merge (gate + confirm, M again)"], ["⇧M", "Merge + ship"],
     ["O", "Open on GitHub"],
   ] },
+  // lib/chatcomposer.js composerKey (composer focused) and lib/chatview.js chatViewKey (not).
+  { title: "Chat", tone: "brand", rows: [
+    ["↵", "Send (picks a completion when the list is open)"], ["⇧↵", "New line"],
+    ["↑ ↓  ⇥", "Completions: move / pick"], ["esc", "Leave the composer (closes the list first)"],
+    ["↵  I", "Composer not focused: type in it"], ["↵  esc", "Composer not focused: approve / skip a prompt"],
+    ["N", "Composer not focused: new task"],
+  ] },
 ];
 
 const NOTE =
@@ -34,7 +41,7 @@ const MOUSE_ONLY = "Restore and sidebar filters: mouse only. Drag a card to move
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {
-  openOverlay({ mod: "deck", props: { view: "keys" }, kind: "dialog", width: 1000, height: 600 });
+  openOverlay({ mod: "deck", props: { view: "keys" }, kind: "dialog", width: 1240, height: 600 });
 }
 
 export default class KeysView extends View {
