@@ -1,6 +1,6 @@
 // The Chat view (the deck-chat-main block of the deck-chat row): one continuous
 // conversation with the chat agent in a 700 px centered column, with the
-// composer under it. The sidebar on the right (spaces, machines, agents, key
+// composer under it. The sidebar on the left (spaces, machines, agents, key
 // hints) is the Terminal view's own, laid out in layouts/deck.json.
 //
 // Blocks come from the shared chat log (chat.js tails the agent's transcript);

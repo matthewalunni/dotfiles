@@ -48,16 +48,6 @@
           },
           "children": [
             {
-              "id": "deck-chat-main",
-              "type": "block",
-              "content": {
-                "mod": "deck",
-                "props": {
-                  "view": "chat"
-                }
-              }
-            },
-            {
               "id": "deck-chat-side",
               "type": "column",
               "size": {
@@ -115,6 +105,16 @@
                   }
                 }
               ]
+            },
+            {
+              "id": "deck-chat-main",
+              "type": "block",
+              "content": {
+                "mod": "deck",
+                "props": {
+                  "view": "chat"
+                }
+              }
             }
           ]
         },
