@@ -72,7 +72,7 @@ function latest(issue) {
 const FAILED = (e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e ?? "failed") });
 
 /** exec that never rejects. A rejection (timeout, or it could not start) is marked `rejected`. */
-async function sh(cmd, args, opts) {
+export async function sh(cmd, args, opts) {
   try {
     const r = await exec(cmd, args, opts);
     return r ?? FAILED("no result");
@@ -92,7 +92,7 @@ const okText = (r) => (r.code === 0 ? String(r.stdout ?? "").trim() : "");
 const DRAFT = "Agent has a draft — not sent";
 
 /** hc send / hc keys, time-limited. A timeout means the agent's draft blocked it. */
-async function hcAct(args, failed) {
+export async function hcAct(args, failed) {
   const r = await sh("hc", args, { timeout: T_HC });
   if (r.code === 0) return { ok: true, error: null };
   if (r.rejected) return { ok: false, error: DRAFT };
@@ -167,7 +167,7 @@ async function hasWorkflows(root) {
   return okText(r) !== "";
 }
 
-async function readScreen(t, status) {
+export async function readScreen(t, status) {
   const r = await hcRead(["read", t, "--lines", "60"]);
   return r.code === 0 ? parsePrompt(String(r.stdout ?? ""), status) : null;
 }
@@ -610,9 +610,16 @@ export async function appendLog(path, line) {
   }
 }
 
-/** Records a removed card in the closed-issue log; not awaited by the caller. */
+/**
+ * Records a removed card in the closed-issue log; not awaited by the caller.
+ * Never throws (even building the record or path), so it cannot fail the action.
+ */
 function logClosed(issue, how, now) {
-  void appendLog(expandHome(CLOSED_LOG, home()), JSON.stringify(closedRecord(issue, how, now)));
+  try {
+    void appendLog(expandHome(CLOSED_LOG, home()), JSON.stringify(closedRecord(issue, how, now)));
+  } catch {
+    try { notify({ title: "Could not write the log", level: "warn" }); } catch {}
+  }
 }
 
 /**
