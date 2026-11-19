@@ -1,0 +1,121 @@
+// The Chat view's block renderers, by block type (lib/chatregistry.js). Add a
+// block type with one registerBlock call; renderBlock draws any block, and an
+// unknown type (or a renderer that throws) draws a one-line note instead.
+//
+// A renderer is (block, cx, ctx) => element; ctx is { k: tokens, host: the
+// Chat view } (host.busy, host.run(cx, fn, failTitle), host.canAnswer,
+// host.answer(option, cx)).
+import { div, svg } from "gpui-kit";
+import { h_flex, v_flex } from "gpui-base";
+import { createRegistry } from "../lib/chatregistry.js";
+import { clipDetail } from "../lib/chatview.js";
+import { BARLOW, spaced, button, dot } from "./ui.js";
+import { githubCard, deckCard } from "./chatcards.js";
+
+const note = (k, text) => div().w_full().text_size(11).text_color(k.muted).child(text);
+
+const blocks = createRegistry((type, _block, _cx, ctx) => note(ctx.k, `unknown block: ${String(type)}`));
+
+/** Adds (or replaces) the renderer for `type`. */
+export function registerBlock(type, render) {
+  blocks.register(type, render);
+}
+
+/** The registered block types. */
+export function blockKinds() {
+  return blocks.kinds();
+}
+
+/** Draws one block through its renderer. @param {any} block @param {any} cx @param {{k: any, host: any}} ctx */
+export function renderBlock(block, cx, ctx) {
+  try {
+    return blocks.run(block?.type, block, cx, ctx);
+  } catch (e) {
+    return note(ctx.k, `could not draw a ${String(block?.type)} block: ${String(e?.message ?? e)}`);
+  }
+}
+
+/** User: a bubble on the right. Agent: on the left, under a CHAT label. */
+function text(block, _cx, { k }) {
+  if (block.role === "user") {
+    return h_flex()
+      .w_full()
+      .justify_end()
+      .child(div().max_w(520).px(14).py(10).bg(k.raised).border_1().border_color(k.line).rounded(10).text_color(k.strong).line_height(1.5).child(block.text));
+  }
+  return v_flex()
+    .w_full()
+    .gap(8)
+    .child(
+      h_flex()
+        .items_center()
+        .gap(8)
+        .child(dot(k.brand, 8))
+        .child(div().font_family(BARLOW).font_weight(600).text_size(14).text_color(k.brand).child(spaced("Chat"))),
+    )
+    .child(div().w_full().text_color(k.text).line_height(1.6).child(block.text));
+}
+
+/** What the agent did: check, verb, target, a muted detail (cut to ~120 characters). */
+function action(block, _cx, { k }) {
+  return h_flex()
+    .w_full()
+    .items_center()
+    .gap(10)
+    .px(12)
+    .py(8)
+    .bg(k.okBg)
+    .border_1()
+    .border_color(k.line)
+    .rounded(8)
+    .text_size(12)
+    .child(svg("mods/deck/icons/check.svg").flex_none().w(14).h(14).text_color(k.ok))
+    .child(div().flex_none().text_color(k.ok).child(String(block.verb ?? "")))
+    .when(Boolean(block.target), (el) => el.child(div().flex_none().text_color(k.strong).child(String(block.target))))
+    .when(Boolean(block.detail), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(k.muted).child(clipDetail(block.detail))));
+}
+
+/** A thin centered rule: "context compacted" / "context cleared". */
+function divider(block, _cx, { k }) {
+  const rule = () => div().flex_1().h(1).bg(k.line);
+  return h_flex()
+    .w_full()
+    .items_center()
+    .gap(12)
+    .child(rule())
+    .child(div().flex_none().text_size(11).text_color(k.muted).child(block.kind === "cleared" ? "context cleared" : "context compacted"))
+    .child(rule());
+}
+
+/**
+ * The chat agent's pending permission prompt (lib/chatview.js approvalFrom).
+ * Approve / Skip are off while the chat pane has the keyboard.
+ */
+function approval(block, _cx, { k, host }) {
+  const off = !host.canAnswer;
+  return v_flex()
+    .w_full()
+    .gap(10)
+    .p(14)
+    .bg(k.holdBg)
+    .border_1()
+    .border_color(k.hold)
+    .rounded(8)
+    .child(div().font_weight(700).text_color(k.strong).child(block.title))
+    .when(Boolean(block.subtitle), (el) => el.child(div().text_color(k.muted).line_height(1.5).child(clipDetail(block.subtitle, 300))))
+    .child(
+      h_flex()
+        .items_center()
+        .gap(8)
+        .child(button("chat-approve", "Approve", "primary", (_e, cx) => host.answer(block.approve, cx), off, "⏎"))
+        .when(Boolean(block.skip), (el) => el.child(button("chat-skip", "Skip", "plain", (_e, cx) => host.answer(block.skip, cx), off, "esc")))
+        .when(host.focusedPane, (el) => el.child(div().text_size(11).text_color(k.muted).child("off while the chat pane has the keyboard"))),
+    );
+}
+
+registerBlock("text", text);
+registerBlock("action", action);
+registerBlock("divider", divider);
+registerBlock("approval", approval);
+registerBlock("github", githubCard);
+registerBlock("deck", deckCard);

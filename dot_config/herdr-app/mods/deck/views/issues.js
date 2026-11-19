@@ -48,7 +48,7 @@ const clip = (s, n) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
  * Text button that keeps its label exactly as the agent wrote it (prompt options,
  * quick replies). `key` (1–9 for options) shows as a hint chip before it.
  */
-function optionButton(id, text, primary, onClick, disabled, key = null) {
+export function optionButton(id, text, primary, onClick, disabled, key = null) {
   const k = tokens();
   let el = h_flex()
     .id(id)
