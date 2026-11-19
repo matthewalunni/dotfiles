@@ -27,7 +27,7 @@ Find one by title: `jq -c 'select(.title | test("login"; "i"))' ~/.local/state/h
 
 `~/.local/state/herdr-deck/chat/`: one file per month, `YYYY-MM.jsonl`, one JSON object per line. It keeps the chat that `/clear` and `/compact` wiped from your context.
 
-Each line is a transcript block plus `at` (epoch ms, when it was archived). Keys: `id`, `session`, `t` (epoch ms of the message), `type` (`text` or `divider`), `role` (`user` or `agent`, on text blocks), `text`, `at`.
+Each line is a transcript block plus `at` (epoch ms, when it was archived). Keys: `id`, `session`, `t` (epoch ms of the message), `type`, `role` (`user` or `agent`, on text blocks), `text`, `at`. `type` is usually `text`; `action` (a command the agent ran) and `divider` blocks also appear, and dividers carry `kind` (`compacted` or `cleared`). Filter with `.type == "text"` to skip them.
 
 Find an earlier decision:
 

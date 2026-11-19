@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { CLOSED_LOG, CHAT_ARCHIVE_DIR, CHAT_NAME } from "../../dot_config/herdr-app/mods/deck/lib/chatpaths.js";
+import { parseTranscriptLine } from "../../dot_config/herdr-app/mods/deck/lib/chat.js";
 import { closedRecord, archiveLine } from "../../dot_config/herdr-app/mods/deck/lib/chatarchive.js";
 
 const read = (n) => fs.readFileSync(new URL(`../../dot_claude/skills/${n}/SKILL.md`, import.meta.url), "utf8");
@@ -9,15 +10,17 @@ const history = read("herdr-history");
 const orch = read("orchestrator");
 
 const record = closedRecord({ key: "k", title: "t", stage: "build", pr: { number: 1, state: "OPEN" }, createdAt: 1 }, "deleted", 2);
-const lineKeys = Object.keys(JSON.parse(archiveLine({ type: "user", text: "x" }, 1)));
+const sample = parseTranscriptLine(JSON.stringify({ type: "user", uuid: "u1", timestamp: "2026-11-19T06:47:10.000Z", message: { role: "user", content: "hi" } }), "S1")[0];
+assert.ok(sample, "parser yields a text block");
+const lineKeys = Object.keys(JSON.parse(archiveLine(sample, 1)));
 
 test("herdr-history: both paths verbatim", () => {
   assert.ok(history.includes(CLOSED_LOG));
   assert.ok(history.includes(CHAT_ARCHIVE_DIR));
 });
 test("herdr-history: every closedRecord field and archive line key", () => {
-  for (const f of Object.keys(record)) assert.ok(history.includes(f), `closed field ${f}`);
-  for (const k of lineKeys) assert.ok(history.includes(k), `archive key ${k}`);
+  for (const f of Object.keys(record)) assert.ok(history.includes(`\`${f}\``), `closed field ${f}`);
+  for (const k of lineKeys) assert.ok(history.includes(`\`${k}\``), `archive key ${k}`);
 });
 test("herdr-history: has jq and grep examples", () => {
   assert.match(history, /jq /);

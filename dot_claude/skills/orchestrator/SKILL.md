@@ -16,8 +16,8 @@ Anything that must survive a `/clear` goes in a file, not in your memory of the 
 ## Commands (`hc`, not `herdr`)
 
 ```sh
-hc ls --json                    # every terminal and agent: name, address, state, cwd
-hc read <name> --lines 60       # the last 60 lines of an agent's screen
+hc ls --json                    # every terminal and agent: address, name (when set), cwd, state (live), status (what it is doing)
+hc read <name> --lines 60       # the screen plus 60 lines of history
 hc send <name> -- <text>        # type text to an agent and submit; ALWAYS keep the --
 hc keys <name> down enter       # press keys, for menus and modals
 hc wait <name>                  # block until the agent's turn finishes
