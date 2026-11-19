@@ -1,5 +1,5 @@
-// The top bar: brand, Command / Issues / Terminal nav, the holding chip, "? keys"
-// and the clock. The collector runs in this copy; main.js starts and stops it
+// The top bar: brand, Command / Issues / Terminal / Chat nav, the holding chip, "? keys"
+// and the clock. The collector and the chat source run in this copy; main.js starts and stops them
 // (close() only reaches the root view). This copy also runs the keys.json
 // command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
 // chip, ⌘⇧J and ⌘⇧I open the issue page (views/issuepage.js).
@@ -22,6 +22,7 @@ const NAV = [
   { label: "COMMAND", key: "⌥⌘1", child: "deck-command" },
   { label: "ISSUES", key: "⌥⌘2", child: "deck-issues" },
   { label: "TERMINAL", key: "⌥⌘3", child: "deck-terminal" },
+  { label: "CHAT", key: "⌥⌘4", child: "deck-chat" },
 ];
 // macOS draws the traffic lights over the bar's left edge.
 const LEFT_ROOM = 84;
@@ -40,7 +41,7 @@ function focusedIssue(issues) {
   return t ? issues.find((i) => i.terminal === t && i.observed !== false) ?? null : null;
 }
 
-const GO = { command: "deck-command", issues: "deck-issues", terminal: "deck-terminal" };
+const GO = { command: "deck-command", chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal" };
 
 /**
  * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back" or "new-task"
@@ -49,7 +50,7 @@ const GO = { command: "deck-command", issues: "deck-issues", terminal: "deck-ter
  */
 export function runCommand(c) {
   const cmd = String(c ?? "").trim();
-  const go = /^go:(command|issues|terminal)$/.exec(cmd);
+  const go = /^go:(command|chat|issues|terminal)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
   if (cmd === "new-task") return void openNewTask();
   // ⌘Esc: back out of the issue page (even from its terminal, where Esc is the agent's).

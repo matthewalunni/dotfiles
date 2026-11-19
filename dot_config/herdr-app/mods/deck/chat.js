@@ -6,13 +6,14 @@
 // security prompt, and only the person may answer it (the view shows "waiting
 // for trust confirmation").
 
-import { terminals, home, shared, setShared, notify } from "herdr";
-import { sh, hcAct, appendLog, currentStore } from "./data.js";
+import { terminals, agents, home, shared, setShared, notify } from "herdr";
+import { sh, hcAct, appendLog, currentStore, readScreen } from "./data.js";
 import { CHAT_NAME, CHAT_CWD, expandHome, projectDir, archiveFile } from "./lib/chatpaths.js";
 import { parseTranscriptLine, appendBlocks, reviveChatLog } from "./lib/chat.js";
 import { archiveLine } from "./lib/chatarchive.js";
 import { repoChoices } from "./lib/newtask.js";
 import { findChatTerminal, newestBorn, advance, chatLaunch, listProjectFiles, parseFileList } from "./lib/chatsource.js";
+import { chatAgent, matchOption } from "./lib/chatview.js";
 
 // No Node APIs here (no Buffer, process, require, setTimeout): the mod runtime has none.
 
@@ -173,6 +174,40 @@ export async function sendToChat(message) {
   if (typeof message !== "string" || !message.trim()) return { ok: false, error: "nothing to send" };
   if (message.includes("\0")) return { ok: false, error: "message contains a NUL character" };
   return hcAct(["send", CHAT_NAME, "--", message], "send failed");
+}
+
+/**
+ * The chat agent now: its terminal state (lib/chatview.js chatAgent) and, while
+ * it is blocked, the prompt on its screen (a permission prompt is only ever
+ * read from a blocked agent). null when there is no live `deck-chat` terminal.
+ * @returns {Promise<{ agent: {address: string, status: string|null, focused: boolean}, prompt: any }|null>}
+ */
+export async function chatPrompt() {
+  const agent = chatAgent(terminals(), agents());
+  if (!agent) return null;
+  const prompt = agent.status === "blocked" ? await readScreen(CHAT_NAME, agent.status) : null;
+  return { agent, prompt };
+}
+
+/**
+ * Answer the chat agent's prompt with `option`, only if a fresh read of its
+ * screen still shows `shown`, the prompt the person saw (same rule as
+ * data.js pressOption); the fresh option's keys are pressed (hc keys) or its
+ * reply typed (hc send). A prompt that changed is never answered.
+ * @param {import("./lib/prompt.js").PromptOption} option @param {import("./lib/prompt.js").Prompt} shown
+ * @returns {Promise<{ok: boolean, error: string|null}>}
+ */
+export async function answerChat(option, shown) {
+  const agent = chatAgent(terminals(), agents());
+  if (!agent) return { ok: false, error: "the chat agent is not running" };
+  const fresh = agent.status && agent.status !== "working" ? await readScreen(CHAT_NAME, agent.status) : null;
+  const match = matchOption(shown, fresh, option);
+  if (!match) {
+    notify({ title: "The chat agent's prompt changed — not answered", level: "info" });
+    return { ok: false, error: "prompt changed" };
+  }
+  if (typeof match.reply === "string" && match.reply !== "") return hcAct(["send", CHAT_NAME, "--", match.reply], "send failed");
+  return hcAct(["keys", CHAT_NAME, ...match.keys], "keys failed");
 }
 
 let launching = null;

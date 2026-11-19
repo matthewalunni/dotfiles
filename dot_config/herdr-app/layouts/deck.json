@@ -49,6 +49,16 @@
           }
         },
         {
+          "id": "deck-chat",
+          "type": "block",
+          "content": {
+            "mod": "deck",
+            "props": {
+              "view": "chat"
+            }
+          }
+        },
+        {
           "id": "deck-issues",
           "type": "block",
           "content": {

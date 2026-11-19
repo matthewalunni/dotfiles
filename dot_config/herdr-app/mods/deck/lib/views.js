@@ -1,7 +1,7 @@
 // Which Deck stack child is on screen, and when a view has just come into
 // sight (so it takes the keyboard). Pure; no herdr imports.
 
-const CHILDREN = ["deck-command", "deck-issues", "deck-issue", "deck-terminal"];
+const CHILDREN = ["deck-command", "deck-chat", "deck-issues", "deck-issue", "deck-terminal"];
 
 /**
  * The child the deck-main stack shows, or null outside a Deck layout.
@@ -35,7 +35,7 @@ export function takesFocus(last, now, ask, child, ms) {
   return Boolean(ask && ask !== last.ask && ask.child === child && ms - ask.at < ASK_MS);
 }
 
-const NAV = ["deck-command", "deck-issues", "deck-terminal"];
+const NAV = ["deck-command", "deck-chat", "deck-issues", "deck-terminal"];
 
 /**
  * The bar nav item to underline for a VIEW_KEY: the issue page is Issues; a

@@ -85,7 +85,7 @@ export function showIssueSide(pane) {
  * (nothing when it is gone), and puts the keyboard on the overview (goTo).
  * Never agent.focus / pane.focus: only T gives the terminal the keyboard, so a
  * digit pressed right after opening can't answer a prompt in the terminal.
- * @param {any} issue @param {"board"|"list"|"command"|"terminal"} [from]
+ * @param {any} issue @param {"board"|"list"|"command"|"chat"|"terminal"} [from]
  */
 export function openIssue(issue, from) {
   const f = from ?? issueFrom(shared(VIEW_KEY), shared(MODE_KEY), shared(ISSUE_FROM_KEY));

@@ -2,13 +2,14 @@
 // and where esc goes back to. Pure; no herdr imports.
 
 /** @typedef {import("./store.js").Issue} Issue */
-/** @typedef {"board"|"list"|"command"|"terminal"} IssueFrom */
+/** @typedef {"board"|"list"|"command"|"chat"|"terminal"} IssueFrom */
 
-const FROMS = new Set(["board", "list", "command", "terminal"]);
+const FROMS = new Set(["board", "list", "command", "chat", "terminal"]);
 const BACK = {
   board: { child: "deck-issues", label: "← Board", focus: true },
   list: { child: "deck-issues", label: "← Issues", focus: true },
   command: { child: "deck-command", label: "← Command", focus: true },
+  chat: { child: "deck-chat", label: "← Chat", focus: true },
   terminal: { child: "deck-terminal", label: "← Terminal", focus: false },
 };
 
@@ -84,6 +85,7 @@ export function stepIssue(order, key, d) {
 export function issueFrom(view, mode, prev) {
   if (view === "deck-issue") return FROMS.has(/** @type {string} */ (prev)) ? /** @type {IssueFrom} */ (prev) : "list";
   if (view === "deck-command") return "command";
+  if (view === "deck-chat") return "chat";
   if (view === "deck-terminal") return "terminal";
   return mode === "board" ? "board" : "list";
 }

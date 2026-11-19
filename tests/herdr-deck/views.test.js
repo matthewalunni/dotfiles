@@ -39,6 +39,12 @@ test("navChild: the issue page underlines Issues", () => {
   assert.equal(navChild(undefined), "deck-command");
 });
 
+test("the Chat view is a Deck view and a nav item", () => {
+  assert.equal(shownChild("deck", "deck-chat"), "deck-chat");
+  assert.equal(navChild("deck-chat"), "deck-chat");
+  assert.equal(takesFocus({ shown: "deck-command", ask: null }, "deck-chat", null, "deck-chat", 0), true);
+});
+
 test("drawSig changes with the selection, view and store events, not otherwise", async () => {
   const { drawSig } = await import("../../dot_config/herdr-app/mods/deck/lib/views.js");
   const base = { layout: "deck", "deck.view": "deck-issue", "deck.selected": "a", "deck.store": { issues: [1, 2], log: [{ t: 5, key: "a" }] } };

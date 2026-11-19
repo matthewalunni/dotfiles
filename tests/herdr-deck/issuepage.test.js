@@ -66,6 +66,13 @@ test("backTarget: esc returns where the page came from", () => {
   assert.deepEqual(backTarget(undefined), { child: "deck-issues", label: "← Issues", focus: true });
 });
 
+test("the chat origin: opened from the Chat view, esc goes back there with the keyboard", () => {
+  assert.equal(issueFrom("deck-chat", "list", null), "chat");
+  assert.equal(issueFrom("deck-issue", "list", "chat"), "chat");
+  assert.equal(openPlan(iss("a"), "chat").from, "chat");
+  assert.deepEqual(backTarget("chat"), { child: "deck-chat", label: "← Chat", focus: true });
+});
+
 test("backTarget: going back to the Terminal view never takes terminal focus (a held esc must not reach the agent)", () => {
   assert.equal(backTarget("terminal").focus, false);
   for (const f of ["board", "list", "command"]) assert.equal(backTarget(f).focus, true);

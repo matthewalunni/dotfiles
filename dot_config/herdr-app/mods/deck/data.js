@@ -604,9 +604,9 @@ export async function appendLog(path, line) {
   try {
     const ex = appendExec(path, line);
     const r = await sh(ex.cmd, ex.args, { timeout: T_GIT });
-    if (r.code !== 0) notify({ title: "Could not write the log", level: "warn" });
+    if (r.code !== 0) notify({ title: "Could not write the log", level: "warning" });
   } catch {
-    try { notify({ title: "Could not write the log", level: "warn" }); } catch {}
+    try { notify({ title: "Could not write the log", level: "warning" }); } catch {}
   }
 }
 
@@ -618,7 +618,7 @@ function logClosed(issue, how, now) {
   try {
     void appendLog(expandHome(CLOSED_LOG, home()), JSON.stringify(closedRecord(issue, how, now)));
   } catch {
-    try { notify({ title: "Could not write the log", level: "warn" }); } catch {}
+    try { notify({ title: "Could not write the log", level: "warning" }); } catch {}
   }
 }
 
