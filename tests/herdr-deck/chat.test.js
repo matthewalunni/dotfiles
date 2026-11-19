@@ -75,8 +75,17 @@ test("malformed input never throws", () => {
   assert.deepEqual(parseTranscriptLine('{"type":"user","mess', "s1"), []);
   assert.deepEqual(parseTranscriptLine("", "s1"), []);
   assert.deepEqual(parseTranscriptLine("null", "s1"), []);
-  assert.deepEqual(parseTranscriptLine('{"type":"assistant","message":{"content":[]}}', "s1"), []);
-  assert.deepEqual(parseTranscriptLine('{"type":"mode"}', "s1"), []);
+  for (const rec of [
+    { type: "assistant", message: { content: [] } },
+    { type: "mode" },
+    { type: "assistant" },
+    { type: "assistant", message: {} },
+    { type: "assistant", message: { content: null } },
+    { type: "assistant", message: { content: [null] } },
+    { type: "assistant", message: { content: "plain string" } },
+  ]) {
+    assert.deepEqual(parseTranscriptLine(JSON.stringify({ uuid: "x-1", ...rec }), "s1"), [], JSON.stringify(rec));
+  }
   assert.deepEqual(parseTranscriptLine(undefined, "s1"), []);
 });
 test("ids are stable", () => {

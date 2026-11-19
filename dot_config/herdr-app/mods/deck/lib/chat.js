@@ -102,3 +102,69 @@ export function parseTranscriptLine(line, session) {
     return [];
   }
 }
+
+/** @typedef {{ blocks: object[], ids: Set<string>, session: string|null }} ChatLog */
+
+/** @returns {ChatLog} */
+export function emptyChatLog() {
+  return { blocks: [], ids: new Set(), session: null };
+}
+
+/**
+ * Append new blocks, skipping any whose id is already present (replays after a
+ * restart or /clear). A block from a different session than the log's current
+ * one is preceded by a "cleared" divider. Returns the same object when nothing
+ * is new. Never mutates `log`.
+ * @param {ChatLog} log @param {Array<{id: string, session: string}>} blocks @param {number} now
+ * @returns {ChatLog}
+ */
+export function appendBlocks(log, blocks, now) {
+  let out = null;
+  for (const b of blocks) {
+    if ((out ?? log).ids.has(b.id)) continue;
+    if (!out) out = { blocks: [...log.blocks], ids: new Set(log.ids), session: log.session };
+    if (out.session !== null && b.session !== out.session) {
+      const id = `${b.session}:cleared`;
+      if (!out.ids.has(id)) {
+        out.blocks.push({ id, session: b.session, t: now, type: "divider", kind: "cleared" });
+        out.ids.add(id);
+      }
+    }
+    out.blocks.push(b);
+    out.ids.add(b.id);
+    out.session = b.session;
+  }
+  return out ?? log;
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Cards for the deck issue keys and PR references mentioned in `text`, in order
+ * of first appearance, without duplicates. Keys match as whole words; a PR is
+ * written `#N` or `PR N`.
+ * @param {string} text @param {Array<{key: string, pr: {number: number}|null}>} issues
+ */
+export function cardsFor(text, issues) {
+  if (typeof text !== "string" || !text) return [];
+  const found = [];
+  for (const issue of issues) {
+    const m = new RegExp(`(?<![\\w-])${escapeRe(issue.key)}(?![\\w-])`).exec(text);
+    if (m) found.push({ at: m.index, card: { type: "deck", issueKey: issue.key } });
+  }
+  for (const m of text.matchAll(/(?:#|\bPR\s+)(\d+)\b/g)) {
+    const number = Number(m[1]);
+    const owner = issues.find((i) => i.pr?.number === number);
+    found.push({ at: m.index, card: { type: "github", number, issueKey: owner ? owner.key : null } });
+  }
+  found.sort((a, b) => a.at - b.at);
+  const seen = new Set();
+  const out = [];
+  for (const { card } of found) {
+    const k = card.type === "deck" ? `d:${card.issueKey}` : `g:${card.number}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(card);
+  }
+  return out;
+}
