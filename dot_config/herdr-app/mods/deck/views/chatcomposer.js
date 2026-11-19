@@ -55,9 +55,9 @@ export class Composer {
     this.pop = null; // { q, items, at }: the open completion list
     this.closedFor = null; // the text esc closed the list on (stays closed until it changes)
     this.enterAt = 0;
-    this.input = TextareaState.new({ placeholder: "Message the chat agent…", rows: 2 });
+    this.input = TextareaState.new({ placeholder: "Message the chat agent…", rows: 1 });
     this.input.set_soft_wrap(true);
-    this.input.set_auto_grow(2, 8);
+    this.input.set_auto_grow(1, 8);
     // What the last change replaced: an Enter the input acted on first has
     // already put its "\n" in (and closed the list) by the time submit arrives.
     this.lastText = "";
