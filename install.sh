@@ -57,16 +57,21 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     apply_dotfiles
 
     info "Installing Homebrew packages..."
-    brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
-    success "Homebrew packages installed"
+    if brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"; then
+        success "Homebrew packages installed"
+    else
+        warn "Some Homebrew packages failed (see above); continuing"
+    fi
+
+    # Right after bundling, so it picks Homebrew's zsh, and before the
+    # optional extras below, so their failure can't leave bash as login shell.
+    set_default_shell
 
     if ! command -v harlequin &>/dev/null; then
         info "Installing harlequin (Postgres TUI)..."
         uv tool install 'harlequin[postgres]'
         success "harlequin installed"
     fi
-
-    set_default_shell
 
     echo
     success "Installation complete!"
