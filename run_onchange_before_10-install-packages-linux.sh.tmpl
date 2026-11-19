@@ -72,13 +72,12 @@ fi
 
 # ---- Official release builds, for what the package manager can't give ------
 # Ubuntu/Debian don't package starship, lazygit or yazi (nor fastfetch before
-# Ubuntu 24.10 / Debian 13), and their fzf is too
-# old for fzf-tab's menu in ~/.config/zsh/completion.zsh (needs 0.58+ for
-# change-nth). Put GitHub's release binaries in ~/.local/bin, which ~/.zshrc
+# Ubuntu 24.10 / Debian 13), and their fzf is too old for fzf-tab's menu in
+# ~/.config/zsh/completion.zsh (needs 0.58+ for change-nth). Put GitHub's release binaries in ~/.local/bin, which ~/.zshrc
 # puts ahead of /usr/bin. Arch gets everything from pacman, so this no-ops.
 PATH="$HOME/.local/bin:$PATH"
 case $(uname -m) in
-  x86_64) cpu=x86_64 ;; aarch64|arm64) cpu=aarch64 ;; *) cpu= ;;
+  x86_64) cpu=x86_64 ;; aarch64|arm64) cpu=aarch64 ;; armv7l|armv6l) cpu=arm ;; *) cpu= ;;
 esac
 
 latest_tag() {  # owner/repo -> v1.2.3, via the redirect (no API rate limit)
@@ -116,24 +115,27 @@ else
   fzf_ver=$(fzf --version 2>/dev/null | cut -d' ' -f1)
   if [ -z "$fzf_ver" ] || [ "$(printf '%s\n' "$fzf_min" "$fzf_ver" | sort -V | head -1)" != "$fzf_min" ]; then
     echo "chezmoi: fzf ${fzf_ver:-missing} is older than $fzf_min"
-    t=$(latest_tag junegunn/fzf) && { [ $cpu = x86_64 ] && a=amd64 || a=arm64
+    case $cpu in x86_64) a=amd64 ;; aarch64) a=arm64 ;; arm) a=armv7 ;; esac
+    t=$(latest_tag junegunn/fzf) && {
       release_install fzf "https://github.com/junegunn/fzf/releases/download/$t/fzf-${t#v}-linux_$a.tar.gz" fzf; }
   fi
   if ! command -v starship >/dev/null && t=$(latest_tag starship/starship); then
-    release_install starship "https://github.com/starship/starship/releases/download/$t/starship-$cpu-unknown-linux-musl.tar.gz" starship
+    [ $cpu = arm ] && a=arm-unknown-linux-musleabihf || a=$cpu-unknown-linux-musl
+    release_install starship "https://github.com/starship/starship/releases/download/$t/starship-$a.tar.gz" starship
   fi
   if ! command -v lazygit >/dev/null && t=$(latest_tag jesseduffield/lazygit); then
-    [ $cpu = x86_64 ] && a=x86_64 || a=arm64
+    case $cpu in x86_64) a=x86_64 ;; aarch64) a=arm64 ;; arm) a=armv6 ;; esac
     release_install lazygit "https://github.com/jesseduffield/lazygit/releases/download/$t/lazygit_${t#v}_linux_$a.tar.gz" lazygit
   fi
   if ! command -v fastfetch >/dev/null && t=$(latest_tag fastfetch-cli/fastfetch); then
     # "polyfilled" builds run on older glibc too (Ubuntu 20.04/22.04).
-    [ $cpu = x86_64 ] && a=amd64 || a=aarch64
-    d=fastfetch-linux-$a-polyfilled
+    case $cpu in x86_64) d=fastfetch-linux-amd64-polyfilled ;; aarch64) d=fastfetch-linux-aarch64-polyfilled ;; arm) d=fastfetch-linux-armv7l ;; esac
     release_install fastfetch "https://github.com/fastfetch-cli/fastfetch/releases/download/$t/$d.tar.gz" "$d/usr/bin/fastfetch"
   fi
   if ! command -v yazi >/dev/null && t=$(latest_tag sxyazi/yazi); then
-    if command -v unzip >/dev/null; then
+    if [ $cpu = arm ]; then
+      echo "chezmoi: yazi has no 32-bit ARM build; install it by hand" >&2
+    elif command -v unzip >/dev/null; then
       d=yazi-$cpu-unknown-linux-musl
       release_install yazi "https://github.com/sxyazi/yazi/releases/download/$t/$d.zip" "$d/yazi" "$d/ya"
     else
