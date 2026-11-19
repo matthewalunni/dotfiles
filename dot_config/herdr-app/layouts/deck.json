@@ -40,13 +40,83 @@
       "children": [
         {
           "id": "deck-chat",
-          "type": "block",
-          "content": {
-            "mod": "deck",
-            "props": {
-              "view": "chat"
+          "type": "row",
+          "resizable": false,
+          "divider": {
+            "width": 1,
+            "color": "border"
+          },
+          "children": [
+            {
+              "id": "deck-chat-main",
+              "type": "block",
+              "content": {
+                "mod": "deck",
+                "props": {
+                  "view": "chat"
+                }
+              }
+            },
+            {
+              "id": "deck-chat-side",
+              "type": "column",
+              "size": {
+                "px": 268
+              },
+              "background": "chrome",
+              "resizable": false,
+              "children": [
+                {
+                  "id": "deck-chat-spaces",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 90,
+                  "content": {
+                    "mod": "spaces"
+                  }
+                },
+                {
+                  "id": "deck-chat-machines",
+                  "type": "block",
+                  "size": {
+                    "px": 120
+                  },
+                  "content": {
+                    "mod": "deck",
+                    "props": {
+                      "view": "machines"
+                    }
+                  }
+                },
+                {
+                  "id": "deck-chat-agents",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 90,
+                  "content": {
+                    "mod": "agents"
+                  }
+                },
+                {
+                  "id": "deck-chat-hints",
+                  "type": "block",
+                  "size": {
+                    "px": 52
+                  },
+                  "content": {
+                    "mod": "deck",
+                    "props": {
+                      "view": "termhints"
+                    }
+                  }
+                }
+              ]
             }
-          }
+          ]
         },
         {
           "id": "deck-issues",

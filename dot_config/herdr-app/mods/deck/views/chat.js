@@ -1,6 +1,7 @@
-// The Chat view (stack child deck-chat): one continuous conversation with the
-// chat agent in a 700 px centered column, the composer under it and the agent
-// roster (views/chatroster.js) on the right. No status strip.
+// The Chat view (the deck-chat-main block of the deck-chat row): one continuous
+// conversation with the chat agent in a 700 px centered column, with the
+// composer under it. The sidebar on the right (spaces, machines, agents, key
+// hints) is the Terminal view's own, laid out in layouts/deck.json.
 //
 // Blocks come from the shared chat log (chat.js tails the agent's transcript);
 // each agent message is followed by the deck / GitHub cards for what it
@@ -28,7 +29,6 @@ import { MONO, tokens, button, act, keyOf } from "./ui.js";
 import { renderBlock } from "./chatblocks.js";
 import { prsWanted, fetchPrs } from "./chatcards.js";
 import { Composer } from "./chatcomposer.js";
-import ChatRoster from "./chatroster.js";
 import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
 import { anyDialogOpen } from "./merge.js";
@@ -51,7 +51,6 @@ export default class ChatView extends View {
     this.handle = cx.focus_handle();
     registerFocus(CHILD, this.handle);
     this.scroll = ScrollHandle.new();
-    this.roster = cx.new(ChatRoster, p);
     this.composer = new Composer(this);
     this.busy = null; // a deck card's action in flight
     this.answering = false;
@@ -306,7 +305,6 @@ export default class ChatView extends View {
             h_flex().flex_none().w_full().justify_center().px(16).pt(4).pb(20)
               .child(div().w_full().max_w(COLUMN).child(this.composer.render(k))),
           ),
-      )
-      .child(this.roster);
+      );
   }
 }

@@ -366,8 +366,9 @@ The deck lives in `dot_config/herdr-app/mods/deck`. Its views open at ⌥⌘1
 ### Chat
 
 The Chat view is one continuous conversation with a Claude Code session (an
-`hc` terminal named `deck-chat`) that steers the other agents. A roster rail
-sits on the right, and GitHub and Deck cards appear inline. The agent starts
+`hc` terminal named `deck-chat`) that steers the other agents. The Terminal
+view's sidebar (spaces, machines, live agents) sits on the right, and GitHub and
+Deck cards appear inline. The agent starts
 when the view is shown; if that fails, a Start button appears. It follows your
 normal Claude permission behavior.
 
