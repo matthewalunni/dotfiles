@@ -65,6 +65,33 @@ if ! install "${missing[@]}"; then
 fi
 fi
 
+# Distro fzf lags far behind (Ubuntu 24.04 ships 0.44); fzf-tab's menu in
+# ~/.config/zsh/completion.zsh needs 0.58+ (change-nth). When the installed one
+# is older, put the official release build in ~/.local/bin, which ~/.zshrc puts
+# ahead of /usr/bin. Bump fzf_min if completion.zsh starts needing newer.
+fzf_min=0.58.0
+fzf_ver=$(PATH="$HOME/.local/bin:$PATH" fzf --version 2>/dev/null | cut -d' ' -f1)
+if [ -z "$fzf_ver" ] || [ "$(printf '%s\n' "$fzf_min" "$fzf_ver" | sort -V | head -1)" != "$fzf_min" ]; then
+  case $(uname -m) in
+    x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;;
+    armv7l) arch=armv7 ;; armv6l) arch=armv6 ;; *) arch= ;;
+  esac
+  tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/junegunn/fzf/releases/latest 2>/dev/null)
+  tag=${tag##*/}
+  if [ -n "$arch" ] && [ -n "$tag" ] && [ "$tag" != latest ]; then
+    echo "chezmoi: fzf ${fzf_ver:-missing} is older than $fzf_min; installing fzf $tag into ~/.local/bin"
+    mkdir -p "$HOME/.local/bin"
+    if curl -fsSL "https://github.com/junegunn/fzf/releases/download/$tag/fzf-${tag#v}-linux_$arch.tar.gz" \
+         | tar -xz -C "$HOME/.local/bin" fzf; then
+      chmod +x "$HOME/.local/bin/fzf"
+    else
+      echo "chezmoi: fzf download failed; fzf-tab menus need fzf >= $fzf_min" >&2
+    fi
+  else
+    echo "chezmoi: couldn't fetch a newer fzf (arch $(uname -m)); fzf-tab menus need fzf >= $fzf_min" >&2
+  fi
+fi
+
 # Make zsh the login shell, so new terminals and `chezmoi cd` don't land in
 # bash. chsh only accepts shells listed in /etc/shells.
 if z=$(command -v zsh); then

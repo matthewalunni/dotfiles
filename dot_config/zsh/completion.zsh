@@ -45,11 +45,16 @@ zstyle ':fzf-tab:*' fzf-min-height 24
 # --nth=2 matches your query against candidate names only; fzf-tab's default
 # also matches descriptions, so typing "clone" listed 28 git commands whose
 # description happens to say "clone". Alt-D toggles description matching.
+# An fzf that doesn't know a flag or bind action exits at once, and fzf-tab
+# then shows nothing at all: `git <Tab>` just goes silent. So only pass what
+# the installed fzf supports. (Linux apply installs a new enough fzf.)
+autoload -Uz is-at-least
+typeset -g _ftb_fzf_ver=${${(z)"$(fzf --version 2>/dev/null)"}[1]:-0}
 typeset -ga _ftb_flags=(
   '--preview-window=right,55%,wrap,border-left,<50(down,55%,wrap,border-top)'
-  '--info=inline-right'
   '--nth=2'
 )
+is-at-least 0.42 $_ftb_fzf_ver && _ftb_flags+=('--info=inline-right')
 zstyle ':fzf-tab:*' fzf-flags $_ftb_flags
 # keep npm run scripts in package.json order
 zstyle ':fzf-tab:complete:npm:*' fzf-flags --no-sort $_ftb_flags
@@ -59,13 +64,16 @@ zstyle ':fzf-tab:complete:npm:*' fzf-flags --no-sort $_ftb_flags
 zstyle ':fzf-tab:complete:*' fzf-preview \
   'cmd-help preview "$word" "${group:-}" "${realpath:-}" "$desc" -- "$words[@]"'
 
-zstyle ':fzf-tab:*' fzf-bindings \
-  'ctrl-o:execute({_FTB_INIT_}cmd-help open "$word" -- "$words[@]")' \
-  'ctrl-f:change-preview-window(down,80%,wrap,border-top|)' \
-  'alt-d:change-nth(2,3|2)' \
-  'ctrl-/:toggle-preview' \
-  'ctrl-d:preview-half-page-down' \
+typeset -ga _ftb_binds=(
+  'ctrl-o:execute({_FTB_INIT_}cmd-help open "$word" -- "$words[@]")'
+  'ctrl-f:change-preview-window(down,80%,wrap,border-top|)'
+  'ctrl-/:toggle-preview'
+  'ctrl-d:preview-half-page-down'
   'ctrl-u:preview-half-page-up'
+)
+is-at-least 0.58 $_ftb_fzf_ver && _ftb_binds+=('alt-d:change-nth(2,3|2)')
+zstyle ':fzf-tab:*' fzf-bindings $_ftb_binds
+unset _ftb_fzf_ver _ftb_binds
 
 # ---- Alt-H: full docs for the command being typed -------------------------
 # Replaces zsh's default run-help on Alt-H, which only knows man pages and
