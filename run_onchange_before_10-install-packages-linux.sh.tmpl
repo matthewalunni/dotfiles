@@ -42,11 +42,25 @@ for t in "${tools[@]}"; do
 done
 [ ${#missing[@]} -eq 0 ] && exit 0
 
+install() {
+  case $mgr in
+    pacman) sudo pacman -S --needed --noconfirm "$@" ;;
+    apt)    sudo apt-get install -y "$@" ;;
+    dnf)    sudo dnf install -y "$@" ;;
+  esac
+}
+
 echo "chezmoi: installing missing tools: ${missing[*]}"
-case $mgr in
-  pacman) sudo pacman -S --needed --noconfirm "${missing[@]}" ;;
-  apt)    sudo apt-get install -y "${missing[@]}" ;;
-  dnf)    sudo dnf install -y "${missing[@]}" ;;
-esac || echo "chezmoi: package install failed; install by hand: ${missing[*]}" >&2
+# A fresh Debian/Ubuntu has empty package lists, so every name is "unable to
+# locate" until the first update.
+[ "$mgr" = apt ] && { sudo apt-get update || true; }
+# All three managers refuse the whole batch if one name is unknown (yazi,
+# lazygit, starship aren't packaged everywhere), which used to leave even
+# ripgrep uninstalled. Try the batch, then each package on its own.
+if ! install "${missing[@]}"; then
+  failed=()
+  for pkg in "${missing[@]}"; do install "$pkg" || failed+=("$pkg"); done
+  [ ${#failed[@]} -eq 0 ] || echo "chezmoi: not available from $mgr; install by hand: ${failed[*]}" >&2
+fi
 exit 0
 {{- end }}
