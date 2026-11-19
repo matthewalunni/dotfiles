@@ -14,6 +14,8 @@ import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restor
 import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "./lib/store.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
+import { CLOSED_LOG, expandHome } from "./lib/chatpaths.js";
+import { closedRecord, appendExec } from "./lib/chatarchive.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -593,6 +595,27 @@ export function dismiss(issue) {
 }
 
 /**
+ * Appends one line to a log file through a login shell (lib/chatarchive.js
+ * appendExec). Never throws: a failed write only notifies, so it can never
+ * stop the action it records.
+ * @param {string} path @param {string} line
+ */
+export async function appendLog(path, line) {
+  try {
+    const ex = appendExec(path, line);
+    const r = await sh(ex.cmd, ex.args, { timeout: T_GIT });
+    if (r.code !== 0) notify({ title: "Could not write the log", level: "warn" });
+  } catch {
+    try { notify({ title: "Could not write the log", level: "warn" }); } catch {}
+  }
+}
+
+/** Records a removed card in the closed-issue log; not awaited by the caller. */
+function logClosed(issue, how, now) {
+  void appendLog(expandHome(CLOSED_LOG, home()), JSON.stringify(closedRecord(issue, how, now)));
+}
+
+/**
  * Delete: the card goes and this agent session is never tracked again.
  * Deck's record only: the terminal, branch and PR are untouched.
  * @param {Issue} issue
@@ -600,8 +623,13 @@ export function dismiss(issue) {
 export function deleteIssue(issue) {
   if (!issue?.key || issue.kind === "backlog") return;
   const prev = currentStore();
-  const next = removeIssue(prev, issue.key, Date.now());
-  if (next !== prev) save(next);
+  const now = Date.now();
+  const gone = latest(issue);
+  const next = removeIssue(prev, issue.key, now);
+  if (next !== prev) {
+    save(next);
+    logClosed(gone, "deleted", now);
+  }
 }
 
 /**
@@ -757,8 +785,11 @@ export async function waitForIssueAt(path, ms = 20_000) {
 
 /** X: the entry moves to the Discarded filter (kept 7 days). @param {Issue} entry */
 export function discardEntry(entry) {
-  if (!liveBacklog(entry)) return;
-  save(discardBacklog(currentStore(), entry.key, Date.now()));
+  const live = liveBacklog(entry);
+  if (!live) return;
+  const now = Date.now();
+  save(discardBacklog(currentStore(), entry.key, now));
+  logClosed(live, "discarded", now);
 }
 
 /** Restore (Discarded filter): back into the Backlog. @param {Issue} entry */
