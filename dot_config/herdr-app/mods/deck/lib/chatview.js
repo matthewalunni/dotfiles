@@ -235,3 +235,13 @@ export function focusJump(prevKey, f) {
   if (key === null) return { key: prevKey, jump: false };
   return { key, jump: prevKey !== null && key !== prevKey };
 }
+
+/**
+ * `text` as HTML that shows it literally (for a selectable TextView.html):
+ * & < > " ' escaped, newlines as <br>. The person's own words are not markdown.
+ * @param {unknown} text
+ */
+export function plainHtml(text) {
+  const esc = String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  return `<span>${esc.replace(/\r?\n/g, "<br>")}</span>`;
+}

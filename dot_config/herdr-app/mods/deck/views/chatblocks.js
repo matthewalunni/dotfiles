@@ -6,9 +6,9 @@
 // Chat view } (host.busy, host.run(cx, fn, failTitle), host.canAnswer,
 // host.answer(option, cx)).
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, TextView } from "gpui-base";
 import { createRegistry, BLOCK_TYPES } from "../lib/chatregistry.js";
-import { clipDetail } from "../lib/chatview.js";
+import { clipDetail, plainHtml } from "../lib/chatview.js";
 import { button, dot } from "./ui.js";
 import { githubCard, deckCard } from "./chatcards.js";
 
@@ -35,13 +35,16 @@ export function renderBlock(block, cx, ctx) {
   }
 }
 
-/** User: a bubble on the right. Agent: on the left, under a CHAT label. */
+/**
+ * User: a bubble on the right. Agent: on the left, under a CHAT label, as markdown.
+ * Both are selectable TextViews (plain div text cannot be selected or copied).
+ */
 function text(block, _cx, { k }) {
   if (block.role === "user") {
     return h_flex()
       .w_full()
       .justify_end()
-      .child(div().max_w(520).px(14).py(10).bg(k.raised).rounded(14).text_color(k.strong).line_height(1.5).child(block.text));
+      .child(div().max_w(520).px(14).py(10).bg(k.raised).rounded(14).text_color(k.strong).line_height(1.5).child(TextView.html(`chat-${block.id}`, plainHtml(block.text)).selectable(true)));
   }
   return v_flex()
     .w_full()
@@ -53,7 +56,7 @@ function text(block, _cx, { k }) {
         .child(dot(k.brand, 7, true))
         .child(div().font_weight(600).text_size(12).text_color(k.muted).child("Chat")),
     )
-    .child(div().w_full().text_color(k.text).line_height(1.6).child(block.text));
+    .child(div().w_full().text_color(k.text).line_height(1.6).child(TextView.markdown(`chat-${block.id}`, String(block.text ?? "")).selectable(true)));
 }
 
 /** What the agent did: check, verb, target, a muted detail (cut to ~120 characters). */
