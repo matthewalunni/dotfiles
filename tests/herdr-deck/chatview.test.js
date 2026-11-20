@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   chatAgent, nullSince, trustWaiting, TRUST_MS, approvalFrom, matchOption, clipDetail, wheelAway,
   recentBlocks, attachCards, chatViewKey, canSendToChat, SEND_BLOCKED, composerLocked, followKey, followScroll,
-  chatOpenCommand, CHAT_ATTACH, TRUST_NOTE, prCwds, logMark,
+  chatOpenCommand, CHAT_ATTACH, TRUST_NOTE, prCwds, logMark, plainHtml,
 } from "../../dot_config/herdr-app/mods/deck/lib/chatview.js";
 
 const term = (o = {}) => ({ address: "t9", name: "deck-chat", state: "live", status: null, ...o });
@@ -190,4 +190,10 @@ test("prCwds: each distinct repo root from the store, in order; one try without 
   ];
   assert.deepEqual(prCwds(issues), ["/r/one", "/r/two"]);
   assert.deepEqual(prCwds([]), [null]);
+});
+
+test("plainHtml: escaped, newlines kept, never markup", () => {
+  assert.equal(plainHtml("a <b> & \"c\" 'd'"), "<span>a &lt;b&gt; &amp; &quot;c&quot; &#39;d&#39;</span>");
+  assert.equal(plainHtml("one\ntwo\r\nthree"), "<span>one<br>two<br>three</span>");
+  assert.equal(plainHtml(null), "<span></span>");
 });

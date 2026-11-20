@@ -147,6 +147,8 @@ br_white   = "#c2c5aa"
 chrome  = "#0a0d08"
 surface = "#0f130d"
 raised  = "#1a2116"
+# Text selection: brighter than raised, so a selection shows on the chat bubbles too.
+selection = "#3d5236"
 border  = "#2b3524"
 text    = "#a4ac86"
 strong  = "#dfe3cf"
