@@ -127,7 +127,7 @@
     "cmd-shift-j": "layout.switch:deck"
   },
   "layout:deck": {
-    "cmd-alt-1": "deck.go:command",
+    "cmd-alt-1": "deck.go:chat",
     "cmd-alt-2": "deck.go:issues",
     "cmd-alt-3": "deck.go:terminal",
     "cmd-shift-j": "deck.next-holding",

@@ -132,7 +132,7 @@ export function dot(color, size = 8, round = false) {
   return round ? d.rounded(size) : d;
 }
 
-/** Panel with the Command Center's brand corner brackets (top-left, bottom-right). */
+/** Panel with the brand corner brackets (top-left, bottom-right). */
 export function panel(el) {
   const k = tokens();
   const corner = (top) =>

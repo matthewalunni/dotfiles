@@ -1,17 +1,17 @@
 // Which Deck stack child is on screen, and when a view has just come into
 // sight (so it takes the keyboard). Pure; no herdr imports.
 
-const CHILDREN = ["deck-command", "deck-issues", "deck-issue", "deck-terminal"];
+const CHILDREN = ["deck-chat", "deck-issues", "deck-issue", "deck-terminal"];
 
 /**
  * The child the deck-main stack shows, or null outside a Deck layout.
- * A stale or unknown view (e.g. "deck-work" from v1) counts as Command.
+ * A stale or unknown view (e.g. "deck-work" from v1) counts as Chat.
  * @param {unknown} layout shared("layout") @param {unknown} view shared(VIEW_KEY)
  * @returns {string|null}
  */
 export function shownChild(layout, view) {
   if (!String(layout ?? "").startsWith("deck")) return null;
-  return CHILDREN.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-command";
+  return CHILDREN.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-chat";
 }
 
 /** How long a show request (showView) may wait for the view's next draw. */
@@ -35,16 +35,16 @@ export function takesFocus(last, now, ask, child, ms) {
   return Boolean(ask && ask !== last.ask && ask.child === child && ms - ask.at < ASK_MS);
 }
 
-const NAV = ["deck-command", "deck-issues", "deck-terminal"];
+const NAV = ["deck-chat", "deck-issues", "deck-terminal"];
 
 /**
  * The bar nav item to underline for a VIEW_KEY: the issue page is Issues; a
- * stale or unknown view is Command.
+ * stale or unknown view is Chat.
  * @param {unknown} view @returns {string}
  */
 export function navChild(view) {
   if (view === "deck-issue") return "deck-issues";
-  return NAV.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-command";
+  return NAV.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-chat";
 }
 
 const SIG_KEYS = ["layout", "deck.view", "deck.selected", "deck.issueTab", "deck.issuesMode", "deck.issueFrom"];

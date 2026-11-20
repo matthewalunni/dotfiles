@@ -49,7 +49,7 @@ const hasNoData = (i) => (i.claims ?? []).some((c) => c.verdict === "NO DATA");
 
 const isBacklog = (i) => i.kind === "backlog";
 
-/** The agents' issues, without backlog entries (Command Center, telemetry). @param {Issue[]} issues */
+/** The agents' issues, without backlog entries (telemetry). @param {Issue[]} issues */
 export function liveIssues(issues) {
   return (issues ?? []).filter((i) => !isBacklog(i));
 }
@@ -138,7 +138,7 @@ export function prChip(issue) {
 
 const firstLine = (s) => String(s ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 
-/** A short line of what the issue is doing, for Command Center rows. */
+/** A short line of what the issue is doing, for list rows. */
 export function issueNote(issue) {
   if (issue.stage === "holding") return firstLine(issue.prompt?.text) || "waiting on you";
   if (issue.stage === "landed") return issue.pr?.state === "MERGED" ? "merged" : "dismissed";

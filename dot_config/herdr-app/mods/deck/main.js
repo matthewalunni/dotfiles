@@ -5,8 +5,9 @@ import { View, div } from "gpui-kit";
 import { props, theme } from "herdr";
 import { deckTokens } from "./lib/tokens.js";
 import { startCollector, stopCollector } from "./data.js";
+import { startChat, stopChat } from "./chat.js";
 import Bar from "./views/bar.js";
-import Command from "./views/command.js";
+import Chat from "./views/chat.js";
 import Issues from "./views/issues.js";
 import Confirm from "./views/confirm.js";
 import StartConfirm from "./views/startconfirm.js";
@@ -19,7 +20,7 @@ import Keys from "./views/keys.js";
 import IssuePage, { ThreadView, GoneView, IssueHints } from "./views/issuepage.js";
 
 const VIEWS = {
-  bar: Bar, command: Command, issues: Issues, confirm: Confirm, startconfirm: StartConfirm, remove: Remove, newtask: NewTask, review: Review,
+  bar: Bar, chat: Chat, issues: Issues, confirm: Confirm, startconfirm: StartConfirm, remove: Remove, newtask: NewTask, review: Review,
   machines: Machines, termhints: TermHints, keys: Keys,
   issue: IssuePage, thread: ThreadView, issuegone: GoneView, issuehints: IssueHints,
 };
@@ -27,14 +28,18 @@ const VIEWS = {
 export default class Deck extends View {
   init(p, cx) {
     const view = (props() ?? {}).view;
-    // The bar's copy runs the collector (one per app; see data.js).
-    if (view === "bar") this.guard = startCollector(cx);
+    // The bar's copy runs the collector and the chat source (one per app; see data.js, chat.js).
+    if (view === "bar") {
+      this.guard = startCollector(cx);
+      this.chatGuard = startChat(cx);
+    }
     const Cls = VIEWS[view];
     this.inner = Cls ? cx.new(Cls, p) : null;
   }
 
   async close() {
     stopCollector(this.guard);
+    stopChat(this.chatGuard);
   }
 
   render(cx) {

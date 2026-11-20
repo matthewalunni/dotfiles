@@ -1,4 +1,4 @@
-// Merge controls shared by the Command Center band, the issue detail and the PR tab.
+// Merge controls shared by the issue detail and the PR tab.
 // Merge / Merge + ship only when the lock is open; otherwise "Merge anyway",
 // which opens the confirm dialog pinned to the head the store shows now.
 // Every merge is pinned to the head shown on screen (issue.pr.headSha).

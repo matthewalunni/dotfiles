@@ -358,6 +358,40 @@ config pointed at that agent's leased device, and starts the coding agent in it.
 
 ---
 
+## Herdr Deck
+
+The deck lives in `dot_config/herdr-app/mods/deck`. Its views open at ⌥⌘1
+(Chat), ⌥⌘2 (Issues) and ⌥⌘3 (Terminal).
+
+### Chat
+
+The Chat view is one continuous conversation with a Claude Code session (an
+`hc` terminal named `deck-chat`) that steers the other agents. The Terminal
+view's sidebar (spaces, machines, live agents) sits on the left, and GitHub and
+Deck cards appear inline. The agent starts
+when the view is shown; if that fails, a Start button appears. It follows your
+normal Claude permission behavior.
+
+- `/compact` and `/clear` are plain messages typed in the composer. The thread
+  stays on screen and gets a divider; `/clear` also makes the agent forget.
+- Every block shown is archived to `~/.local/state/herdr-deck/chat/YYYY-MM.jsonl`.
+  Every deleted or discarded issue is logged to
+  `~/.local/state/herdr-deck/closed.jsonl`. Both files live outside this repo
+  and are never part of it.
+- Two skills in `dot_claude/skills/`: `orchestrator` (how the chat agent drives
+  the board, which is the source of truth) and `herdr-history` (optional: where
+  the two logs are and how to search them).
+- On the first run, Claude asks you to trust its directory. The chat agent runs
+  without a pane, so the Chat view shows a note with an Open terminal button
+  that peeks its terminal; answer there (or run `hc attach deck-chat` in any
+  terminal, ctrl+\ detaches). The deck never answers it, and the composer
+  sends nothing while that note or a permission card is showing.
+- The chat agent starts with a short system prompt that names it and points it
+  at the `orchestrator` skill. The view keeps the last 500 blocks; the archive
+  keeps all of them.
+
+---
+
 ## What's Included
 
 - **Alacritty**: Terminal emulator config
