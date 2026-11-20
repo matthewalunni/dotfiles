@@ -228,12 +228,10 @@ export function terminalFocusKey(f) {
  * (a peek of it) is ignored.
  * @param {string|null} prevKey the last terminal focus key seen
  * @param {{ space?: string, tab?: string, terminal?: string|null, agent?: string|null }|null|undefined} f herdr focused()
- * @param {string|null} chatTerminal the chat agent's terminal address, if running
  * @returns {{ key: string|null, jump: boolean }}
  */
-export function focusJump(prevKey, f, chatTerminal) {
+export function focusJump(prevKey, f) {
   const key = terminalFocusKey(f);
   if (key === null) return { key: prevKey, jump: false };
-  if (chatTerminal && (f?.terminal === chatTerminal || f?.agent === chatTerminal)) return { key: prevKey, jump: false };
   return { key, jump: prevKey !== null && key !== prevKey };
 }

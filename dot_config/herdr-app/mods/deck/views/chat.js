@@ -19,7 +19,6 @@ import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { shared, terminals, agents, focused } from "herdr";
 import { shownChild } from "../lib/views.js";
 import { reviveChatLog } from "../lib/chat.js";
-import { findChatTerminal } from "../lib/chatsource.js";
 import {
   chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey,
   composerLocked, followKey, followScroll, logMark, TRUST_NOTE, focusJump,
@@ -81,9 +80,9 @@ export default class ChatView extends View {
     // A click on the sidebar's Spaces or Agents moves the focus to another terminal:
     // open the Terminal view on it. The baseline keeps moving while this view is hidden,
     // so coming back to Chat never jumps.
-    this.termKey = focusJump(null, focused(), null).key;
+    this.termKey = focusJump(null, focused()).key;
     cx.timer.every(FRESH_MS, () => {
-      const r = focusJump(this.termKey, focused(), findChatTerminal(terminals()));
+      const r = focusJump(this.termKey, focused());
       this.termKey = r.key;
       if (r.jump && isShown()) goTo("deck-terminal");
     });
