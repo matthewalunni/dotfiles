@@ -15,7 +15,7 @@ import { previewPlan, backlogFiler } from "../lib/backlog.js";
 import { startKey } from "./startconfirm.js";
 import { removeKey } from "./remove.js";
 import { openNewTask, newTaskButton } from "./newtask.js";
-import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf } from "./ui.js";
+import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf, SANS } from "./ui.js";
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle } from "./board.js";
@@ -56,12 +56,12 @@ export function optionButton(id, text, primary, onClick, disabled, key = null) {
     .items_center()
     .gap(8)
     .px(12)
-    .py(6)
-    .border_1()
-    .border_color(primary ? k.hold : k.line)
+    .py(7)
+    .rounded(8)
+    .bg(primary ? k.holdWash : k.wash)
     .text_color(primary ? k.hold : k.strong)
     .whitespace_normal()
-    .when(key != null, (el) => el.child(keyChip(key, primary ? k.hold : k.line)))
+    .when(key != null, (el) => el.child(keyChip(key)))
     .child(div().flex_1().min_w(0).child(text));
   if (disabled) return el.opacity(0.4);
   return el.cursor_pointer().hover((s) => s.bg(k.raised)).on_click((e, cx) => {
@@ -283,13 +283,13 @@ function backlogDetail(host, issue, k, opts) {
     .track_scroll(host.bodyScroll)
     .child(section("Where it came from",
       h_flex().flex_wrap().items_center().gap(10)
-        .child(div().flex_none().px(7).py(1).border_1().border_color(k.line).child(String(issue.source || "agent").toUpperCase()))
+        .child(div().flex_none().px(8).py(2).rounded(10).bg(k.wash).text_size(11).child(String(issue.source || "agent")))
         .child(filer
           ? h_flex().flex_wrap().child(div().child("Filed by ")).child(div().text_color(k.strong).child(`${filer.id} · ${filer.title || "untitled"}`)).child(div().child(" while it worked"))
           : div().child(issue.source === "you" ? "Filed by you from Deck" : `Filed by an ${issue.source || "agent"}`)),
     ))
     .child(section("Brief · what the agent will be told",
-      div().border_l(2).border_color(k.brand).pl(12).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
+      div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
     ))
     .child(section("When you start it",
       "error" in plan
@@ -301,7 +301,7 @@ function backlogDetail(host, issue, k, opts) {
           .child(fact("Agent", "claude", ", told to use herdr-proof")),
     ))
     .when(Boolean(failed), (el) => el.child(
-      v_flex().gap(4).border_1().border_color(k.fail).p(10)
+      v_flex().gap(4).rounded(10).bg(k.fail + "1f").p(12)
         .child(div().text_color(k.fail).child("Could not start. Nothing was marked started."))
         .child(div().text_color(k.strong).line_height(1.5).child(failed)),
     ));
@@ -321,8 +321,8 @@ function backlogDetail(host, issue, k, opts) {
               .items_center()
               .gap(10)
               .text_color(k.muted)
-              .child(div().px(8).py(2).border_1().border_color(issue.discarded ? k.line : k.brand).text_color(issue.discarded ? k.muted : k.brand)
-                .child((issue.discarded ? "DISCARDED · " + age(issue.discardedAt, now) : "BACKLOG · " + age(issue.createdAt, now)).toUpperCase()))
+              .child(div().px(9).py(2).rounded(10).bg(issue.discarded ? k.wash : k.brandWash).text_size(11).text_color(issue.discarded ? k.muted : k.brand)
+                .child(issue.discarded ? "Discarded · " + age(issue.discardedAt, now) : "Backlog · " + age(issue.createdAt, now)))
               .child(div().child(projectOf(issue) ?? "no project"))
               .child(div().child(issue.discarded ? "· kept 7 days" : "· not started")),
           ),
@@ -336,9 +336,13 @@ function tabs(issue, tab, k) {
   const t = (name, text, key) =>
     div()
       .id("tab-" + name)
-      .pb(8)
-      .border_b(2)
-      .border_color(tab === name ? k.brand : k.bg)
+      .px(10)
+      .h(28)
+      .flex()
+      .items_center()
+      .rounded(8)
+      .bg(tab === name ? k.raised : "#00000000")
+      .font_weight(tab === name ? 600 : 500)
       .text_color(tab === name ? k.strong : k.muted)
       .cursor_pointer()
       .hover((s) => s.text_color(k.strong))
@@ -346,9 +350,7 @@ function tabs(issue, tab, k) {
       .child(h_flex().items_center().gap(6).child(text).child(div().text_size(10).text_color(k.muted).child(key)));
   return h_flex()
     .flex_none()
-    .gap(18)
-    .border_b(1)
-    .border_color(k.line)
+    .gap(4)
     .child(t("overview", "Overview", "⇧1"))
     .when(Boolean(issue.pr), (el) => el.child(t("pr", `Pull request #${issue.pr.number}`, "⇧2")));
 }
@@ -361,8 +363,6 @@ function header(issue, crumb, k, back, hint, compact) {
     .items_center()
     .gap(8)
     .px(20)
-    .border_b(1)
-    .border_color(k.line)
     .when(Boolean(back), (el) => el.child(button("hdr-back", back.label, "plain", back.onClick, false, "esc")))
     .child(div().flex_1().min_w(0).truncate().text_color(k.muted).child(crumb))
     .when(Boolean(hint), (el) => el.child(hint))
@@ -379,12 +379,11 @@ function questionBox(host, issue, k) {
   const text = String(p.text ?? "").trim();
   const box = v_flex()
     .flex_none()
-    .border_1()
-    .border_color(k.hold)
-    .bg(k.holdBg)
+    .rounded(12)
+    .bg(k.holdWash)
     .p(14)
     .gap(10)
-    .child(div().text_color(k.hold).line_height(1.5).child("◆ AGENT ASKS: " + clip(text || "(no question text)", MAX_QUESTION)));
+    .child(div().text_color(k.hold).line_height(1.5).child("Agent asks: " + clip(text || "(no question text)", MAX_QUESTION)));
   const options = p.options ?? [];
   if (options.length) {
     box.child(
@@ -409,12 +408,13 @@ function questionBox(host, issue, k) {
             .id("reply-box")
             .flex_1()
             .min_w(0)
-            .h(32)
-            .px(10)
+            .h(34)
+            .px(12)
             .flex()
             .items_center()
+            .rounded(8)
             .border_1()
-            .border_color(k.line)
+            .border_color(k.hair)
             .bg(k.bg)
             .cursor_text()
             .when(host.typing, (el) => el.border_color(k.brand))
@@ -451,7 +451,7 @@ function metaLine(issue, k) {
   const since = issue.stage === "holding" && issue.holdingSince ? ` · ${minutesSince(issue.holdingSince, Date.now())}m` : "";
   return v_flex()
     .gap(4)
-    .child(div().text_color(stageColor(issue.stage, k)).child(String(STAGE_NAME[issue.stage] ?? issue.stage).toUpperCase() + since.toUpperCase()))
+    .child(div().font_weight(600).text_color(stageColor(issue.stage, k)).child(String(STAGE_NAME[issue.stage] ?? issue.stage) + since))
     .child(div().text_color(k.muted).truncate().child(facts.join(" · ")));
 }
 
@@ -484,9 +484,9 @@ function overview(host, issue, store, k, stacked) {
             .child(label("Your brief"))
             .child(
               div()
-                .border_l(2)
-                .border_color(k.brand)
-                .pl(12)
+                .p(12)
+                .rounded(10)
+                .bg(k.wash)
                 .line_height(1.6)
                 .text_color(issue.brief ? k.strong : k.muted)
                 .child(issue.brief ? String(issue.brief) : "Brief unknown"),
@@ -503,7 +503,7 @@ function overview(host, issue, store, k, stacked) {
                 h_flex()
                   .gap(12)
                   .items_start()
-                  .child(div().mt(4).child(dot(toneColor(e.tone), 8)))
+                  .child(div().mt(5).child(dot(toneColor(e.tone), 7, true)))
                   .child(div().w(40).flex_none().text_color(k.muted).child(hhmm(e.t)))
                   .child(div().flex_1().min_w(0).child(String(e.what ?? "").replace(/^moved to Survey$/, "moved to Started"))),
               ),
@@ -615,7 +615,7 @@ function railSections(issue, k) {
 }
 
 function rail(host, issue, k) {
-  const base = v_flex().w(300).flex_none().h_full().bg(k.panel).border_l(1).border_color(k.line);
+  const base = v_flex().w(300).flex_none().h_full().bg(k.chrome);
   const body = v_flex()
     .id("issue-rail")
     .flex_1()
@@ -774,10 +774,11 @@ export default class IssuesView extends View {
       .gap(8)
       .px(10)
       .py(6)
+      .rounded(8)
       .cursor_pointer()
       .text_color(active ? k.strong : k.text)
       .when(active, (el) => el.bg(k.raised))
-      .hover((s) => s.bg(k.raised))
+      .hover((s) => (active ? s : s.bg(k.wash)))
       .on_click(onClick)
       .when(Boolean(mark), (el) => el.child(mark))
       .child(div().flex_1().min_w(0).truncate().child(text))
@@ -803,8 +804,6 @@ export default class IssuesView extends View {
       .flex_none()
       .h_full()
       .bg(k.chrome)
-      .border_r(1)
-      .border_color(k.line)
       .px(10)
       .py(14)
       .gap(2)
@@ -848,9 +847,6 @@ export default class IssuesView extends View {
           .items_center()
           .gap(8)
           .px(16)
-          .bg(k.panel)
-          .border_b(1)
-          .border_color(k.line)
           .child(ring(c, stagePct(g.stage)))
           .child(label(STAGE_LABEL[g.stage], c))
           .child(div().text_color(k.muted).child(String(g.items.length))),
@@ -866,15 +862,15 @@ export default class IssuesView extends View {
             .h(38)
             .items_center()
             .gap(10)
-            .px(16)
-            .border_b(1)
-            .border_color(k.line)
+            .mx(8)
+            .px(10)
+            .rounded(8)
             .cursor_pointer()
             .when(on, (el) => el.bg(k.raised))
-            .hover((s) => s.bg(k.raised))
+            .hover((s) => (on ? s : s.bg(k.wash)))
             .on_click(() => this.select(i))
             .child(ring(c, stagePct(i.stage)))
-            .child(div().w(44).flex_none().truncate().text_color(k.muted).child(i.id))
+            .child(div().w(48).flex_none().truncate().font_family(MONO).text_size(11).text_color(k.muted).child(i.id))
             .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(i.title || "untitled"))
             .child(h_flex().flex_none().items_center().gap(5).text_color(k.muted).child(dot(tone(pc.tone, k), 7, true)).child(pc.text)),
         );
@@ -890,23 +886,19 @@ export default class IssuesView extends View {
       .w(440)
       .flex_none()
       .h_full()
-      .border_r(1)
-      .border_color(k.line)
       .child(
         h_flex()
           .flex_none()
-          .h(48)
+          .h(52)
           .items_center()
-          .gap(10)
+          .gap(12)
           .px(16)
-          .border_b(1)
-          .border_color(k.line)
           .overflow_hidden()
-          .child(heading("Issues", 18))
+          .child(heading("Issues", 20))
           .child(modeToggle("list", k))
           .child(newTaskButton(k))
           .when(Boolean(filterName), (el) =>
-            el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(filterName).toUpperCase())),
+            el.child(div().px(9).h(24).flex().items_center().rounded(12).bg(k.brandWash).text_size(12).text_color(k.brand).truncate().max_w(220).child(String(filterName))),
           )
           .child(div().flex_1().min_w(0))
           .child(h_flex().min_w(0).flex_shrink(1).overflow_hidden().gap(4).text_color(k.muted).child(div().flex_none().text_color(k.text).child("j k")).child(div().flex_none().child("move ·")).child(div().flex_none().text_color(k.text).child("/")).child(div().flex_none().child("filter")))
@@ -940,7 +932,7 @@ export default class IssuesView extends View {
       // reply box takes it again on its own press).
       .on_mouse_down("left", () => { if (!this.typing) this.handle.focus(); })
       .on_key_down((e, cx) => this.onKey(e, cx))
-      .size_full().items_stretch().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
+      .size_full().items_stretch().min_h(0).bg(k.bg).font_family(SANS).text_size(12).text_color(k.text);
     root.child(this.sidebar(issues, k));
 
     if (issue && tab === "pr") return root.child(issueDetail(this, issue, k, cx));

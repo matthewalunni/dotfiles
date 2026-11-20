@@ -19,7 +19,7 @@ import { currentStore, fileTask, startNow, SEL_KEY } from "../data.js";
 import { repoChoices, defaultRepo, dialogKeyNewTask, oneAtATime, freshId, NO_TERMINAL_BACKLOG } from "../lib/newtask.js";
 import { repoColor } from "../lib/board.js";
 import { remember, dialogBeat, forgetDialog, anyDialogOpen, claimDialog } from "./merge.js";
-import { MONO, tokens, label, heading, button, keyChip, keyOf } from "./ui.js";
+import { MONO, tokens, label, heading, button, keyChip, keyOf, SANS } from "./ui.js";
 
 // Its slot in the dialog registry (merge.js): one New task at a time, and N stays off while it is up.
 const KEY = "deck:newtask";
@@ -49,13 +49,15 @@ export function newTaskButton(k) {
     .flex_none()
     .items_center()
     .gap(7)
-    .px(9)
-    .py(3)
-    .border_1()
-    .border_color(k.brand)
+    .px(11)
+    .h(26)
+    .rounded(8)
+    .bg(k.brandWash)
     .text_color(k.brand)
+    .font_weight(600)
+    .text_size(12)
     .cursor_pointer()
-    .hover((s) => s.bg(k.raised))
+    .hover((s) => s.opacity(0.85))
     .on_click((_e, cx) => {
       cx.stop_propagation();
       openNewTask();
@@ -252,10 +254,10 @@ export default class NewTaskView extends View {
         .flex_none()
         .items_center()
         .gap(7)
-        .px(10)
-        .py(5)
-        .border_1()
-        .border_color(on ? k.brand : k.line)
+        .px(11)
+        .py(6)
+        .rounded(8)
+        .bg(on ? k.brandWash : k.wash)
         .text_color(on ? k.strong : k.text)
         .cursor_pointer()
         .hover((s) => s.bg(k.raised))
@@ -264,14 +266,14 @@ export default class NewTaskView extends View {
           this.error = null;
           cx.notify();
         })
-        .child(div().flex_none().w(7).h(7).bg(repoColor(c.name, k.repo)))
+        .child(div().flex_none().w(7).h(7).rounded(3).bg(repoColor(c.name, k.repo)))
         .child(c.name);
     };
     const field = (title, on, body) =>
       v_flex()
         .gap(6)
         .child(label(title))
-        .child(div().px(10).py(8).border_1().border_color(on ? k.brand : k.line).bg(k.bg).cursor_text().child(body));
+        .child(div().px(12).py(9).rounded(8).border_1().border_color(on ? k.brand : k.hair).bg(k.bg).cursor_text().child(body));
     return v_flex()
       .id("deck-new-task")
       .track_focus(this.handle)
@@ -292,15 +294,15 @@ export default class NewTaskView extends View {
       .gap(16)
       .bg(k.panel)
       .border_1()
-      .border_color(k.brand)
-      .font_family(MONO)
+      .border_color(k.hair)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.text)
       .child(
         h_flex()
           .items_baseline()
           .gap(12)
-          .child(heading("New task", 22))
+          .child(heading("New task", 24))
           .child(div().text_color(k.muted).child(this.terminal ? "⌘↵ opens a terminal in a new worktree" : "⌘↵ starts an agent now · ⌥⌘↵ files it to the Backlog")),
       )
       .child(
@@ -316,11 +318,10 @@ export default class NewTaskView extends View {
                 div()
                   .id("nt-choose")
                   .flex_none()
-                  .px(10)
-                  .py(5)
-                  .border_1()
-                  .border_dashed()
-                  .border_color(k.line)
+                  .px(11)
+                  .py(6)
+                  .rounded(8)
+                  .bg(k.wash)
                   .text_color(k.muted)
                   .cursor_pointer()
                   .hover((s) => s.text_color(k.strong))
@@ -341,7 +342,7 @@ export default class NewTaskView extends View {
               .child(this.terminal ? BRIEF_HINT_TERMINAL : BRIEF_HINT)))
           .child(Textarea.new(this.brief).w_full().h(96).text_size(12).text_color(k.strong))))
       .child(this.checkbox(k, termOn))
-      .when(Boolean(this.error), (el) => el.child(div().px(10).py(8).border_1().border_color(k.fail).text_color(k.fail).child(String(this.error))))
+      .when(Boolean(this.error), (el) => el.child(div().px(12).py(9).rounded(8).bg(k.fail + "1f").text_color(k.fail).child(String(this.error))))
       .child(
         h_flex()
           .items_center()
@@ -367,8 +368,7 @@ export default class NewTaskView extends View {
       .gap(9)
       .px(10)
       .py(6)
-      .border_1()
-      .border_color(on ? k.brand : k.bg)
+      .rounded(8)
       .cursor_pointer()
       .on_click((_e, cx) => {
         this.field = "terminal";
@@ -378,8 +378,9 @@ export default class NewTaskView extends View {
       .child(
         div()
           .flex_none()
-          .w(14)
-          .h(14)
+          .w(16)
+          .h(16)
+          .rounded(5)
           .border_1()
           .border_color(this.terminal ? k.brand : k.line)
           .flex()

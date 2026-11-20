@@ -12,7 +12,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, notify } from "herdr";
 import { currentStore, mergeAnyway, merge, mergeAndShip } from "../data.js";
 import { lockOf, dialogBeat, forgetDialog } from "./merge.js";
-import { MONO, tokens, label, heading, button, dot, act, keyChip, keyOf } from "./ui.js";
+import { MONO, tokens, label, heading, button, dot, act, keyChip, keyOf, SANS } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
 import { confirmLine } from "../lib/proof.js";
 
@@ -93,7 +93,7 @@ export default class ConfirmView extends View {
       .p(18)
       .gap(12)
       .bg(k.panel)
-      .font_family(MONO)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.text)
       .child(

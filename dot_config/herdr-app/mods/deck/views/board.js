@@ -15,11 +15,15 @@ export function modeToggle(mode, k, after) {
   const one = (value, text) =>
     div()
       .id("mode-" + value)
-      .px(8)
-      .py(3)
-      .border_1()
-      .border_color(mode === value ? k.brand : k.line)
-      .text_color(mode === value ? k.brand : k.muted)
+      .px(10)
+      .h(24)
+      .flex()
+      .items_center()
+      .rounded(6)
+      .text_size(12)
+      .font_weight(mode === value ? 600 : 500)
+      .bg(mode === value ? k.raised : "#00000000")
+      .text_color(mode === value ? k.strong : k.muted)
       .cursor_pointer()
       .hover((s) => s.text_color(k.strong))
       .on_click((_e, cx) => {
@@ -28,7 +32,12 @@ export function modeToggle(mode, k, after) {
         cx.notify();
       })
       .child(text);
-  return h_flex().flex_none().items_center().gap(6).child(one("list", "LIST")).child(one("board", "BOARD")).child(keyChip("V"));
+  return h_flex()
+    .flex_none()
+    .items_center()
+    .gap(8)
+    .child(h_flex().items_center().gap(2).p(2).rounded(8).bg(k.wash).child(one("list", "List")).child(one("board", "Board")))
+    .child(keyChip("V"));
 }
 
 // Drag state. A press on a card arms it; it becomes a drag once the pointer
@@ -65,15 +74,16 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
     return v_flex()
       .id("card-" + i.key)
       .flex_none()
-      .bg(dnd.key === i.key ? k.raised : k.panel)
+      .bg(dnd.key === i.key || on ? k.raised : k.panel)
       .when(dnd.key === i.key, (el) => el.opacity(0.4))
+      .rounded(10)
       .border_1()
-      .border_color(on ? k.brand : waiting ? k.hold : k.line)
-      .px(11)
-      .py(10)
-      .gap(7)
+      .border_color(on ? k.brand : k.hair)
+      .px(12)
+      .py(11)
+      .gap(8)
       .cursor_pointer()
-      .hover((s) => s.bg(k.raised))
+      .hover((s) => s.bg(k.raised).border_color(k.line))
       .on_mouse_down("left", (e) => {
         dnd.moved = false;
         dnd.press = entry ? null : { key: i.key, x: e.position.x, y: e.position.y };
@@ -85,19 +95,20 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
       .child(
         h_flex()
           .gap(8)
-          .child(div().text_color(k.muted).child(i.id))
-          .when(waiting, (el) => el.child(div().text_color(k.hold).child("● waiting")))
+          .child(div().font_family("JetBrains Mono").text_size(11).text_color(k.muted).child(i.id))
+          .when(waiting, (el) => el.child(div().px(7).py(1).rounded(8).bg(k.holdWash).text_size(11).text_color(k.hold).child("Waiting on you")))
           .child(div().flex_1())
           .child(div().text_color(k.muted).child(ago(i, now))),
       )
-      .child(div().text_color(k.strong).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled"))
+      .child(div().text_color(k.strong).font_weight(500).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled"))
       .child(div().text_color(entry && on ? k.brand : toneColor[note.tone]).truncate().child(note.text))
       .child(
         h_flex()
           .items_center()
           .gap(8)
           .text_color(k.muted)
-          .child(div().flex_1().min_w(0).truncate().child(entry ? "not started" : i.branch ?? "no branch"))
+          .text_size(11)
+          .child(div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").child(entry ? "not started" : i.branch ?? "no branch"))
           .child(div().flex_none().child(pc.text)),
       );
   };
@@ -109,13 +120,11 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
       .min_w(0)
       .items_center()
       .gap(8)
-      .px(12)
-      .pb(4)
-      .border_b(2)
-      .border_color(dnd.key != null && dnd.over === c.stage ? k.brand : k.line)
-      .child(dot(accent, 9, true))
-      .child(label(c.label, accent))
-      .child(div().text_color(k.muted).child(String(c.items.length)));
+      .px(8)
+      .pb(6)
+      .child(dot(accent, 7, true))
+      .child(label(c.label, dnd.key != null && dnd.over === c.stage ? k.strong : k.text).font_weight(600))
+      .child(div().text_size(12).text_color(k.muted).child(String(c.items.length)));
   };
   const cell = (c, items) => {
     const hot = dnd.key != null && dnd.over === c.stage;
@@ -124,27 +133,24 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
       .min_w(0)
       .min_h(40)
       .gap(8)
-      .p(6)
-      .border_1()
-      .border_color(hot ? k.brand : "#00000000")
-      .when(hot, (el) => el.bg(k.raised))
+      .p(4)
+      .rounded(12)
+      .bg(hot ? k.brandWash : k.wash)
       .children(items.map(card));
   };
   const lane = (l) =>
     v_flex()
       .flex_none()
-      .gap(6)
-      .pb(10)
-      .border_b(1)
-      .border_color(k.line)
+      .gap(8)
+      .pb(18)
       .child(
         h_flex()
           .items_center()
           .gap(8)
-          .px(6)
-          .pt(8)
-          .child(div().flex_none().w(8).h(8).bg(repoColor(l.project, k.repo)))
-          .child(div().text_color(l.project ? k.strong : k.muted).child(l.project ?? "no project"))
+          .px(4)
+          .pt(10)
+          .child(div().flex_none().w(8).h(8).rounded(3).bg(repoColor(l.project, k.repo)))
+          .child(div().font_weight(600).text_color(l.project ? k.strong : k.muted).child(l.project ?? "No project"))
           .child(div().text_color(k.muted).child(String(l.count))),
       )
       .child(h_flex().items_start().gap(12).children(cols.map((c, n) => cell(c, l.cells[n]))));
@@ -192,20 +198,18 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
     .child(
       h_flex()
         .flex_none()
-        .h(48)
+        .h(52)
         .items_center()
-        .gap(10)
+        .gap(12)
         .px(16)
-        .border_b(1)
-        .border_color(k.line)
-        .child(heading("Issues", 18))
+        .child(heading("Issues", 20))
         .child(modeToggle("board", k, onToggled))
         .child(newTaskButton(k))
         .when(Boolean(opts.filterName), (el) =>
-          el.child(div().px(8).py(3).border_1().border_color(k.brand).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName).toUpperCase())),
+          el.child(div().px(9).h(24).flex().items_center().rounded(12).bg(k.brandWash).text_size(12).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName))),
         )
         .child(div().flex_1())
-        .child(div().text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move card · ↵ open · S start · X discard")),
+        .child(div().text_size(11).text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move · ↵ open · S start · X discard")),
     )
     .child(
       v_flex()
@@ -228,25 +232,15 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
     .child(
       h_flex()
         .flex_none()
-        .h(44)
+        .h(40)
         .items_center()
-        .gap(14)
+        .gap(10)
         .px(20)
-        .border_t(1)
-        .border_color(k.line)
+        .text_size(11)
         .text_color(k.muted)
-        .child(div().text_color(k.text).child("Backlog"))
-        .child(div().child("→"))
-        .child(h_flex().gap(6).child(div().child("Started")).child(div().text_color(k.text).child("S, S")))
-        .child(div().text_color(k.line).child("|"))
-        .child(div().text_color(k.text).child("Cards move on their own when:"))
-        .child(h_flex().gap(6).child(div().child("Verify")).child(div().text_color(k.text).child("PR opened")))
-        .child(div().child("·"))
-        .child(h_flex().gap(6).child(div().child("Landed")).child(div().text_color(k.text).child("merged")))
-        .child(div().text_color(k.line).child("|"))
-        .child(div().text_color(k.text).child("Drag a card to move it; it stays put"))
+        .child(div().child("Cards move on their own: PR opened → Verify, merged → Landed. Drag one to pin it."))
         .child(div().flex_1())
-        .child(div().text_color(k.hold).child("● waiting on you")),
+        .child(h_flex().items_center().gap(6).child(div().flex_none().w(6).h(6).rounded(6).bg(k.hold)).child(div().text_color(k.hold).child("Waiting on you"))),
     )
     .when(Boolean(dragged), (el) =>
       el.child(
@@ -258,7 +252,8 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .gap(4)
           .px(11)
           .py(8)
-          .bg(k.panel)
+          .bg(k.raised)
+          .rounded(10)
           .border_1()
           .border_color(k.brand)
           .shadow_lg()

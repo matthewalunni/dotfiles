@@ -17,7 +17,7 @@ import { boardColumns } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
 import { issuePane, stepIssue, backTarget } from "../lib/issuepage.js";
 import { currentStore, STORE_KEY, SEL_KEY, TAB_KEY, ISSUE_FROM_KEY, VIEW_KEY } from "../data.js";
-import { MONO, tokens, label, keyChip, heading, keyOf } from "./ui.js";
+import { MONO, tokens, label, keyChip, heading, keyOf, SANS } from "./ui.js";
 import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./issues.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide, keepFresh, drew } from "./focus.js";
@@ -127,7 +127,7 @@ export default class IssuePage extends View {
       .id("deck-issue")
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.onKey(e, cx))
-      .size_full().min_h(0).bg(k.bg).font_family(MONO).text_size(12).text_color(k.text);
+      .size_full().min_h(0).bg(k.bg).font_family(SANS).text_size(12).text_color(k.text);
     if (!issue) {
       return root.child(
         v_flex().flex_1().items_center().justify_center().gap(10).text_color(k.muted)
@@ -165,10 +165,8 @@ export class ThreadView extends View {
       .gap(12)
       .px(16)
       .bg(k.chrome)
-      .border_b(1)
-      .border_color(k.line)
-      .font_family(MONO)
-      .text_size(11)
+      .font_family(SANS)
+      .text_size(12)
       .text_color(k.muted)
       .child(label("Live thread", k.brand))
       .child(div().flex_1().min_w(0).truncate().child(who))
@@ -206,11 +204,11 @@ export class GoneView extends View {
         .bg(k.bg)
         .border_l(1)
         .border_color(k.line)
-        .font_family(MONO)
+        .font_family(SANS)
         .text_size(12)
         .text_color(k.muted)
         .child(
-          v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).border_1().border_dashed().border_color(k.line).rounded(10)
+          v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).bg(k.wash).rounded(12)
             .child(label("No agent yet", k.muted))
             .child(div().child(issue.discarded ? "Discarded. Restore it to start an agent." : "Press S to start one. Its live thread shows up here.")),
         );
@@ -223,7 +221,7 @@ export class GoneView extends View {
       .bg(k.bg)
       .border_l(1)
       .border_color(k.line)
-      .font_family(MONO)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.muted)
       .child(heading("Agent not running", 18, k.strong))
@@ -257,7 +255,7 @@ export class IssueHints extends View {
       .bg(k.chrome)
       .border_t(1)
       .border_color(k.line)
-      .font_family(MONO)
+      .font_family(SANS)
       .text_size(11)
       .text_color(k.muted)
       .children((entry ? BACKLOG_HINTS : HINTS).map(([key, what]) => h_flex().flex_none().items_center().gap(6).child(keyChip(key)).child(what)))

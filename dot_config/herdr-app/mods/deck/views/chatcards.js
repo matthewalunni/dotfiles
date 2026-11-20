@@ -74,7 +74,7 @@ function mergeState(pr, k) {
   return { text: "open", color: k.text };
 }
 
-const card = (k) => h_flex().w_full().items_center().gap(10).px(12).py(10).bg(k.panel).border_1().border_color(k.line).rounded(8);
+const card = (k) => h_flex().w_full().items_center().gap(10).px(12).py(10).bg(k.panel).border_1().border_color(k.hair).rounded(10);
 
 /** A `github` block: { number, issueKey }. */
 export function githubCard(block, _cx, { k }) {
@@ -110,7 +110,7 @@ export function githubCard(block, _cx, { k }) {
 function stageChip(issue, k) {
   const c = issue.discarded ? k.muted : stageColor(issue.stage, k);
   const word = issue.discarded ? "Discarded" : STAGE_LABEL[issue.stage] ?? issue.stage;
-  return div().flex_none().px(7).py(1).border_1().border_color(c).text_size(11).text_color(c).child(String(word).toUpperCase());
+  return div().flex_none().px(8).py(2).rounded(10).bg(c + "22").text_size(11).text_color(c).child(String(word));
 }
 
 /** Time held (holding), age (backlog), else the issue's one-line note. */
@@ -136,7 +136,7 @@ export function deckCard(block, _cx, { k, host }) {
     .child(div().flex_none().text_color(k.muted).child(issue.id))
     .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(issue.title || "untitled"))
     .child(div().flex_none().max_w(220).truncate().text_color(issue.stage === "holding" ? k.hold : k.muted).child(since(issue, Date.now())));
-  const body = v_flex().w_full().gap(10).px(12).py(10).bg(k.panel).border_1().border_color(issue.stage === "holding" ? k.hold : k.line).rounded(8).child(head);
+  const body = v_flex().w_full().gap(10).px(12).py(10).bg(issue.stage === "holding" ? k.holdWash : k.panel).border_1().border_color(k.hair).rounded(10).child(head);
 
   const p = issue.prompt;
   const asks = issue.kind !== "backlog" && issue.observed !== false && p && p.kind !== "none" && (p.options ?? []).length;

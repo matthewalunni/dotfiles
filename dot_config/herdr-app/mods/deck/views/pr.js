@@ -7,7 +7,7 @@ import { exec } from "herdr";
 import { parseDiff } from "../lib/github.js";
 import { diffRows, checkTally } from "../lib/present.js";
 import { openUrl, markDiffReviewed } from "../data.js";
-import { tokens, label, heading, chip, dot, segments, act } from "./ui.js";
+import { tokens, label, heading, chip, dot, segments, act, MONO } from "./ui.js";
 import { lockOf, mergeButtons } from "./merge.js";
 
 const DIFF_TIMEOUT = 15_000;
@@ -81,10 +81,7 @@ function diffRow(row, k, pr) {
         .items_center()
         .gap(10)
         .px(12)
-        .bg(k.panel)
-        .border_t(1)
-        .border_b(1)
-        .border_color(k.line)
+        .bg(k.raised)
         .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(row.path))
         .child(div().flex_none().text_color(k.ok).child("+" + row.add))
         .child(div().flex_none().text_color(k.fail).child("−" + row.del));
@@ -113,6 +110,8 @@ function diffRow(row, k, pr) {
         .h(20)
         .flex_none()
         .items_center()
+        .font_family(MONO)
+        .text_size(12)
         .when(add, (el) => el.bg(k.addBg))
         .when(del, (el) => el.bg(k.delBg))
         .child(div().w(44).flex_none().pr(8).text_right().text_color(k.muted).child(row.a == null ? "" : String(row.a)))
@@ -193,8 +192,6 @@ export function prTab(host, issue, k, cx, withTabs) {
     .w(250)
     .flex_none()
     .h_full()
-    .border_r(1)
-    .border_color(k.line)
     .py(12)
     .gap(2)
     .overflow_y_scrollbar()
@@ -300,9 +297,10 @@ export function prTab(host, issue, k, cx, withTabs) {
     .gap(12)
     .px(20)
     .py(14)
-    .border_t(1)
-    .border_color(k.line)
-    .bg(open && !m.canMerge ? k.holdBg : k.panel)
+    .mx(16)
+    .mb(12)
+    .rounded(12)
+    .bg(open && !m.canMerge ? k.holdWash : k.panel)
     .child(dot(!open ? k.muted : m.canMerge ? k.ok : k.nodata, 10, true))
     .child(
       v_flex()

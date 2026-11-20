@@ -55,5 +55,11 @@ export function deckTokens(theme = {}) {
     out[token] = theme?.[key] || MOSS[token];
   }
   out.repo = REPO;
+  // Soft separators and tonal fills: the strong text colour at low alpha, so they sit on any surface.
+  const hex = /^#[0-9a-f]{6}$/i.test(out.strong) ? out.strong : "#dfe3cf";
+  out.hair = hex + "14";
+  out.wash = hex + "0a";
+  out.brandWash = (/^#[0-9a-f]{6}$/i.test(out.brand) ? out.brand : "#7fa07f") + "26";
+  out.holdWash = (/^#[0-9a-f]{6}$/i.test(out.hold) ? out.hold : "#b5803a") + "24";
   return out;
 }

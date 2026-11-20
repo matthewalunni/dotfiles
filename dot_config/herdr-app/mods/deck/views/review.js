@@ -10,7 +10,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, setShared, shared } from "herdr";
 import { currentStore, showView, SEL_KEY, TAB_KEY, VIEW_KEY } from "../data.js";
 import { openConfirm, dialogBeat, forgetDialog } from "./merge.js";
-import { MONO, tokens, heading, button, keyChip, keyOf } from "./ui.js";
+import { MONO, tokens, heading, button, keyChip, keyOf, SANS } from "./ui.js";
 import { dialogKey, confirmKeyLabel } from "../lib/dialogkeys.js";
 
 export default class ReviewGateView extends View {
@@ -72,7 +72,7 @@ export default class ReviewGateView extends View {
       .p(18)
       .gap(12)
       .bg(k.panel)
-      .font_family(MONO)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.text)
       .child(

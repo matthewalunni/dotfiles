@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { createRegistry, BLOCK_TYPES } from "../lib/chatregistry.js";
 import { clipDetail } from "../lib/chatview.js";
-import { BARLOW, spaced, button, dot } from "./ui.js";
+import { button, dot } from "./ui.js";
 import { githubCard, deckCard } from "./chatcards.js";
 
 const note = (k, text) => div().w_full().text_size(11).text_color(k.muted).child(text);
@@ -41,7 +41,7 @@ function text(block, _cx, { k }) {
     return h_flex()
       .w_full()
       .justify_end()
-      .child(div().max_w(520).px(14).py(10).bg(k.raised).border_1().border_color(k.line).rounded(10).text_color(k.strong).line_height(1.5).child(block.text));
+      .child(div().max_w(520).px(14).py(10).bg(k.raised).rounded(14).text_color(k.strong).line_height(1.5).child(block.text));
   }
   return v_flex()
     .w_full()
@@ -50,8 +50,8 @@ function text(block, _cx, { k }) {
       h_flex()
         .items_center()
         .gap(8)
-        .child(dot(k.brand, 8))
-        .child(div().font_family(BARLOW).font_weight(600).text_size(14).text_color(k.brand).child(spaced("Chat"))),
+        .child(dot(k.brand, 7, true))
+        .child(div().font_weight(600).text_size(12).text_color(k.muted).child("Chat")),
     )
     .child(div().w_full().text_color(k.text).line_height(1.6).child(block.text));
 }
@@ -64,9 +64,7 @@ function action(block, _cx, { k }) {
     .gap(10)
     .px(12)
     .py(8)
-    .bg(k.okBg)
-    .border_1()
-    .border_color(k.line)
+    .bg(k.wash)
     .rounded(8)
     .text_size(12)
     .child(svg("mods/deck/icons/check.svg").flex_none().w(14).h(14).text_color(k.ok))
@@ -77,7 +75,7 @@ function action(block, _cx, { k }) {
 
 /** A thin centered rule: "context compacted" / "context cleared". */
 function divider(block, _cx, { k }) {
-  const rule = () => div().flex_1().h(1).bg(k.line);
+  const rule = () => div().flex_1().h(1).bg(k.hair);
   return h_flex()
     .w_full()
     .items_center()
@@ -97,10 +95,8 @@ function approval(block, _cx, { k, host }) {
     .w_full()
     .gap(10)
     .p(14)
-    .bg(k.holdBg)
-    .border_1()
-    .border_color(k.hold)
-    .rounded(8)
+    .bg(k.holdWash)
+    .rounded(12)
     .child(div().font_weight(700).text_color(k.strong).child(block.title))
     .when(Boolean(block.subtitle), (el) => el.child(div().text_color(k.muted).line_height(1.5).child(clipDetail(block.subtitle, 300))))
     .child(

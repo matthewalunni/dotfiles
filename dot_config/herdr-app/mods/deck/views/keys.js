@@ -4,7 +4,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, openOverlay, closeOverlay } from "herdr";
-import { BARLOW, MONO, tokens, spaced } from "./ui.js";
+import { BARLOW, MONO, tokens, spaced, SANS } from "./ui.js";
 
 const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
@@ -65,21 +65,18 @@ export default class KeysView extends View {
         .gap(9)
         .child(
           div()
-            .pb(6)
-            .border_b(1)
-            .border_color(k.line)
-            .font_family(BARLOW)
+            .pb(4)
             .font_weight(600)
             .text_size(13)
             .text_color(color[c.tone])
-            .child(spaced(c.title)),
+            .child(String(c.title)),
         )
         .children(
           c.rows.map(([key, what]) =>
             h_flex()
               .items_center()
               .gap(12)
-              .child(div().flex_none().min_w(74).px(7).py(2).border_1().border_color(k.line).bg(k.bg).text_color(k.strong).text_center().whitespace_nowrap().child(key))
+              .child(div().flex_none().min_w(74).px(8).py(3).rounded(6).font_family(MONO).text_size(11).bg(k.wash).text_color(k.strong).text_center().whitespace_nowrap().child(key))
               .child(div().flex_1().min_w(0).truncate().child(what)),
           ),
         );
@@ -97,14 +94,14 @@ export default class KeysView extends View {
       .py(26)
       .gap(22)
       .bg(k.panel)
-      .font_family(MONO)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.text)
       .child(
         h_flex()
           .items_baseline()
           .gap(14)
-          .child(div().font_family(BARLOW).font_weight(700).text_size(26).text_color(k.strong).child(spaced("Keyboard")))
+          .child(div().font_weight(700).text_size(24).text_color(k.strong).child("Keyboard"))
           .child(div().text_color(k.muted).child("Press ? anywhere in Deck · esc closes")),
       )
       .child(h_flex().flex_none().items_start().gap(26).children(COLS.map(column)))
@@ -113,8 +110,6 @@ export default class KeysView extends View {
         v_flex()
           .pt(14)
           .gap(6)
-          .border_t(1)
-          .border_color(k.line)
           .text_color(k.muted)
           .line_height(1.6)
           .child(div().child(NOTE))

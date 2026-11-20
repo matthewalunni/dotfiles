@@ -25,7 +25,7 @@ import {
 } from "../lib/chatview.js";
 import { currentStore, STORE_KEY, VIEW_KEY } from "../data.js";
 import { CHAT_KEY, chatPrompt, answerChat, ensureChat, openChatTerminal } from "../chat.js";
-import { MONO, tokens, button, act, keyOf } from "./ui.js";
+import { MONO, tokens, button, act, keyOf, SANS } from "./ui.js";
 import { renderBlock } from "./chatblocks.js";
 import { prsWanted, fetchPrs } from "./chatcards.js";
 import { Composer } from "./chatcomposer.js";
@@ -174,10 +174,9 @@ export default class ChatView extends View {
       .gap(12)
       .px(14)
       .py(10)
-      .border_1()
-      .border_color(k.hold)
-      .rounded(8)
-      .child(div().flex_1().min_w(0).text_size(11).text_color(k.hold).line_height(1.5).child(TRUST_NOTE))
+      .bg(k.holdWash)
+      .rounded(10)
+      .child(div().flex_1().min_w(0).text_size(12).text_color(k.hold).line_height(1.5).child(TRUST_NOTE))
       .child(
         button("chat-open-terminal", "Open terminal", "plain", (_e, cx) => {
           act(cx, async () => openChatTerminal(), "Could not open the chat agent's terminal");
@@ -221,9 +220,8 @@ export default class ChatView extends View {
       .gap(8)
       .px(14)
       .py(12)
-      .border_1()
-      .border_color(k.line)
-      .rounded(8)
+      .bg(k.wash)
+      .rounded(10)
       .child(
         h_flex()
           .items_center()
@@ -300,8 +298,8 @@ export default class ChatView extends View {
       .min_h(0)
       .items_stretch()
       .bg(k.bg)
-      .font_family(MONO)
-      .text_size(12)
+      .font_family(SANS)
+      .text_size(13)
       .text_color(k.text)
       .child(
         v_flex()

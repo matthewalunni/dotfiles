@@ -16,12 +16,12 @@ import { openNewTask } from "./newtask.js";
 import { goTo, focusedAgent, openIssue, keepFresh, drew } from "./focus.js";
 import { backTarget } from "../lib/issuepage.js";
 
-const BARLOW = "Barlow Condensed";
+const SANS = "SF Pro Text";
 const MONO = "JetBrains Mono";
 const NAV = [
-  { label: "CHAT", key: "⌥⌘1", child: "deck-chat" },
-  { label: "ISSUES", key: "⌥⌘2", child: "deck-issues" },
-  { label: "TERMINAL", key: "⌥⌘3", child: "deck-terminal" },
+  { label: "Chat", key: "⌥⌘1", child: "deck-chat" },
+  { label: "Issues", key: "⌥⌘2", child: "deck-issues" },
+  { label: "Terminal", key: "⌥⌘3", child: "deck-terminal" },
 ];
 // macOS draws the traffic lights over the bar's left edge.
 const LEFT_ROOM = 84;
@@ -88,21 +88,19 @@ function holdingChip(k, holding, next) {
   const base = h_flex()
     .id("deck-holding")
     .items_center()
-    .gap(8)
-    .px(8)
-    .py(2)
-    .rounded(4)
-    .border_1()
-    .font_family(MONO)
-    .text_size(11);
+    .gap(7)
+    .px(10)
+    .h(24)
+    .rounded(12)
+    .font_family(SANS)
+    .text_size(12);
   if (!holding || !next) {
-    return base.border_color(k.line).text_color(k.muted).child(`${holding} holding`);
+    return base.bg(k.wash).text_color(k.muted).child(`${holding} holding`);
   }
   return own(
     base
-      .border_color(k.hold)
-      .bg(k.holdBg)
-      .font_weight(600)
+      .bg(k.holdWash)
+      .font_weight(500)
       .text_color(k.hold)
       .cursor_pointer()
       .hover((s) => s.opacity(0.85))
@@ -166,22 +164,22 @@ export default class BarView extends View {
       return own(
         div()
           .id("deck-nav-" + child)
-          .h_full()
+          .h(28)
           .flex()
           .items_center()
-          .gap(6)
-          .px(10)
-          .border_b(2)
-          .border_color(on ? k.brand : k.chrome)
+          .gap(8)
+          .px(11)
+          .rounded(8)
+          .bg(on ? k.raised : "#00000000")
           .cursor_pointer()
-          .font_family(BARLOW)
-          .font_weight(600)
-          .text_size(14)
+          .font_family(SANS)
+          .font_weight(on ? 600 : 500)
+          .text_size(13)
           .text_color(on ? k.strong : k.muted)
-          .hover((s) => s.text_color(k.strong))
+          .hover((s) => (on ? s : s.bg(k.wash).text_color(k.strong)))
           .on_click(() => goTo(child))
-          .child(spaced(label))
-          .child(keyChip(key)),
+          .child(label)
+          .when(on, (el) => el.child(keyChip(key))),
       );
     });
 
@@ -202,16 +200,14 @@ export default class BarView extends View {
             .hover((s) => s.text_color(k.strong))
             .on_click(() => openKeys())
             .child(keyChip("?"))
-            .child("keys"),
+            .child(div().font_family(SANS).child("Shortcuts")),
         ),
       )
-      .child(div().font_family(MONO).text_size(12).text_color(k.muted).child(clock));
+      .child(div().font_family(SANS).text_size(12).text_color(k.muted).child(clock));
 
     return h_flex()
       .size_full()
       .bg(k.chrome)
-      .border_b(1)
-      .border_color(k.line)
       .pl(LEFT_ROOM)
       .pr(16)
       .items_center()
@@ -220,16 +216,9 @@ export default class BarView extends View {
         h_flex()
           .h_full()
           .items_center()
-          .gap(22)
-          .child(
-            div()
-              .font_family(BARLOW)
-              .font_weight(700)
-              .text_size(16)
-              .text_color(k.brand)
-              .child(spaced("HERDR // DECK")),
-          )
-          .child(h_flex().h_full().items_center().gap(4).children(nav)),
+          .gap(20)
+          .child(div().font_family(SANS).font_weight(700).text_size(14).text_color(k.strong).child("herdr"))
+          .child(h_flex().h_full().items_center().gap(2).children(nav)),
       )
       .child(right);
   }

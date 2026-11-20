@@ -5,14 +5,16 @@ import { h_flex } from "gpui-base";
 import { theme, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
 
-export const BARLOW = "Barlow Condensed";
+export const SANS = "SF Pro Text";
+// Kept so older imports keep working: the condensed display face is retired.
+export const BARLOW = SANS;
 export const MONO = "JetBrains Mono";
 
 /** The current tokens. */
 export const tokens = () => deckTokens(theme());
 
-/** Letter-spaced uppercase: a hair space between letters (gpui has no tracking). */
-export const spaced = (s) => [...String(s).toUpperCase()].join(" ");
+/** Plain text. (Letter-spaced caps are retired; kept so callers don't change.) */
+export const spaced = (s) => String(s);
 
 /** Tone name (lib/present.js) -> color. */
 export function tone(name, k = tokens()) {
@@ -35,33 +37,33 @@ export function stageColor(stage, k = tokens()) {
   return { backlog: k.brand, survey: k.muted, build: k.work, verify: k.work, holding: k.hold, landed: k.ok }[stage] ?? k.muted;
 }
 
-/** Small uppercase letter-spaced label (Barlow 13). */
+/** Small quiet section label: sentence case, medium weight. */
 export function label(text, color) {
   const k = tokens();
-  return div().font_family(BARLOW).font_weight(600).text_size(13).text_color(color ?? k.muted).child(spaced(text));
+  return div().font_family(SANS).font_weight(500).text_size(12).text_color(color ?? k.muted).child(String(text));
 }
 
-/** Barlow heading, uppercase. Large sizes are not letter-spaced (the mocks use .05em). */
+/** Heading: sentence case semibold sans, tight leading. */
 export function heading(text, size = 18, color) {
   const k = tokens();
-  const s = String(text ?? "");
   return div()
-    .font_family(BARLOW)
+    .font_family(SANS)
     .font_weight(600)
-    .text_size(size)
-    .line_height(1.1)
+    .text_size(Math.max(14, size - 4))
+    .line_height(1.25)
     .text_color(color ?? k.strong)
-    .child(size >= 22 ? s.toUpperCase() : spaced(s));
+    .child(String(text ?? ""));
 }
 
-/** A key hint chip: 10 px mono, bordered (the canvas's keyboard boards). */
+/** A key hint: small rounded tonal cap, no outline. */
 export function keyChip(text, border, color) {
   const k = tokens();
   return div()
     .flex_none()
-    .px(4)
-    .border_1()
-    .border_color(border ?? k.line)
+    .px(5)
+    .py(1)
+    .rounded(5)
+    .bg(border ? "#00000026" : k.wash)
     .font_family(MONO)
     .font_weight(400)
     .text_size(10)
@@ -72,41 +74,41 @@ export function keyChip(text, border, color) {
 }
 
 /**
- * kind: "primary" (holding amber, black ink), "brand" (brand fill, black ink: Start agent), "ghost" (brand outline), "danger"
- * (fail outline), "plain" (line outline). Disabled buttons don't click.
- * `key` (optional) shows its shortcut as a hint chip before the label.
+ * kind: "primary" (holding amber, dark ink), "brand" (brand fill), "ghost" (brand tint), "danger"
+ * (fail tint), "plain" (quiet tonal). Disabled buttons don't click.
+ * `key` (optional) shows its shortcut as a hint chip after the label.
  */
 export function button(id, text, kind, onClick, disabled = false, key = null) {
   const k = tokens();
   const look = {
-    primary: { bg: k.hold, fg: k.holdInk, border: k.hold },
-    brand: { bg: k.brand, fg: k.holdInk, border: k.brand },
-    ghost: { bg: null, fg: k.brand, border: k.brand },
-    danger: { bg: null, fg: k.fail, border: k.fail },
-    plain: { bg: null, fg: k.text, border: k.line },
-  }[kind] ?? { bg: null, fg: k.text, border: k.line };
+    primary: { bg: k.hold, fg: k.holdInk, hover: 0.9 },
+    brand: { bg: k.brand, fg: k.holdInk, hover: 0.9 },
+    ghost: { bg: k.brandWash, fg: k.brand },
+    danger: { bg: k.fail + "26", fg: k.fail },
+    plain: { bg: k.wash, fg: k.text },
+  }[kind] ?? { bg: k.wash, fg: k.text };
+  const solid = look.hover != null;
   let el = div()
     .id(id)
     .flex_none()
-    .h(32)
-    .px(14)
+    .h(30)
+    .px(13)
+    .rounded(8)
     .flex()
     .items_center()
     .justify_center()
-    .border_1()
-    .border_color(look.border)
-    .font_family(BARLOW)
-    .font_weight(700)
-    .text_size(14)
+    .bg(look.bg)
+    .font_family(SANS)
+    .font_weight(600)
+    .text_size(13)
     .text_color(look.fg)
     .whitespace_nowrap()
-    .when(Boolean(key), (b) => b.gap(7).child(keyChip(key, look.bg ? look.fg : null, look.bg ? look.fg : null)))
-    .child(spaced(text));
-  if (look.bg) el = el.bg(look.bg);
+    .child(String(text))
+    .when(Boolean(key), (b) => b.gap(8).child(keyChip(key, solid ? look.fg : null, solid ? look.fg : null)));
   if (disabled) return el.opacity(0.4);
   return el
     .cursor_pointer()
-    .hover((s) => (look.bg ? s.opacity(0.88) : s.bg(k.raised)))
+    .hover((s) => (solid ? s.opacity(look.hover) : s.bg(k.raised)))
     .on_click((e, cx) => {
       cx.stop_propagation();
       onClick(e, cx);
@@ -123,7 +125,7 @@ export function ring(color, pct, size = 12) {
 
 /** A small filled chip. */
 export function chip(text, fg, bg) {
-  return div().flex_none().px(7).py(1).bg(bg).text_size(11).text_color(fg).whitespace_nowrap().child(String(text));
+  return div().flex_none().px(8).py(2).rounded(10).bg(bg).text_size(11).text_color(fg).whitespace_nowrap().child(String(text));
 }
 
 /** A square or round dot. */
@@ -132,23 +134,15 @@ export function dot(color, size = 8, round = false) {
   return round ? d.rounded(size) : d;
 }
 
-/** Panel with the brand corner brackets (top-left, bottom-right). */
+/** Rounded surface with a hairline edge. */
 export function panel(el) {
   const k = tokens();
-  const corner = (top) =>
-    div()
-      .absolute()
-      .w(10)
-      .h(10)
-      .border_color(k.brand)
-      .when(top, (d) => d.top(-1).left(-1).border_t(2).border_l(2))
-      .when(!top, (d) => d.bottom(-1).right(-1).border_b(2).border_r(2));
-  return el.relative().bg(k.panel).border_1().border_color(k.line).child(corner(true)).child(corner(false));
+  return el.relative().bg(k.panel).rounded(12).border_1().border_color(k.hair).shadow_lg();
 }
 
 /** A horizontal segmented bar (telemetry, checks). */
 export function segments(colors, h = 8) {
-  return h_flex().flex_1().gap(2).children(colors.map((c) => div().flex_1().h(h).bg(c)));
+  return h_flex().flex_1().gap(2).children(colors.map((c) => div().flex_1().h(h).rounded(h).bg(c)));
 }
 
 // data.js already posts a toast for these.

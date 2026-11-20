@@ -29,12 +29,9 @@ export default class MachinesView extends View {
       .py(note ? 8 : 6)
       .gap(8)
       .items_center()
-      .rounded(6)
-      .border_1()
-      .border_dashed()
-      .border_color(k.line)
+      .rounded(8)
       .cursor_pointer()
-      .hover((s) => s.bg(k.raised).border_color(k.brand))
+      .hover((s) => s.bg(k.wash))
       .on_click((_e, cx) => {
         cx.stop_propagation();
         addMachine();
@@ -51,7 +48,7 @@ export default class MachinesView extends View {
   render() {
     const k = tokens();
     const list = machineList();
-    const root = v_flex().size_full().min_h(0).bg(k.chrome).border_t(1).border_color(k.line).text_size(13);
+    const root = v_flex().size_full().min_h(0).bg(k.chrome).text_size(13);
 
     if (!list.length) {
       return root.justify_center().child(this.addRow("run agents on another Mac"));

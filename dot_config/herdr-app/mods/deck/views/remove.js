@@ -12,7 +12,7 @@ import { backTarget } from "../lib/issuepage.js";
 import { dialogKey } from "../lib/dialogkeys.js";
 import { remember, dialogOpen, dialogBeat, forgetDialog } from "./merge.js";
 import { goTo } from "./focus.js";
-import { MONO, tokens, heading, button, keyChip, keyOf } from "./ui.js";
+import { MONO, tokens, heading, button, keyChip, keyOf, SANS } from "./ui.js";
 
 const liveIssue = (key) => currentStore().issues.find((i) => i.key === key && i.kind !== "backlog") ?? null;
 
@@ -82,8 +82,8 @@ export default class RemoveView extends View {
       .gap(14)
       .bg(k.panel)
       .border_1()
-      .border_color(k.brand)
-      .font_family(MONO)
+      .border_color(k.hair)
+      .font_family(SANS)
       .text_size(12)
       .text_color(k.text)
       .child(

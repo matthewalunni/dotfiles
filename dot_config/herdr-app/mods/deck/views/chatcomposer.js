@@ -198,18 +198,18 @@ export class Composer {
     const pop = this.pop;
     return v_flex()
       .w_full()
-      .py(4)
-      .border_b(1)
-      .border_color(k.line)
+      .py(6)
       .children(
         pop.items.map((item, i) =>
           h_flex()
             .id("chat-pop-" + i)
-            .px(14)
-            .py(4)
+            .mx(6)
+            .px(10)
+            .py(5)
+            .rounded(6)
             .cursor_pointer()
             .when(i === pop.at, (el) => el.bg(k.raised))
-            .hover((s) => s.bg(k.raised))
+            .hover((s) => s.bg(k.wash))
             .on_click((_e, cx) => {
               pop.at = i;
               this.pick();
@@ -228,11 +228,9 @@ export class Composer {
       .gap(14)
       .px(14)
       .py(8)
-      .border_t(1)
-      .border_color(k.line)
       .text_size(11)
       .text_color(k.muted)
-      .child(div().flex_none().px(7).py(1).border_1().border_color(k.line).rounded(4).text_color(k.text).child("scope · all agents"))
+      .child(div().flex_none().px(8).py(2).rounded(10).bg(k.wash).text_color(k.text).child("All agents"))
       .child(hint("@ mention an agent"))
       .child(hint("/ commands"))
       .child(div().flex_1())
@@ -242,8 +240,9 @@ export class Composer {
       .w_full()
       .bg(k.panel)
       .border_1()
-      .border_color(this.typing ? k.brand : k.line)
-      .rounded(8)
+      .border_color(this.typing ? k.brand : k.hair)
+      .rounded(14)
+      .shadow_lg()
       .when(Boolean(this.pop), (el) => el.child(this.popList(k)))
       .child(
         div()
