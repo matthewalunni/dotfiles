@@ -407,6 +407,29 @@ normal Claude permission behavior.
 
 ---
 
+## Agent screen recording
+
+`obs-ctl` (in `dot_local/bin`) records an agent's screen with OBS and pauses
+while the agent waits for you, so the file only holds it working. The
+`/record` skill tells agents when and how to use it.
+
+- The agent runs `obs-ctl start --scene "Agent Coding" --title "..."` (or
+  `"Agent CAD"`) and `obs-ctl stop` when done. Stop writes a `.json` next to
+  the video: title, times, every pause.
+- `dot_claude/hooks/agent-record.sh` runs on Claude Code's hook events: `Stop`,
+  `Notification`, `PermissionRequest` and `AskUserQuestion` pause; prompts and
+  tool calls resume; `SessionEnd` stops. It exits at once when nothing is
+  recording, and only acts for the session that started the recording.
+- `obs-ctl pause --hold` stays paused until `obs-ctl resume` (secrets on screen).
+- `obs-ctl setup` creates the two scenes with a full-screen capture.
+
+Per machine, not in this repo: OBS with Tools > WebSocket Server Settings >
+Enable on, and optionally `~/.config/agent-record/config.json`
+(`{"dir": "...", "host": "...", "port": 4455, "password": "..."}`). With OBS on
+the same machine the password is read from OBS's own config. Recordings go to
+`~/Movies/agent-recordings` unless `dir` says otherwise. Python 3.9+ standard
+library only, so it runs on a fresh macOS VM. Tests: `python3 tests/obs-ctl.test.py`.
+
 ## Personal Claude settings
 
 `~/.claude/settings.json` is generated from `dot_claude/settings.json.tmpl`,
