@@ -8,7 +8,7 @@
 // the agent is blocked or its state is unknown (sendToChat).
 
 import { terminals, agents, home, shared, setShared, notify, run } from "herdr";
-import { sh, hcAct, appendLog, currentStore, readScreen } from "./data.js";
+import { sh, hcAct, appendLog, currentStore, readScreen, readScreenText } from "./data.js";
 import { CHAT_NAME, CHAT_CWD, expandHome, projectDir, archiveFile } from "./lib/chatpaths.js";
 import { parseTranscriptLine, appendBlocks, reviveChatLog, capChatLog } from "./lib/chat.js";
 import { archiveLine, archiveBlocks, replayExec } from "./lib/chatarchive.js";
@@ -17,7 +17,7 @@ import {
   findChatTerminal, newestBorn, advance, chatLaunch, listProjectFiles, parseFileList, sendArgs, tailExec, sizeExec,
   firstOffset, sessionSeen, sessionFloor, logFloor, keepFrom,
 } from "./lib/chatsource.js";
-import { chatAgent, matchOption, canSendToChat, SEND_BLOCKED, chatOpenCommand } from "./lib/chatview.js";
+import { chatAgent, matchOption, canSendToChat, SEND_BLOCKED, chatOpenCommand, contextPercent } from "./lib/chatview.js";
 
 // No Node APIs here (no Buffer, process, require, setTimeout): the mod runtime has none.
 
@@ -211,6 +211,12 @@ export async function chatPrompt() {
   if (!agent) return null;
   const prompt = agent.status === "blocked" ? await readScreen(CHAT_NAME, agent.status) : null;
   return { agent, prompt };
+}
+
+/** How full the chat agent's context window is (percent, from its status line), or null. */
+export async function chatContext() {
+  if (!findChatTerminal(terminals())) return null;
+  return contextPercent(await readScreenText(CHAT_NAME));
 }
 
 /**

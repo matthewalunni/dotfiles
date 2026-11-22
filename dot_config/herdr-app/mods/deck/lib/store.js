@@ -21,7 +21,8 @@ import { samePrompt } from "./prompt.js";
  *   quiet: boolean, quietPrompt: Prompt|null, quietAt: number|null,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number,
- *   pin?: { column: string, prState: string|null, at: number }|null
+ *   pin?: { column: string, prState: string|null, at: number }|null,
+ *   edits?: { title?: string, brief?: string }|null
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
@@ -213,9 +214,11 @@ export function reconcile(store, obs, now) {
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
     const next = {
       key, id, terminal: o.terminal, session: o.session ?? prev?.session ?? null, space: o.space ?? null, project,
-      status: o.status, title: o.title, cwd: o.cwd,
+      // An edit (editIssue) outlives what the agent's terminal reports.
+      status: o.status, title: prev?.edits?.title ?? o.title, cwd: o.cwd,
       repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, dirty: o.dirty ?? false, pr,
-      ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
+      ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: prev?.edits && "brief" in prev.edits ? prev.edits.brief : o.brief,
+      edits: prev?.edits ?? null,
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
       quietPrompt: mergedNow ? o.prompt ?? null : quietHeld ? prev?.quietPrompt ?? null : null,
       quietAt: mergedNow ? now : quietHeld ? prev?.quietAt ?? null : null,
@@ -366,12 +369,12 @@ export function updatePr(store, key, fresh, now) {
  * @param {Store} store @param {string} key @param {number} now
  * @returns {Store}
  */
-export function removeIssue(store, key, now) {
+export function removeIssue(store, key, now, by = "you") {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev)) return store;
   const retired = { ...(store.retired ?? {}) };
   if (prev.observed !== false) retired[RETIRED_TAG + sessionTag(prev.terminal, prev.session ?? null)] = now;
-  const log = [...store.log, { t: now, key, id: prev.id, what: "deleted by you", tone: "warn" }];
+  const log = [...store.log, { t: now, key, id: prev.id, what: "deleted by " + by, tone: "warn" }];
   return { ...store, issues: store.issues.filter((i) => i !== prev), retired, log };
 }
 
@@ -379,10 +382,11 @@ export function removeIssue(store, key, now) {
  * The person dragged a card to a board column: it stays there until a PR opens
  * or merges (see pinHolds). Unchanged store for a backlog entry, an unknown
  * key or a column cards cannot be dragged to.
- * @param {Store} store @param {string} key @param {string} column @param {number} now
+ * `by` names who moved it in the log ("you", or "chat" for the chat agent).
+ * @param {Store} store @param {string} key @param {string} column @param {number} now @param {string} [by]
  * @returns {Store}
  */
-export function pinColumn(store, key, column, now) {
+export function pinColumn(store, key, column, now, by = "you") {
   if (!PIN_COLUMNS.includes(column)) return store;
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev)) return store;
@@ -392,7 +396,7 @@ export function pinColumn(store, key, column, now) {
     next.holdingSince = null;
     next.stage = deriveStage(next);
   }
-  const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by you", tone: "work" }];
+  const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by " + by, tone: "work" }];
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
@@ -408,4 +412,31 @@ export function markReviewed(store, key, sha) {
   if (!prev || isBacklog(prev) || prev.reviewedSha === sha) return store;
   const next = { ...prev, reviewedSha: sha };
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+}
+
+/**
+ * A new title and/or brief for a card. A backlog card takes them as its own;
+ * an agent card keeps them in `edits`, which reconcile prefers over what the
+ * agent's terminal reports. Unchanged store for an unknown key or no change.
+ * @param {Store} store @param {string} key @param {{ title?: string, brief?: string }} edit @param {number} now @param {string} [by]
+ * @returns {Store}
+ */
+export function editIssue(store, key, edit, now, by = "you") {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || !edit) return store;
+  const has = (k) => typeof edit[k] === "string" && edit[k] !== prev[k];
+  const title = has("title") && edit.title.trim() ? edit.title.trim() : null;
+  const brief = has("brief") ? edit.brief : null;
+  if (title == null && brief == null) return store;
+  const next = { ...prev };
+  if (title != null) next.title = title;
+  if (brief != null) next.brief = brief;
+  if (!isBacklog(prev)) {
+    next.edits = { ...(prev.edits ?? {}) };
+    if (title != null) next.edits.title = title;
+    if (brief != null) next.edits.brief = brief;
+  }
+  const what = [title != null ? "title" : null, brief != null ? "brief" : null].filter(Boolean).join(" and ") + " edited by " + by;
+  const log = [...store.log, { t: now, key, id: prev.id, what, tone: "work" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }

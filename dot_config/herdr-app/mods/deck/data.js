@@ -11,11 +11,15 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree, issueAt } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "./lib/store.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue } from "./lib/store.js";
+import { STAGE_LABEL } from "./lib/stage.js";
+import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, resultLine } from "./lib/boardops.js";
+import { findChatTerminal } from "./lib/chatsource.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 import { CLOSED_LOG, expandHome } from "./lib/chatpaths.js";
 import { closedRecord, appendExec, noteDue } from "./lib/chatarchive.js";
+import { createSharedMemo } from "./lib/sharedmemo.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -58,9 +62,19 @@ const T_BACKLOG = 15_000;
 // readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
 const HISTORY_TAIL = String(4 * 1024 * 1024);
 
+// One memo for every copy of the mod (they share this runtime, like the collector guard).
+const memo = (globalThis.__deckSharedMemo ??= createSharedMemo((k) => shared(k)));
+
+/**
+ * shared(key) with the issue store read at most once per synchronous job
+ * (lib/sharedmemo.js); other keys (some herdr writes itself) are read as is.
+ * Treat what it returns as read-only.
+ */
+export const sharedOnce = (key) => (key === STORE_KEY ? memo.get(key) : shared(key));
+
 /** @returns {Store} */
 export function currentStore() {
-  const s = /** @type {Store|null} */ (shared(STORE_KEY));
+  const s = /** @type {Store|null} */ (sharedOnce(STORE_KEY));
   return s && Array.isArray(s.issues) ? s : emptyStore();
 }
 
@@ -165,6 +179,12 @@ async function hasWorkflows(root) {
     { timeout: T_GIT },
   );
   return okText(r) !== "";
+}
+
+/** The bottom of terminal `t`'s screen (no history), or null when it cannot be read. */
+export async function readScreenText(t) {
+  const r = await hcRead(["read", t, "--lines", "0"]);
+  return r.code === 0 ? String(r.stdout ?? "") : null;
 }
 
 export async function readScreen(t, status) {
@@ -284,6 +304,7 @@ async function cycle(id) {
   const next = mergeBacklog(reconcile(prev, obs, now), inbox, now);
   if (fingerprint(next) !== fingerprint(prev) || now - lastWrite > HEARTBEAT_WRITE_MS) {
     setShared(STORE_KEY, next);
+    memo.clear();
     lastWrite = now;
   }
 }
@@ -306,7 +327,10 @@ async function selectedCycle(id, key) {
   const agentClaims = (cur.claims ?? []).filter((c) => c.source === "agent");
   const claims = [...buildClaims(shownPr?.checks ?? [], [], {}, wf && shownPr != null), ...agentClaims];
   const next = updatePr(prev, key, { pr: pr.pr, ghError: pr.error, claims }, now);
-  if (fingerprint(next) !== fingerprint(prev)) setShared(STORE_KEY, next);
+  if (fingerprint(next) !== fingerprint(prev)) {
+    setShared(STORE_KEY, next);
+    memo.clear();
+  }
 }
 
 let running = null;
@@ -384,6 +408,13 @@ export function startCollector(cx) {
         await machinesCycle();
       });
     }
+    // The chat agent's board requests (herdr-board): their own loop, so a slow
+    // issue cycle or a start never holds them up for long.
+    if (!opsBusy) {
+      cx.spawn(async () => {
+        await boardOpsCycle();
+      });
+    }
     const hung = running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS;
     if (running && !hung) return;
     const now = Date.now();
@@ -420,6 +451,7 @@ export function refresh() {
 /** @param {Store} s */
 function save(s) {
   setShared(STORE_KEY, s);
+  memo.clear();
 }
 
 /**
@@ -639,12 +671,12 @@ function logClosed(issue, how, now) {
  * Deck's record only: the terminal, branch and PR are untouched.
  * @param {Issue} issue
  */
-export function deleteIssue(issue) {
+export function deleteIssue(issue, by = "you") {
   if (!issue?.key || issue.kind === "backlog") return;
   const prev = currentStore();
   const now = Date.now();
   const gone = latest(issue);
-  const next = removeIssue(prev, issue.key, now);
+  const next = removeIssue(prev, issue.key, now, by);
   if (next !== prev) {
     save(next);
     logClosed(gone, "deleted", now);
@@ -654,12 +686,12 @@ export function deleteIssue(issue) {
 /**
  * The person put a card in a board column (drag or ⇧H/⇧L): it stays there
  * until a PR opens or merges.
- * @param {Issue} issue @param {string} column
+ * @param {Issue} issue @param {string} column @param {string} [by] who moved it, for the log
  */
-export function moveCard(issue, column) {
+export function moveCard(issue, column, by = "you") {
   if (!issue?.key || issue.kind === "backlog") return;
   const prev = currentStore();
-  const next = pinColumn(prev, issue.key, column, Date.now());
+  const next = pinColumn(prev, issue.key, column, Date.now(), by);
   if (next !== prev) save(next);
 }
 
@@ -877,5 +909,90 @@ export async function startNow(form) {
     });
   } finally {
     refresh();
+  }
+}
+
+// ---------------------------------------------------------------- board requests
+
+/** Shared key: board request id -> when it was applied (each applies once). */
+const OPS_DONE_KEY = "deck.boardOpsDone";
+const OPS_MAX = 256 * 1024;
+let opsBusy = false;
+
+/**
+ * Applies the chat agent's queued board requests (lib/boardops.js), oldest
+ * first, and writes each outcome for herdr-board to report. A request is
+ * marked done before it runs, so a reload mid-way never applies it twice.
+ */
+async function boardOpsCycle() {
+  if (opsBusy) return;
+  opsBusy = true;
+  try {
+    const h = home();
+    const r = await sh("tail", ["-c", String(OPS_MAX), expandHome(BOARD_OPS, h)], { timeout: T_GIT });
+    if (r.code !== 0) return; // no requests yet
+    const now = Date.now();
+    const known = shared(OPS_DONE_KEY) ?? {};
+    const done = pruneDone(known, now);
+    const todo = pendingOps(parseOps(inboxTail(String(r.stdout ?? ""), OPS_MAX)), done, now);
+    if (!todo.length) {
+      if (Object.keys(done).length !== Object.keys(known).length) setShared(OPS_DONE_KEY, done);
+      return;
+    }
+    for (const op of todo) {
+      done[op.id] = Date.now();
+      setShared(OPS_DONE_KEY, { ...done });
+      let res;
+      try {
+        res = await applyBoardOp(op, findChatTerminal(terminals()));
+      } catch (e) {
+        res = { ok: false, message: String(e?.message ?? e ?? "failed") };
+      }
+      await appendLog(expandHome(BOARD_RESULTS, h), resultLine(op.id, res.ok, res.message, Date.now()));
+    }
+  } finally {
+    opsBusy = false;
+  }
+}
+
+/**
+ * One request, through the same actions as the deck's own buttons.
+ * @param {import("./lib/boardops.js").BoardOp} op @param {string|null} chat the chat agent's terminal address
+ * @returns {Promise<{ok: boolean, message: string}>}
+ */
+async function applyBoardOp(op, chat) {
+  const plan = planOp(op, currentStore().issues, chat);
+  if (plan.error) return { ok: false, message: plan.error };
+  const it = plan.issue;
+  const ok = (message) => ({ ok: true, message });
+  switch (op.op) {
+    case "move":
+      moveCard(it, plan.column, "chat");
+      return ok(`${it.id} moved to ${STAGE_LABEL[plan.column] ?? plan.column}`);
+    case "dismiss":
+      dismiss(it);
+      return ok(`${it.id} dismissed (it moves to Landed and stops counting as waiting)`);
+    case "delete":
+      deleteIssue(it, "chat");
+      return ok(`${it.id} deleted from the board (its terminal, branch and PR are untouched)`);
+    case "discard":
+      discardEntry(it);
+      return ok(`${it.id} discarded (restorable for 7 days)`);
+    case "restore":
+      restoreEntry(it);
+      return ok(`${it.id} restored to the Backlog`);
+    case "edit": {
+      const prev = currentStore();
+      const next = editIssue(prev, it.key, plan.edit, Date.now(), "chat");
+      if (next === prev) return ok(`${it.id} unchanged (same text)`);
+      save(next);
+      return ok(`${it.id} edited`);
+    }
+    case "start": {
+      const r = await startBacklog(it);
+      return r.ok ? ok(`${it.id} started${r.path ? " in " + r.path : ""}`) : { ok: false, message: r.error || "start failed" };
+    }
+    default:
+      return { ok: false, message: `unknown request: ${op.op}` };
   }
 }

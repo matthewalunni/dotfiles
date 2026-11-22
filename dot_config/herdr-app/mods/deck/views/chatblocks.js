@@ -11,6 +11,7 @@ import { createRegistry, BLOCK_TYPES } from "../lib/chatregistry.js";
 import { clipDetail, plainHtml } from "../lib/chatview.js";
 import { button, dot } from "./ui.js";
 import { githubCard, deckCard } from "./chatcards.js";
+import { optionButton } from "./issues.js";
 
 const note = (k, text) => div().w_full().text_size(11).text_color(k.muted).child(text);
 
@@ -88,11 +89,41 @@ function divider(block, _cx, { k }) {
     .child(rule());
 }
 
+/** A question menu (AskUserQuestion): one button per option, keyed by its number. */
+function menu(block, k, host) {
+  const off = !host.canAnswer;
+  return v_flex()
+    .w_full()
+    .gap(10)
+    .p(14)
+    .bg(k.holdWash)
+    .rounded(12)
+    .when(Boolean(block.subtitle), (el) => el.child(div().text_size(11).text_color(k.muted).child(block.subtitle)))
+    .child(div().font_weight(600).text_color(k.strong).line_height(1.5).child(clipDetail(block.title, 400)))
+    .child(
+      v_flex()
+        .gap(6)
+        .children(
+          block.options.map((o, n) =>
+            optionButton(`chat-menu-${n}`, o.label, n === 0, (_e, cx) => host.answer(o, cx), off, o.keys?.[0] ?? null).w_full(),
+          ),
+        ),
+    )
+    .child(
+      h_flex()
+        .items_center()
+        .gap(8)
+        .child(div().flex_1().text_size(11).text_color(k.muted).child(host.focusedPane ? "off while the chat pane has the keyboard" : "To type an answer, open the terminal"))
+        .child(button("chat-menu-terminal", "Open terminal", "plain", (_e, cx) => host.openTerminal(cx))),
+    );
+}
+
 /**
- * The chat agent's pending permission prompt (lib/chatview.js approvalFrom).
- * Approve / Skip are off while the chat pane has the keyboard.
+ * The chat agent's pending prompt (lib/chatview.js approvalFrom): a permission
+ * prompt (Approve / Skip) or a question menu. Off while the chat pane has the keyboard.
  */
 function approval(block, _cx, { k, host }) {
+  if (block.menu) return menu(block, k, host);
   const off = !host.canAnswer;
   return v_flex()
     .w_full()

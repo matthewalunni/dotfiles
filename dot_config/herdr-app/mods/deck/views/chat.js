@@ -21,11 +21,11 @@ import { shownChild } from "../lib/views.js";
 import { reviveChatLog } from "../lib/chat.js";
 import {
   chatAgent, shouldAutoStart, nullSince, trustWaiting, approvalFrom, wheelAway, recentBlocks, attachCards, chatViewKey,
-  composerLocked, followKey, followScroll, logMark, TRUST_NOTE, focusJump,
+  composerLocked, followKey, followScroll, logMark, TRUST_NOTE, focusJump, contextLabel, isThinking, thinkingLabel,
 } from "../lib/chatview.js";
-import { currentStore, STORE_KEY, VIEW_KEY } from "../data.js";
-import { CHAT_KEY, chatPrompt, answerChat, ensureChat, openChatTerminal } from "../chat.js";
-import { MONO, tokens, button, act, keyOf, SANS } from "./ui.js";
+import { currentStore, sharedOnce, STORE_KEY, VIEW_KEY } from "../data.js";
+import { CHAT_KEY, chatPrompt, answerChat, ensureChat, openChatTerminal, chatContext } from "../chat.js";
+import { MONO, tokens, button, act, keyOf, SANS, dot } from "./ui.js";
 import { renderBlock } from "./chatblocks.js";
 import { prsWanted, fetchPrs } from "./chatcards.js";
 import { Composer } from "./chatcomposer.js";
@@ -36,6 +36,8 @@ import { registerFocus, focusOnShow, keepFresh, drew, goTo } from "./focus.js";
 
 const CHILD = "deck-chat";
 const POLL_MS = 1500;
+// The context meter reads the chat agent's screen this often while Chat is shown.
+const CONTEXT_MS = 5000;
 const FRESH_MS = 250;
 // Drawn at most; older blocks stay in the log and the archive.
 const MAX_BLOCKS = 200;
@@ -67,6 +69,10 @@ export default class ChatView extends View {
     this.starting = false;
     this.startErr = null;
     this.autoTried = false;
+    this.sentAt = null; // when a message went out, until the agent's status says working
+    this.context = null; // the chat agent's context use, percent (its status line), or null
+    this.contextBusy = false;
+    this.thinking = false; // the thinking row is showing (redrawn to step its dots)
     cx.timer.every(POLL_MS, (cx) => {
       if (!isShown()) return;
       // Opening the view starts the chat agent (once; the Start button covers a failure).
@@ -75,6 +81,9 @@ export default class ChatView extends View {
         this.start(cx);
       }
       this.poll(cx);
+    });
+    cx.timer.every(CONTEXT_MS, (cx) => {
+      if (isShown()) this.readContext(cx);
     });
     // The chat log is not in keepFresh's fingerprint: redraw when it changes.
     // A click on the sidebar's Spaces or Agents moves the focus to another terminal:
@@ -87,7 +96,7 @@ export default class ChatView extends View {
       if (r.jump && isShown()) goTo("deck-terminal");
     });
     cx.timer.every(FRESH_MS, (cx) => {
-      if (isShown() && currentMark() !== this.drawnLog) cx.notify();
+      if (isShown() && (this.thinking || currentMark() !== this.drawnLog)) cx.notify();
     });
   }
 
@@ -106,6 +115,30 @@ export default class ChatView extends View {
         cx.notify();
       }
     });
+  }
+
+  /** Reads the chat agent's context use off its status line (one at a time). */
+  readContext(cx) {
+    if (this.contextBusy) return;
+    this.contextBusy = true;
+    cx.spawn(async (cx) => {
+      let pct = null;
+      try {
+        pct = await chatContext();
+      } catch {
+        pct = null;
+      }
+      this.contextBusy = false;
+      if (pct !== this.context) {
+        this.context = pct;
+        cx.notify();
+      }
+    });
+  }
+
+  /** The composer's context meter (lib/chatview.js contextLabel), or null. */
+  contextMeter() {
+    return contextLabel(this.context);
   }
 
   /** A deck card's action, one at a time (host.busy). */
@@ -159,11 +192,26 @@ export default class ChatView extends View {
 
   sent() {
     this.away = 0;
+    this.sentAt = Date.now();
+  }
+
+  sendFailed() {
+    this.sentAt = null;
+  }
+
+  /** The agent is working on a reply: the agent header with stepping dots. */
+  thinkingRow(k, now) {
+    return h_flex()
+      .w_full()
+      .items_center()
+      .gap(8)
+      .child(dot(k.brand, 7, true))
+      .child(div().font_weight(600).text_size(12).text_color(k.muted).child(thinkingLabel(now)));
   }
 
   /** Whether the composer must hold its text: a prompt (approval card or trust note) is showing. */
   sendLocked() {
-    return composerLocked({ approval: Boolean(this.approval), trust: this.trust });
+    return composerLocked({ approval: Boolean(this.approval), trust: this.trust || this.blocked });
   }
 
   /** The trust note, with the button that shows the chat agent's terminal (a peek). */
@@ -184,12 +232,40 @@ export default class ChatView extends View {
       );
   }
 
+  /** Shows the chat agent's terminal (a peek), for prompts the deck cannot answer. */
+  openTerminal(cx) {
+    act(cx, async () => openChatTerminal(), "Could not open the chat agent's terminal");
+  }
+
+  /** Blocked on something no card can show: say so, with the way to answer it. */
+  blockedNote(k) {
+    return h_flex()
+      .w_full()
+      .items_center()
+      .gap(12)
+      .px(14)
+      .py(10)
+      .bg(k.holdWash)
+      .rounded(10)
+      .child(div().flex_1().min_w(0).text_size(12).text_color(k.hold).line_height(1.5).child("The chat agent is waiting on a prompt the deck can't show. Answer it in its terminal."))
+      .child(button("chat-blocked-terminal", "Open terminal", "plain", (_e, cx) => this.openTerminal(cx)));
+  }
+
   onKey(e, cx) {
     // The view's keys only while its own handle has the keyboard: in the
     // composer every key is the composer's (its handler took Enter, esc and the list keys).
     if (!this.handle.is_focused()) return;
-    const a = chatViewKey(keyOf(e), { approval: Boolean(this.approval), canAnswer: this.canAnswer, dialog: anyDialogOpen() });
+    const menu = this.approval?.menu ? this.approval.options.length : 0;
+    const a = chatViewKey(keyOf(e), { approval: Boolean(this.approval), canAnswer: this.canAnswer, dialog: anyDialogOpen(), menu });
     if (!a) return;
+    if (a.startsWith("pick:")) {
+      const o = this.approval.options.find((x) => x.keys?.[0] === a.slice(5));
+      if (!o) return;
+      this.answer(o, cx);
+      cx.stop_propagation();
+      cx.notify();
+      return;
+    }
     switch (a) {
       case "approve":
         this.answer(this.approval.approve, cx);
@@ -234,7 +310,7 @@ export default class ChatView extends View {
 
   render(cx) {
     drew(this);
-    shared(STORE_KEY); // re-render on store changes
+    sharedOnce(STORE_KEY); // re-render on store changes
     const raw = shared(CHAT_KEY); // and on chat log changes
     focusOnShow(this, CHILD, () => this.composer.focus(), cx);
     const k = tokens();
@@ -245,8 +321,17 @@ export default class ChatView extends View {
     const trust = Boolean(agent) && trustWaiting(agent.status, this.nullAt, now);
     this.trust = trust;
     this.focusedPane = Boolean(agent?.focused);
+    this.blocked = agent?.status === "blocked";
     this.canAnswer = Boolean(agent) && !agent.focused && !this.answering;
     this.approval = agent?.status === "blocked" ? approvalFrom(this.prompt) : null;
+    // Blocked, the screen read back, and still nothing to show: never leave the person guessing.
+    const unreadable = agent?.status === "blocked" && !this.approval && !this.polling && this.prompt != null;
+    // Once herdr reports working, or a reply landed first, the status alone drives the row.
+    const last = raw?.blocks?.at?.(-1);
+    const replied = this.sentAt != null && last?.role === "agent" && last.t >= this.sentAt;
+    if (!agent || agent.status === "working" || replied) this.sentAt = null;
+    const thinking = Boolean(agent) && !trust && !this.approval && isThinking({ status: agent.status, sentAt: this.sentAt, now });
+    this.thinking = thinking;
 
     const log = reviveChatLog(raw);
     this.drawnLog = logMark(raw);
@@ -263,12 +348,14 @@ export default class ChatView extends View {
     if (!agent) rows.push(col(this.notRunning(k)));
     else if (trust) rows.push(col(this.trustNote(k)));
     if (this.approval) rows.push(col(renderBlock(this.approval, cx, ctx)));
+    else if (unreadable) rows.push(col(this.blockedNote(k)));
+    if (thinking) rows.push(col(this.thinkingRow(k, now)));
     rows.push(div().flex_none().h(1)); // the bottom: what following scrolls to
 
     // Something new at the bottom: follow it down, unless the wheel has taken
     // the reader up. Keyed on the last block (lib/chatview.js followKey), not the
     // row count, which stops changing once the log passes MAX_BLOCKS.
-    const follow = followKey({ lastId: drawn.at(-1)?.id, approval: Boolean(this.approval), trust });
+    const follow = followKey({ lastId: drawn.at(-1)?.id, approval: Boolean(this.approval), trust, thinking });
     if (followScroll(this.drawnFollow, follow, this.away)) this.scroll.scroll_to_item(rows.length - 1);
     this.drawnFollow = follow;
     if (prsWanted()) cx.timer.after(0, (cx) => fetchPrs(cx));

@@ -1,0 +1,264 @@
+#!/usr/bin/env node
+//
+// herdr-board — change the Herdr Deck board (for the deck chat agent).
+//
+//   herdr-board move <card> <column>        column: started, build, verify, landed (or done)
+//   herdr-board dismiss <card>              off the waiting list, into Landed
+//   herdr-board delete <card>               off the board for good (terminal, branch and PR untouched)
+//   herdr-board discard <card>              a backlog card, into Discarded (7 days)
+//   herdr-board restore <card>              a discarded backlog card, back into the Backlog
+//   herdr-board edit <card> [--title T] [--brief B]
+//   herdr-board start <card>                a backlog card: new worktree and agent
+//   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
+//                                           end the card's terminal (its space when it is alone there),
+//                                           remove its worktree and delete its branch
+//
+// <card> is the id the board shows (TF-8, B-3). Appends one JSON line to
+// ~/.local/state/herdr-deck/board.jsonl, then waits for Deck to apply it and
+// prints the outcome from board-results.jsonl. Deck applies requests only from
+// the deck chat agent's terminal ($HC_TERMINAL_ID), each once, and none older
+// than 10 minutes.
+//
+// Exit 0: applied. 1: refused (the message says why) or bad arguments.
+// 2: Deck did not answer in time (is it open?); the request may still apply
+// within 10 minutes.
+//
+// cleanup runs here, not in Deck: it reads the card from Deck's store
+// (~/.config/herdr-app/shared.json) and checks everything before it touches
+// anything. Without --force it refuses when the worktree has uncommitted or
+// untracked files or ignored secrets (.env, Config/Secrets: they exist nowhere
+// else), or the branch is neither merged into the default branch nor has a
+// merged PR. It never removes the main checkout or its branch, and never ends
+// the caller's own terminal or deck-chat. --dry-run prints the plan only.
+//
+const { appendFileSync, mkdirSync, readFileSync, openSync, readSync, fstatSync, closeSync, existsSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const { dirname, basename } = require("node:path");
+const { randomBytes } = require("node:crypto");
+const { join } = require("node:path");
+
+const USAGE = `usage:
+  herdr-board move <card> <column>      (started, build, verify, landed / done)
+  herdr-board dismiss <card>
+  herdr-board delete <card>
+  herdr-board discard <card>
+  herdr-board restore <card>
+  herdr-board edit <card> [--title TITLE] [--brief BRIEF]
+  herdr-board start <card>
+  herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
+`;
+const die = (msg) => { process.stderr.write("herdr-board: " + msg + "\n"); process.exit(1); };
+
+const a = process.argv.slice(2);
+if (!a.length || a[0] === "-h" || a[0] === "--help") { process.stdout.write(USAGE); process.exit(a.length ? 0 : 1); }
+const [op, ref, ...rest] = a;
+const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup"];
+if (!OPS.includes(op)) die("unknown command: " + op + "\n" + USAGE);
+if (!ref || !ref.trim() || ref.startsWith("-")) die(op + " needs a card id, like TF-8 or B-3");
+if (op === "cleanup") cleanup(ref.trim(), rest);
+
+const req = { op, ref: ref.trim() };
+if (op === "move") {
+  if (rest.length !== 1 || !rest[0].trim()) die("move needs one column: started, build, verify, landed (or done)");
+  req.column = rest[0].trim();
+} else if (op === "edit") {
+  for (let i = 0; i < rest.length; i++) {
+    const k = rest[i];
+    if (k !== "--title" && k !== "--brief") die("unknown argument: " + k);
+    if (i + 1 >= rest.length) die(k + " needs a value");
+    req[k.slice(2)] = rest[++i];
+  }
+  if (req.title === undefined && req.brief === undefined) die("edit needs --title or --brief");
+  if (req.title !== undefined && !req.title.trim()) die("--title must not be empty");
+} else if (rest.length) die("unexpected argument: " + rest[0]);
+
+const home = process.env.HOME;
+if (!home) die("HOME is not set");
+const dir = join(home, ".local", "state", "herdr-deck");
+const id = randomBytes(6).toString("hex");
+const entry = { id, t: Date.now(), ...req, from: process.env.HC_TERMINAL_ID || null };
+mkdirSync(dir, { recursive: true });
+appendFileSync(join(dir, "board.jsonl"), JSON.stringify(entry) + "\n");
+
+// Wait for Deck's answer: a start makes a worktree and an agent, so it gets longer.
+const waitMs = Number(process.env.HERDR_BOARD_WAIT_MS) || (op === "start" ? 120_000 : 20_000);
+const results = join(dir, "board-results.jsonl");
+const TAIL = 64 * 1024;
+
+function lastResult() {
+  let fd;
+  try {
+    fd = openSync(results, "r");
+    const size = fstatSync(fd).size;
+    const n = Math.min(size, TAIL);
+    const buf = Buffer.alloc(n);
+    readSync(fd, buf, 0, n, size - n);
+    for (const line of buf.toString("utf8").split("\n").reverse()) {
+      if (!line.includes(id)) continue;
+      try {
+        const o = JSON.parse(line);
+        if (o && o.id === id) return o;
+      } catch {}
+    }
+  } catch {} finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+  return null;
+}
+
+const until = Date.now() + waitMs;
+const sleep = new Int32Array(new SharedArrayBuffer(4));
+for (;;) {
+  const r = lastResult();
+  if (r) {
+    const msg = String(r.message ?? "").replace(/[\r\n]+/g, " ");
+    if (r.ok) { process.stdout.write(msg + "\n"); process.exit(0); }
+    process.stderr.write("herdr-board: " + msg + "\n");
+    process.exit(1);
+  }
+  if (Date.now() >= until) break;
+  Atomics.wait(sleep, 0, 0, 250);
+}
+process.stderr.write(`herdr-board: Deck did not answer within ${Math.round(waitMs / 1000)}s (is it open?). The request stays queued for 10 minutes.\n`);
+process.exit(2);
+
+// ---------------------------------------------------------------- cleanup
+
+/** Both are files with the same bytes. A directory (Config/Secrets/) is never the same: it is listed whole. */
+function sameFile(a, b) {
+  try {
+    if (!fstatOk(a) || !fstatOk(b)) return false;
+    return readFileSync(a).equals(readFileSync(b));
+  } catch { return false; }
+}
+function fstatOk(p) {
+  let fd;
+  try { fd = openSync(p, "r"); return fstatSync(fd).isFile(); } catch { return false; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+function cleanup(ref, args) {
+  const FLAGS = ["--dry-run", "--keep-worktree", "--keep-branch", "--keep-terminal", "--force"];
+  for (const a of args) if (!FLAGS.includes(a)) die("unknown argument: " + a);
+  const has = (f) => args.includes(f);
+  const dry = has("--dry-run"), force = has("--force");
+  const home = process.env.HOME;
+  if (!home) die("HOME is not set");
+
+  const sx = (cmd, argv) => {
+    const r = spawnSync(cmd, argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { ok: r.status === 0, out: String(r.stdout ?? "").trim(), err: String(r.stderr ?? r.error?.message ?? "").trim() };
+  };
+  const git = (dir, ...argv) => sx("git", ["-C", dir, ...argv]);
+
+  let store;
+  try {
+    const appHome = process.env.HERDR_APP_HOME || join(home, ".config", "herdr-app");
+    store = JSON.parse(readFileSync(join(appHome, "shared.json"), "utf8"))["deck.store"];
+  } catch (e) { die("cannot read Deck's board: " + e.message); }
+  const issues = Array.isArray(store?.issues) ? store.issues : [];
+  const up = ref.toUpperCase();
+  const card = issues.find((i) => i?.key === ref) ?? issues.find((i) => String(i?.id ?? "").toUpperCase() === up);
+  if (!card) die("no card " + ref + " on the board");
+  if (card.kind === "backlog") die(card.id + " is a backlog card: it has no worktree, branch or terminal (use discard)");
+
+  const steps = [];   // what will be done, in order
+  const notes = [];   // what is skipped, and why
+  const blocks = [];  // what stops it (without --force)
+
+  // Terminal: the space it is alone in, else the terminal itself.
+  const self = process.env.HC_TERMINAL_ID || null;
+  const term = card.terminal || null;
+  if (has("--keep-terminal")) notes.push("terminal kept (--keep-terminal)");
+  else if (!term) notes.push("no terminal on the card");
+  else if (term === self) notes.push(`terminal ${term} kept: it is the one running this command`);
+  else {
+    const ls = sx("hc", ["ls", "--json"]);
+    let named = null;
+    try {
+      const d = JSON.parse(ls.out);
+      const list = Array.isArray(d) ? d : d.terminals ?? [];
+      named = list.find((t) => t.address === term)?.name ?? null;
+    } catch {}
+    if (named === "deck-chat") notes.push(`terminal ${term} kept: it is the deck chat agent`);
+    else {
+      let space = null;
+      const app = sx("herdr-app", ["ls"]);
+      try {
+        for (const sp of JSON.parse(app.out).spaces ?? []) {
+          const terms = (sp.tabs ?? []).flatMap((t) => (t.terminals ?? []).map((x) => x.terminal));
+          if (terms.includes(term)) space = { id: sp.id, name: sp.name, alone: terms.every((x) => x === term) };
+        }
+      } catch {}
+      if (space?.alone) steps.push({ what: `close space "${space.name}" and end terminal ${term}`, run: () => sx("herdr-app", ["do", "space.close", JSON.stringify({ id: space.id, confirmed: true })]) });
+      else steps.push({ what: `end terminal ${term}`, run: () => { const k = sx("hc", ["kill", term]); if (k.ok) sx("hc", ["rm", term]); return k; } });
+    }
+  }
+
+  // Worktree and branch.
+  const wt = card.root || null;
+  const wantWt = !has("--keep-worktree"), wantBr = !has("--keep-branch");
+  let main = null;
+  if (wt && existsSync(wt)) {
+    const common = git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir");
+    if (common.ok) main = basename(common.out) === ".git" ? dirname(common.out) : common.out;
+  }
+  if (!wt) notes.push("no git folder on the card: no worktree or branch to remove");
+  else if (!existsSync(wt)) notes.push(`worktree ${wt} is already gone`);
+  else if (!main) notes.push(`${wt} is not a git checkout any more`);
+  else if (main === wt) notes.push("the card runs in the main checkout: no worktree to remove, its branch is kept");
+  else {
+    const branch = git(wt, "branch", "--show-current").out || card.branch || "";
+    let base = "main";
+    const head = git(main, "symbolic-ref", "--short", "refs/remotes/origin/HEAD");
+    if (head.ok && head.out) base = head.out;
+    else if (!git(main, "rev-parse", "--verify", "-q", "main").ok && git(main, "rev-parse", "--verify", "-q", "master").ok) base = "master";
+
+    if (wantWt) {
+      const dirty = git(wt, "status", "--porcelain", "-uall").out.split("\n").filter(Boolean);
+      if (dirty.length) blocks.push(`worktree has ${dirty.length} uncommitted or untracked file(s): ${dirty.slice(0, 5).map((l) => l.slice(3)).join(", ")}${dirty.length > 5 ? ", ..." : ""}`);
+      const secrets = git(wt, "status", "--porcelain", "--ignored").out.split("\n")
+        .filter((l) => l.startsWith("!! ")).map((l) => l.slice(3))
+        .filter((f) => /(^|\/)(\.env|Config\/Secrets(\/|\.))/.test(f))
+        // A copy of the main checkout's own file is no loss.
+        .filter((f) => !sameFile(join(wt, f), join(main, f)));
+      if (secrets.length) blocks.push(`worktree holds ignored secrets that exist nowhere else: ${secrets.join(", ")}`);
+      steps.push({ what: `remove worktree ${wt}`, run: () => git(main, "worktree", "remove", ...(force ? ["--force"] : []), wt) });
+    } else notes.push("worktree kept (--keep-worktree)");
+
+    if (!wantBr) notes.push("branch kept (--keep-branch)");
+    else if (!branch) notes.push("worktree is on no branch (detached): nothing to delete");
+    else if (branch === base.replace(/^origin\//, "") || branch === "main" || branch === "master") notes.push(`branch ${branch} kept: it is the default branch`);
+    else if (!wantWt) notes.push(`branch ${branch} kept: it is checked out in the kept worktree`);
+    else {
+      const merged = git(main, "merge-base", "--is-ancestor", branch, base).ok || card.pr?.state === "MERGED";
+      if (!merged) blocks.push(`branch ${branch} is not merged into ${base} and has no merged PR`);
+      steps.push({
+        what: `delete branch ${branch}${card.pr?.state === "MERGED" ? ` (PR #${card.pr.number} merged)` : ""}`,
+        run: () => {
+          const d = git(main, "branch", "-d", branch);
+          // A squash merge leaves the branch "unmerged" to git: -D when the PR merged (or --force).
+          return d.ok || !(merged || force) ? d : git(main, "branch", "-D", branch);
+        },
+      });
+    }
+  }
+
+  const say = (s) => process.stdout.write(s + "\n");
+  say(`${card.id} ${card.title ?? ""}`.trim());
+  for (const st of steps) say(`${dry ? "would " : ""}${st.what}`);
+  for (const n of notes) say(`skip: ${n}`);
+  for (const b of blocks) say(`${force ? "forced past" : "blocked"}: ${b}`);
+  if (dry) process.exit(0);
+  if (blocks.length && !force) {
+    process.stderr.write("herdr-board: nothing done; resolve the above or pass --force\n");
+    process.exit(1);
+  }
+  if (!steps.length) { say("nothing to clean up"); process.exit(0); }
+  let failed = false;
+  for (const st of steps) {
+    const r = st.run();
+    if (r.ok) say(`done: ${st.what}`);
+    else { failed = true; say(`FAILED: ${st.what}: ${r.err || r.out || "unknown error"}`); }
+  }
+  process.exit(failed ? 1 : 0);
+}
