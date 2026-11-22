@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed, pinColumn, removeIssue } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
+import { emptyStore, prefixFor, reconcile, dismiss, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue } from "../../dot_config/herdr-app/mods/deck/lib/store.js";
 
 const DAY = 86400000;
 const ob = (o = {}) => ({
@@ -512,4 +512,42 @@ test("Done (pinned to Landed) clears waiting now and keeps it off after the agen
   let t = reconcile(emptyStore(), [ob({ status: "done", prompt: doneQ })], 1);
   t = pinColumn(t, K(t, "t7"), "build", 2);
   assert.equal(T(t, "t7").stage, "holding");
+});
+
+test("editIssue: an agent card's edited title and brief outlive reconcile; the log says who", () => {
+  let s = reconcile(emptyStore(), [ob({ title: "from terminal", brief: "first prompt" })], 1);
+  const k = K(s, "t7");
+  s = editIssue(s, k, { title: "  Better title ", brief: "Rewritten brief" }, 2, "chat");
+  assert.equal(get(s, k).title, "Better title");
+  assert.equal(get(s, k).brief, "Rewritten brief");
+  assert.equal(s.log.at(-1).what, "title and brief edited by chat");
+  s = reconcile(s, [ob({ title: "terminal renamed", brief: "first prompt" })], 3);
+  assert.equal(get(s, k).title, "Better title");
+  assert.equal(get(s, k).brief, "Rewritten brief");
+  // Title only: the brief keeps following the terminal's.
+  let t = reconcile(emptyStore(), [ob({ title: "a", brief: "b" })], 1);
+  t = editIssue(t, K(t, "t7"), { title: "A" }, 2);
+  t = reconcile(t, [ob({ title: "a2", brief: "b2" })], 3);
+  assert.equal(T(t, "t7").title, "A");
+  assert.equal(T(t, "t7").brief, "b2");
+  assert.equal(t.log.find((e) => e.what.startsWith("title"))?.what, "title edited by you");
+});
+
+test("editIssue: a backlog card takes the edit as its own; no change, empty title or unknown key leave the store", () => {
+  const s0 = { ...emptyStore(), issues: [{ key: "backlog|x", id: "B-1", kind: "backlog", title: "Old", brief: "b" }] };
+  const s1 = editIssue(s0, "backlog|x", { brief: "new brief" }, 2);
+  assert.equal(get(s1, "backlog|x").brief, "new brief");
+  assert.equal(get(s1, "backlog|x").edits, undefined);
+  assert.equal(editIssue(s0, "backlog|x", { title: "Old" }, 2), s0);
+  assert.equal(editIssue(s0, "backlog|x", { title: "   " }, 2), s0);
+  assert.equal(editIssue(s0, "nope", { title: "X" }, 2), s0);
+});
+
+test("pinColumn / removeIssue: the log names who acted", () => {
+  let s = reconcile(emptyStore(), [ob()], 1);
+  const k = K(s, "t7");
+  s = pinColumn(s, k, "verify", 2, "chat");
+  assert.equal(s.log.at(-1).what, "moved to Verify by chat");
+  s = removeIssue(s, k, 3, "chat");
+  assert.equal(s.log.at(-1).what, "deleted by chat");
 });

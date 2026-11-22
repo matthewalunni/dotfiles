@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   chatAgent, nullSince, trustWaiting, TRUST_MS, approvalFrom, matchOption, clipDetail, wheelAway,
   recentBlocks, attachCards, chatViewKey, canSendToChat, SEND_BLOCKED, composerLocked, followKey, followScroll,
-  chatOpenCommand, CHAT_ATTACH, TRUST_NOTE, prCwds, logMark, plainHtml,
+  chatOpenCommand, CHAT_ATTACH, TRUST_NOTE, prCwds, logMark, isThinking, thinkingLabel, PENDING_MS, plainHtml, contextPercent, contextLabel, CONTEXT_WARN,
 } from "../../dot_config/herdr-app/mods/deck/lib/chatview.js";
 
 const term = (o = {}) => ({ address: "t9", name: "deck-chat", state: "live", status: null, ...o });
@@ -51,7 +51,7 @@ test("approvalFrom: a permission prompt becomes an approval block (Approve = Yes
 
 test("approvalFrom: nothing for other prompts; Skip falls back to the last option", () => {
   assert.equal(approvalFrom(null), null);
-  assert.equal(approvalFrom({ kind: "menu", text: "Pick", options: perm.options }), null);
+  assert.equal(approvalFrom({ kind: "question", text: "Pick", options: perm.options }), null);
   assert.equal(approvalFrom({ kind: "permission", text: "x", options: [] }), null);
   const a = approvalFrom({ kind: "permission", text: "", options: [{ label: "Allow", keys: ["1"] }, { label: "Deny", keys: ["2"] }] });
   assert.equal(a.title, "Permission needed");
@@ -192,8 +192,82 @@ test("prCwds: each distinct repo root from the store, in order; one try without 
   assert.deepEqual(prCwds([]), [null]);
 });
 
+test("isThinking: working, or just sent and the status has not caught up; never blocked or unknown", () => {
+  const now = 100_000;
+  assert.equal(isThinking({ status: "working", sentAt: null, now }), true);
+  assert.equal(isThinking({ status: "idle", sentAt: null, now }), false);
+  assert.equal(isThinking({ status: "idle", sentAt: now - 500, now }), true);
+  assert.equal(isThinking({ status: "done", sentAt: now - 500, now }), true);
+  assert.equal(isThinking({ status: "idle", sentAt: now - PENDING_MS, now }), false);
+  assert.equal(isThinking({ status: "blocked", sentAt: now - 500, now }), false);
+  assert.equal(isThinking({ status: null, sentAt: now - 500, now }), false);
+});
+
+test("thinkingLabel: one to three dots, stepping", () => {
+  assert.equal(thinkingLabel(0), "Thinking.");
+  assert.equal(thinkingLabel(400), "Thinking..");
+  assert.equal(thinkingLabel(800), "Thinking...");
+  assert.equal(thinkingLabel(1200), "Thinking.");
+});
+
+test("followKey: the thinking row appearing follows down", () => {
+  assert.notEqual(
+    followKey({ lastId: "s:1", approval: false, trust: false, thinking: true }),
+    followKey({ lastId: "s:1", approval: false, trust: false }),
+  );
+});
+
 test("plainHtml: escaped, newlines kept, never markup", () => {
   assert.equal(plainHtml("a <b> & \"c\" 'd'"), "<span>a &lt;b&gt; &amp; &quot;c&quot; &#39;d&#39;</span>");
   assert.equal(plainHtml("one\ntwo\r\nthree"), "<span>one<br>two<br>three</span>");
   assert.equal(plainHtml(null), "<span></span>");
+});
+
+test("approvalFrom: a question menu becomes a menu block: question, tab bar, options but Type something", () => {
+  const menu = {
+    kind: "menu",
+    text: "←  ☐ TF-8 gate  ☐ TF-11 genUI  ✔ Submit  →\n│ TF-8 quality gate: what should\n│ I tell it?",
+    options: [
+      { label: "Accept (Recommended)", keys: ["1"] },
+      { label: "Skip for now", keys: ["2"] },
+      { label: "Type something.", keys: ["3"] },
+      { label: "Chat about this", keys: ["4"] },
+    ],
+  };
+  const a = approvalFrom(menu);
+  assert.equal(a.type, "approval");
+  assert.equal(a.menu, true);
+  assert.equal(a.title, "TF-8 quality gate: what should I tell it?");
+  assert.equal(a.subtitle, "☐ TF-8 gate · ☐ TF-11 genUI · ✔ Submit");
+  assert.deepEqual(a.options.map((o) => o.keys[0]), ["1", "2", "4"]);
+  assert.equal(a.approve, null);
+  assert.equal(a.prompt, menu);
+  const plain = approvalFrom({ kind: "menu", text: "Pick one", options: [{ label: "A", keys: ["1"] }, { label: "B", keys: ["2"] }] });
+  assert.equal(plain.title, "Pick one");
+  assert.equal(plain.subtitle, "");
+  assert.equal(approvalFrom({ kind: "menu", text: "x", options: [{ label: "Type something.", keys: ["1"] }] }), null);
+});
+
+test("chatViewKey: on a question menu digits pick, Enter and esc do nothing", () => {
+  const ev = (key) => ({ key, shift: false, cmd: false, held: false });
+  const c = { approval: true, canAnswer: true, menu: 3 };
+  assert.equal(chatViewKey(ev("2"), c), "pick:2");
+  assert.equal(chatViewKey(ev("4"), c), null);
+  assert.equal(chatViewKey(ev("1"), { ...c, canAnswer: false }), null);
+  assert.equal(chatViewKey(ev("enter"), c), null);
+  assert.equal(chatViewKey(ev("escape"), c), null);
+});
+
+test("contextPercent: the last ctx:N% on the screen, ANSI stripped; null when none or out of range", () => {
+  assert.equal(contextPercent("old ctx:3%\n...\n main (!) \x1b[2m ctx:15%\x1b[0m\n"), 15);
+  assert.equal(contextPercent("no meter here"), null);
+  assert.equal(contextPercent("ctx:250%"), null);
+  assert.equal(contextPercent(null), null);
+  assert.equal(contextPercent("myctx:9%"), null);
+});
+
+test("contextLabel: text, and a warning from CONTEXT_WARN", () => {
+  assert.equal(contextLabel(null), null);
+  assert.deepEqual(contextLabel(8), { text: "context 8%", warn: false });
+  assert.equal(contextLabel(CONTEXT_WARN).warn, true);
 });

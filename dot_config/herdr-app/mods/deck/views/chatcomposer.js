@@ -188,6 +188,7 @@ export class Composer {
         this.pop = null;
       } else {
         this.error = r?.error || "send failed";
+        this.host.sendFailed?.();
       }
       cx.notify();
     });
@@ -234,6 +235,10 @@ export class Composer {
       .child(hint("@ mention an agent"))
       .child(hint("/ commands"))
       .child(div().flex_1())
+      .when(Boolean(this.host.contextMeter?.()), (el) => {
+        const m = this.host.contextMeter();
+        return el.child(div().flex_none().text_color(m.warn ? k.hold : k.muted).child(m.text));
+      })
       .child(hint(this.busy ? "sending…" : this.host.sendLocked() ? "answer the prompt above first" : "⏎ send"));
     const box = v_flex()
       .id("chat-composer")
