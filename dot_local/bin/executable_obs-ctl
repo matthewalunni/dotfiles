@@ -1,0 +1,547 @@
+#!/usr/bin/env python3
+"""obs-ctl: record an agent's screen with OBS, pausing while it waits for you.
+
+Talks to OBS over obs-websocket (v5) using only the Python standard library,
+so it runs on a fresh Mac or VM with nothing but python3 and OBS installed.
+
+  obs-ctl start [--scene NAME] [--title TEXT] [--dir PATH] [--session ID]
+  obs-ctl stop                    stop, restore OBS's folder, write a sidecar .json
+  obs-ctl pause [--hold]          --hold keeps hooks from auto-resuming
+  obs-ctl resume
+  obs-ctl status
+  obs-ctl scenes
+  obs-ctl setup                   create the "Agent Coding" / "Agent CAD" scenes
+  obs-ctl hook                    Claude Code hook entry point (reads JSON on stdin)
+
+Connection settings, first match wins:
+  env OBS_WS_HOST / OBS_WS_PORT / OBS_WS_PASSWORD / AGENT_RECORD_DIR
+  ~/.config/agent-record/config.json   {"host","port","password","dir"}
+  OBS's own obs-websocket config file   (password and port, local OBS only)
+"""
+
+import argparse
+import base64
+import contextlib
+import datetime
+import fcntl
+import hashlib
+import json
+import os
+import re
+import socket
+import struct
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+STATE_DIR = os.path.join(HOME, ".local", "state", "agent-record")
+STATE_FILE = os.path.join(STATE_DIR, "active.json")
+LOCK_FILE = os.path.join(STATE_DIR, "lock")
+LOG_FILE = os.path.join(STATE_DIR, "hook.log")
+CONFIG_FILE = os.path.join(HOME, ".config", "agent-record", "config.json")
+OBS_WS_CONFIGS = [
+    os.path.join(HOME, "Library", "Application Support", "obs-studio",
+                 "plugin_config", "obs-websocket", "config.json"),
+    os.path.join(HOME, ".config", "obs-studio", "plugin_config",
+                 "obs-websocket", "config.json"),
+]
+DEFAULT_DIR = os.path.join(HOME, "Movies", "agent-recordings")
+SCENES = ["Agent Coding", "Agent CAD"]
+
+# obs-websocket status codes we handle
+NOT_READY = 207
+OUTPUT_RUNNING = 500
+OUTPUT_NOT_RUNNING = 501
+OUTPUT_PAUSED = 502
+OUTPUT_NOT_PAUSED = 503
+
+
+class OBSError(Exception):
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
+
+
+# ---------------------------------------------------------------- config
+
+def _read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def load_config():
+    cfg = {"host": "127.0.0.1", "port": 4455, "password": None, "dir": DEFAULT_DIR}
+    user = _read_json(CONFIG_FILE)
+    for key in cfg:
+        if user.get(key) not in (None, ""):
+            cfg[key] = user[key]
+    env = {"host": "OBS_WS_HOST", "port": "OBS_WS_PORT",
+           "password": "OBS_WS_PASSWORD", "dir": "AGENT_RECORD_DIR"}
+    for key, var in env.items():
+        if os.environ.get(var):
+            cfg[key] = os.environ[var]
+    local = cfg["host"] in ("127.0.0.1", "localhost", "::1")
+    if local and cfg["password"] is None:
+        for path in OBS_WS_CONFIGS:
+            ws = _read_json(path)
+            if ws:
+                if ws.get("auth_required", True):
+                    cfg["password"] = ws.get("server_password")
+                if not user.get("port") and not os.environ.get("OBS_WS_PORT"):
+                    cfg["port"] = ws.get("server_port", cfg["port"])
+                break
+    cfg["port"] = int(cfg["port"])
+    cfg["dir"] = os.path.expanduser(str(cfg["dir"]))
+    return cfg
+
+
+# ---------------------------------------------------------------- websocket
+
+class WebSocket:
+    """Minimal RFC 6455 client: text frames, masking, ping/pong, close."""
+
+    def __init__(self, host, port, timeout=3.0):
+        self.sock = socket.create_connection((host, port), timeout=timeout)
+        self.buf = b""
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall((
+            "GET / HTTP/1.1\r\n"
+            "Host: %s:%d\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Key: %s\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "Sec-WebSocket-Protocol: obswebsocket.json\r\n\r\n" % (host, port, key)
+        ).encode())
+        while b"\r\n\r\n" not in self.buf:
+            self._fill()
+        head, self.buf = self.buf.split(b"\r\n\r\n", 1)
+        if b" 101 " not in head.split(b"\r\n", 1)[0]:
+            raise OBSError("websocket upgrade refused: %r" % head[:80])
+
+    def _fill(self):
+        chunk = self.sock.recv(65536)
+        if not chunk:
+            raise OBSError("OBS closed the connection")
+        self.buf += chunk
+
+    def _take(self, n):
+        while len(self.buf) < n:
+            self._fill()
+        out, self.buf = self.buf[:n], self.buf[n:]
+        return out
+
+    def _send_frame(self, opcode, payload):
+        header = bytes([0x80 | opcode])
+        n = len(payload)
+        if n < 126:
+            header += bytes([0x80 | n])
+        elif n < 65536:
+            header += bytes([0x80 | 126]) + struct.pack(">H", n)
+        else:
+            header += bytes([0x80 | 127]) + struct.pack(">Q", n)
+        mask = os.urandom(4)
+        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        self.sock.sendall(header + mask + masked)
+
+    def send(self, obj):
+        self._send_frame(0x1, json.dumps(obj).encode())
+
+    def recv(self):
+        message = b""
+        while True:
+            b1, b2 = self._take(2)
+            fin, opcode = b1 & 0x80, b1 & 0x0F
+            n = b2 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", self._take(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", self._take(8))[0]
+            mask = self._take(4) if b2 & 0x80 else None
+            payload = self._take(n)
+            if mask:
+                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+            if opcode == 0x8:
+                code = struct.unpack(">H", payload[:2])[0] if len(payload) >= 2 else None
+                reason = payload[2:].decode(errors="replace")
+                if code == 4009:
+                    reason = "authentication failed (check the OBS websocket password)"
+                raise OBSError("OBS closed the connection: %s %s" % (code, reason), code)
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            message += payload
+            if fin:
+                return json.loads(message.decode())
+
+    def close(self):
+        with contextlib.suppress(OSError):
+            self._send_frame(0x8, struct.pack(">H", 1000))
+        with contextlib.suppress(OSError):
+            self.sock.close()
+
+
+class OBS:
+    def __init__(self, cfg, timeout=3.0):
+        try:
+            self.ws = WebSocket(cfg["host"], cfg["port"], timeout)
+        except (OSError, socket.timeout) as e:
+            raise OBSError(
+                "can't reach OBS at %s:%s (%s). Is OBS open with "
+                "Tools > WebSocket Server Settings > Enable checked?"
+                % (cfg["host"], cfg["port"], e))
+        hello = self.ws.recv()
+        identify = {"rpcVersion": 1, "eventSubscriptions": 0}
+        auth = hello.get("d", {}).get("authentication")
+        if auth:
+            if not cfg.get("password"):
+                raise OBSError("OBS wants a password; set it in %s" % CONFIG_FILE)
+            secret = base64.b64encode(hashlib.sha256(
+                (cfg["password"] + auth["salt"]).encode()).digest()).decode()
+            identify["authentication"] = base64.b64encode(hashlib.sha256(
+                (secret + auth["challenge"]).encode()).digest()).decode()
+        self.ws.send({"op": 1, "d": identify})
+        while self.ws.recv().get("op") != 2:
+            pass
+        self.n = 0
+
+    def call(self, request_type, data=None):
+        # OBS answers "not ready" (207) for a few seconds after it launches.
+        for _ in range(20):
+            try:
+                return self._call(request_type, data)
+            except OBSError as e:
+                if e.code != NOT_READY:
+                    raise
+                time.sleep(0.5)
+        return self._call(request_type, data)
+
+    def _call(self, request_type, data=None):
+        self.n += 1
+        rid = str(self.n)
+        msg = {"requestType": request_type, "requestId": rid}
+        if data:
+            msg["requestData"] = data
+        self.ws.send({"op": 6, "d": msg})
+        while True:
+            reply = self.ws.recv()
+            d = reply.get("d", {})
+            if reply.get("op") == 7 and d.get("requestId") == rid:
+                status = d.get("requestStatus", {})
+                if not status.get("result"):
+                    raise OBSError("%s failed: %s" % (
+                        request_type, status.get("comment") or status.get("code")),
+                        status.get("code"))
+                return d.get("responseData") or {}
+
+    def close(self):
+        self.ws.close()
+
+
+@contextlib.contextmanager
+def connect(cfg=None):
+    obs = OBS(cfg or load_config())
+    try:
+        yield obs
+    finally:
+        obs.close()
+
+
+# ---------------------------------------------------------------- state
+
+def read_state():
+    return _read_json(STATE_FILE) or None
+
+
+def write_state(state):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f, indent=2)
+    os.replace(tmp, STATE_FILE)
+
+
+def clear_state():
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(STATE_FILE)
+
+
+@contextlib.contextmanager
+def locked():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(LOCK_FILE, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def now():
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def log(msg):
+    with contextlib.suppress(OSError):
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(LOG_FILE, "a") as f:
+            f.write("%s %s\n" % (now(), msg))
+
+
+# ---------------------------------------------------------------- actions
+
+def do_start(obs, cfg, scene=None, title=None, directory=None, session=None):
+    state = read_state()
+    status = obs.call("GetRecordStatus")
+    if state and status.get("outputActive"):
+        raise OBSError("already recording for session %s; run `obs-ctl stop` first"
+                       % state.get("session_id"))
+    if status.get("outputActive"):
+        raise OBSError("OBS is already recording (started outside obs-ctl)")
+    warnings = []
+    if scene:
+        names = [s["sceneName"] for s in obs.call("GetSceneList").get("scenes", [])]
+        if scene in names:
+            obs.call("SetCurrentProgramScene", {"sceneName": scene})
+        else:
+            warnings.append("scene %r not found (have: %s); recording the current "
+                            "scene. `obs-ctl setup` creates the agent scenes."
+                            % (scene, ", ".join(names)))
+            scene = None
+    directory = os.path.expanduser(directory or cfg["dir"])
+    os.makedirs(directory, exist_ok=True)
+    prev_dir = obs.call("GetRecordDirectory").get("recordDirectory")
+    obs.call("SetRecordDirectory", {"recordDirectory": directory})
+    try:
+        obs.call("StartRecord")
+    except OBSError:
+        obs.call("SetRecordDirectory", {"recordDirectory": prev_dir})
+        raise
+    state = {
+        "session_id": session or "pending",
+        "title": title or "",
+        "scene": scene,
+        "dir": directory,
+        "prev_dir": prev_dir,
+        "cwd": os.getcwd(),
+        "started_at": now(),
+        "paused": False,
+        "held": False,
+        "pauses": [],
+    }
+    write_state(state)
+    return state, warnings
+
+
+def do_stop(obs, state):
+    try:
+        path = obs.call("StopRecord").get("outputPath")
+    except OBSError as e:
+        if e.code != OUTPUT_NOT_RUNNING:
+            raise
+        path = None
+    if state and state.get("prev_dir"):
+        with contextlib.suppress(OBSError):
+            obs.call("SetRecordDirectory", {"recordDirectory": state["prev_dir"]})
+    if state:
+        if state.get("paused") and state["pauses"] and "end" not in state["pauses"][-1]:
+            state["pauses"][-1]["end"] = now()
+        state["stopped_at"] = now()
+        state["file"] = path
+        if path:
+            with contextlib.suppress(OSError):
+                with open(os.path.splitext(path)[0] + ".json", "w") as f:
+                    json.dump(state, f, indent=2)
+    clear_state()
+    return path
+
+
+def set_paused(obs, state, paused, reason, hold=False):
+    """Pause or resume OBS and record it in state. Returns True if it changed."""
+    if paused == state.get("paused") and not hold:
+        return False
+    try:
+        obs.call("PauseRecord" if paused else "ResumeRecord")
+    except OBSError as e:
+        if e.code not in (OUTPUT_PAUSED, OUTPUT_NOT_PAUSED):
+            raise
+    if paused and not state.get("paused"):
+        state["pauses"].append({"start": now(), "reason": reason})
+    if not paused and state.get("paused") and state["pauses"]:
+        state["pauses"][-1]["end"] = now()
+    state["paused"] = paused
+    state["held"] = bool(paused and hold)
+    write_state(state)
+    return True
+
+
+# What each Claude Code event means for the recording.
+PAUSE, RESUME, STOP = "pause", "resume", "stop"
+
+
+def hook_action(event):
+    name = event.get("hook_event_name")
+    if name in ("Stop", "Notification", "PermissionRequest"):
+        return PAUSE
+    if name == "PreToolUse":
+        # AskUserQuestion blocks on you; its PostToolUse resumes.
+        return PAUSE if event.get("tool_name") == "AskUserQuestion" else RESUME
+    if name in ("PostToolUse", "UserPromptSubmit"):
+        return RESUME
+    if name == "SessionEnd":
+        return STOP
+    return None
+
+
+def is_start_call(event):
+    if event.get("hook_event_name") != "PostToolUse":
+        return False
+    command = (event.get("tool_input") or {}).get("command")
+    return isinstance(command, str) and re.search(r"obs-ctl\s+start\b", command) is not None
+
+
+def run_hook(event, connect_fn=connect):
+    """Apply one Claude Code hook event. Never raises; never prints."""
+    try:
+        with locked():
+            state = read_state()
+            if not state:
+                return None
+            sid = event.get("session_id")
+            if state.get("session_id") == "pending":
+                # The session whose Bash call ran `obs-ctl start` claims it.
+                if sid and is_start_call(event):
+                    state["session_id"] = sid
+                    write_state(state)
+                    return "claimed"
+                return None
+            if sid != state.get("session_id"):
+                return None
+            action = hook_action(event)
+            if action is None:
+                return None
+            if action == RESUME and state.get("held"):
+                return None
+            if action == PAUSE and state.get("paused"):
+                return None
+            if action == RESUME and not state.get("paused"):
+                return None
+            with connect_fn() as obs:
+                if action == STOP:
+                    do_stop(obs, state)
+                    return STOP
+                try:
+                    set_paused(obs, state, action == PAUSE, event.get("hook_event_name"))
+                except OBSError as e:
+                    if e.code == OUTPUT_NOT_RUNNING:
+                        clear_state()  # stopped by hand in OBS
+                        return "cleared"
+                    raise
+                return action
+    except Exception as e:  # a hook must never break the agent
+        log("hook %s: %s" % (event.get("hook_event_name"), e))
+        return "error"
+
+
+def do_setup(obs):
+    kinds = obs.call("GetInputKindList").get("inputKinds", [])
+    kind = next((k for k in ("screen_capture", "display_capture", "monitor_capture",
+                             "pipewire-desktop-capture-source", "xshm_input")
+                 if k in kinds), None)
+    names = [s["sceneName"] for s in obs.call("GetSceneList").get("scenes", [])]
+    made = []
+    for scene in SCENES:
+        if scene in names:
+            continue
+        obs.call("CreateScene", {"sceneName": scene})
+        if kind:
+            obs.call("CreateInput", {"sceneName": scene,
+                                     "inputName": scene + " Screen",
+                                     "inputKind": kind,
+                                     "sceneItemEnabled": True})
+        made.append(scene)
+    return made, kind
+
+
+# ---------------------------------------------------------------- CLI
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="obs-ctl", description=__doc__.split("\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("start")
+    s.add_argument("--scene")
+    s.add_argument("--title")
+    s.add_argument("--dir")
+    s.add_argument("--session")
+    sub.add_parser("stop")
+    pa = sub.add_parser("pause")
+    pa.add_argument("--hold", action="store_true",
+                    help="stay paused until `obs-ctl resume` (e.g. secrets on screen)")
+    sub.add_parser("resume")
+    sub.add_parser("status")
+    sub.add_parser("scenes")
+    sub.add_parser("setup")
+    sub.add_parser("hook")
+    args = p.parse_args(argv)
+
+    if args.cmd == "hook":
+        try:
+            event = json.load(sys.stdin)
+        except ValueError:
+            return 0
+        run_hook(event)
+        return 0
+
+    cfg = load_config()
+    try:
+        with connect(cfg) as obs:
+            if args.cmd == "start":
+                state, warnings = do_start(obs, cfg, args.scene, args.title,
+                                           args.dir, args.session)
+                for w in warnings:
+                    print("warning: " + w, file=sys.stderr)
+                print("recording to %s (scene: %s)" % (state["dir"],
+                                                       state["scene"] or "current"))
+            elif args.cmd == "stop":
+                path = do_stop(obs, read_state())
+                print(path or "OBS was not recording")
+            elif args.cmd in ("pause", "resume"):
+                with locked():
+                    state = read_state()
+                    if not state:
+                        raise OBSError("no obs-ctl recording in progress")
+                    set_paused(obs, state, args.cmd == "pause", "manual",
+                               hold=getattr(args, "hold", False))
+                print(args.cmd + "d" + (" (held)" if getattr(args, "hold", False) else ""))
+            elif args.cmd == "status":
+                st = obs.call("GetRecordStatus")
+                state = read_state()
+                print(json.dumps({
+                    "recording": st.get("outputActive"),
+                    "paused": st.get("outputPaused"),
+                    "timecode": st.get("outputTimecode"),
+                    "session": state and state.get("session_id"),
+                    "title": state and state.get("title"),
+                }, indent=2))
+            elif args.cmd == "scenes":
+                for sc in obs.call("GetSceneList").get("scenes", []):
+                    print(sc["sceneName"])
+            elif args.cmd == "setup":
+                made, kind = do_setup(obs)
+                print("created: %s" % (", ".join(made) or "nothing (scenes exist)"))
+                if made and not kind:
+                    print("warning: no screen capture source type found; add one by hand",
+                          file=sys.stderr)
+    except OBSError as e:
+        print("obs-ctl: %s" % e, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
