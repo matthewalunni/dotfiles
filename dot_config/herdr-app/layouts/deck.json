@@ -119,6 +119,16 @@
           ]
         },
         {
+          "id": "deck-goals",
+          "type": "block",
+          "content": {
+            "mod": "deck",
+            "props": {
+              "view": "goals"
+            }
+          }
+        },
+        {
           "id": "deck-issues",
           "type": "block",
           "content": {

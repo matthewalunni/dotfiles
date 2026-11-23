@@ -58,12 +58,12 @@ export function composerLocked({ approval, trust }) {
 
 /**
  * What following the transcript keys on: the last drawn block's id and the
- * prompt rows under it (the approval card, the trust note). Not the row count:
+ * rows under it (the approval card, the trust note, the thinking row). Not the row count:
  * at the draw cap new blocks leave it unchanged.
- * @param {{ lastId: string|null|undefined, approval: boolean, trust: boolean }} s
+ * @param {{ lastId: string|null|undefined, approval: boolean, trust: boolean, thinking?: boolean }} s
  */
-export function followKey({ lastId, approval, trust }) {
-  return `${lastId ?? ""}|${approval ? "a" : ""}|${trust ? "t" : ""}`;
+export function followKey({ lastId, approval, trust, thinking = false }) {
+  return `${lastId ?? ""}|${approval ? "a" : ""}|${trust ? "t" : ""}|${thinking ? "w" : ""}`;
 }
 
 /** What the view's redraw check compares for the shared chat log: its length and last block id (the log is capped). */
@@ -112,14 +112,44 @@ export function trustWaiting(status, since, now) {
 
 const firstOf = (options, re) => options.find((o) => re.test(String(o.label ?? "")));
 
+/** Menu options that open a text field in the terminal (the composer stays locked meanwhile): not offered. */
+const TYPE_OPTION = /^type something\.?$/i;
+
 /**
- * The approval block for a permission prompt on the chat agent's screen, else
- * null. Approve is the first "Yes" option (else the first), Skip the first "No"
- * (else the last).
+ * A question menu (AskUserQuestion) as a block: the question as the title, the
+ * tab bar of a several-question form ("←  ☐ A  ☐ B  ✔ Submit  →") as the
+ * subtitle, every option but "Type something." as a button. Box rules ("│ ") are dropped.
+ * @param {import("./prompt.js").Prompt} prompt
+ */
+function menuFrom(prompt) {
+  const lines = String(prompt.text ?? "").split("\n").map((l) => l.replace(/^\s*│\s?/, "").trim()).filter(Boolean);
+  const tabs = lines.find((l) => /^←.*→$/.test(l)) ?? "";
+  const question = lines.filter((l) => l !== tabs).join(" ");
+  const options = prompt.options.filter((o) => !TYPE_OPTION.test(String(o.label ?? "").trim()));
+  if (!options.length) return null;
+  return {
+    id: "approval",
+    type: "approval",
+    menu: true,
+    title: question || "The chat agent asks",
+    subtitle: tabs.replace(/^←\s*|\s*→$/g, "").replace(/\s{2,}/g, " · "),
+    options,
+    approve: null,
+    skip: null,
+    prompt,
+  };
+}
+
+/**
+ * The block for a prompt on the chat agent's screen, else null. A permission
+ * prompt: Approve is the first "Yes" option (else the first), Skip the first
+ * "No" (else the last). A question menu: menuFrom.
  * @param {import("./store.js").Prompt|null|undefined} prompt
  */
 export function approvalFrom(prompt) {
-  if (prompt?.kind !== "permission" || !prompt.options?.length) return null;
+  if (!prompt?.options?.length) return null;
+  if (prompt.kind === "menu") return menuFrom(prompt);
+  if (prompt.kind !== "permission") return null;
   const lines = String(prompt.text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
   const options = prompt.options;
   const approve = firstOf(options, /^yes\b/i) ?? options[0];
@@ -190,15 +220,20 @@ export function attachCards(blocks, issues) {
 /**
  * A key while the Chat view itself (not the composer) has the keyboard.
  * Enter approves and esc skips a shown approval (only when it can be answered);
- * otherwise Enter or I puts the keyboard in the composer.
+ * on a question menu (ctx.menu: its option count) digit N picks option N, and
+ * Enter / esc do nothing; otherwise Enter or I puts the keyboard in the composer.
  * @param {{key: string, shift?: boolean, cmd?: boolean, held?: boolean}} ev
  * N opens a new task (nothing while a Deck dialog is open: ctx.dialog).
- * @param {{ approval: boolean, canAnswer: boolean, dialog?: boolean }} ctx
- * @returns {"approve"|"skip"|"type"|"help"|"newTask"|null}
+ * @param {{ approval: boolean, canAnswer: boolean, dialog?: boolean, menu?: number }} ctx
+ * @returns {"approve"|"skip"|"type"|"help"|"newTask"|`pick:${number}`|null}
  */
 export function chatViewKey(ev, ctx) {
   if (ev?.cmd || ev?.held) return null;
   const k = String(ev?.key ?? "").toLowerCase();
+  if (ctx.approval && ctx.menu) {
+    if (/^[1-9]$/.test(k) && Number(k) <= ctx.menu) return ctx.canAnswer ? `pick:${k}` : null;
+    if (k === "enter" || k === "escape") return null;
+  }
   if (ctx.approval && (k === "enter" || k === "escape")) {
     if (!ctx.canAnswer) return null;
     return k === "enter" ? "approve" : "skip";
@@ -234,4 +269,58 @@ export function focusJump(prevKey, f) {
   const key = terminalFocusKey(f);
   if (key === null) return { key: prevKey, jump: false };
   return { key, jump: prevKey !== null && key !== prevKey };
+}
+
+/** How long a sent message shows "thinking" before the agent's status says it is working. */
+export const PENDING_MS = 15000;
+
+/**
+ * Whether the chat shows the agent thinking: its status is working, or a
+ * message went out less than PENDING_MS ago and the status has not caught up
+ * yet (herdr's status lags the send). Never while it is blocked on a prompt
+ * (the approval card shows) or its status is unknown (the trust note).
+ * @param {{ status: string|null|undefined, sentAt: number|null, now: number }} s
+ */
+export function isThinking({ status, sentAt, now }) {
+  if (status === "working") return true;
+  if (status === "blocked" || status == null) return false;
+  return sentAt != null && now - sentAt >= 0 && now - sentAt < PENDING_MS;
+}
+
+/** The thinking row's label: "Thinking" and one to three dots, stepping every 400 ms. */
+export function thinkingLabel(now) {
+  return "Thinking" + ".".repeat((Math.floor(now / 400) % 3) + 1);
+}
+
+/**
+ * `text` as HTML that shows it literally (for a selectable TextView.html):
+ * & < > " ' escaped, newlines as <br>. The person's own words are not markdown.
+ * @param {unknown} text
+ */
+export function plainHtml(text) {
+  const esc = String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  return `<span>${esc.replace(/\r?\n/g, "<br>")}</span>`;
+}
+
+/**
+ * How full the chat agent's context window is, from the `ctx:N%` its status
+ * line prints at the bottom of its screen (the last one: older ones may sit in
+ * the history above). null when the screen shows none.
+ * @param {unknown} screen `hc read` output
+ */
+export function contextPercent(screen) {
+  const text = String(screen ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "");
+  const all = [...text.matchAll(/\bctx:(\d{1,3})%/g)];
+  if (!all.length) return null;
+  const n = Number(all.at(-1)[1]);
+  return n >= 0 && n <= 100 ? n : null;
+}
+
+/** At or above this, the context meter warns (time to /compact or /clear). */
+export const CONTEXT_WARN = 80;
+
+/** The composer's context meter: its text and whether it warns; null when unknown. @param {number|null} pct */
+export function contextLabel(pct) {
+  if (pct == null) return null;
+  return { text: `context ${pct}%`, warn: pct >= CONTEXT_WARN };
 }

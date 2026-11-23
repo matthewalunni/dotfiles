@@ -41,6 +41,7 @@ export function parseBacklog(text) {
       source: typeof o.source === "string" && o.source ? o.source : "agent",
       from: typeof o.from === "string" && o.from ? o.from : null,
       createdAt: typeof o.createdAt === "number" && Number.isFinite(o.createdAt) ? o.createdAt : 0,
+      ...(typeof o.goal === "string" && o.goal ? { goal: o.goal } : {}),
     });
   }
   return out;
@@ -59,6 +60,7 @@ function toIssue(e, id, now) {
     discarded: false, discardedAt: null, dismissed: false,
     status: "idle", terminal: null, branch: null, cwd: e.repo, commitsAhead: null, pr: null, ghError: null,
     claims: [], prompt: null, holdingSince: null, observed: false, lastSeen: now,
+    ...(e.goal ? { goal: e.goal } : {}),
   };
 }
 

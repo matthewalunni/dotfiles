@@ -14,9 +14,12 @@ test("⌘⇧N is a global binding that opens deck-new, and nothing more specific
   }
 });
 
-test("main layout: only ⌥⌘1–3 and ⌘⇧J switch to the deck (no leftover ⌥⌘4)", () => {
+test("main layout: only ⌥⌘1–4 (one per Deck view) and ⌘⇧J switch to the deck", () => {
   const keys = JSON.parse(read("keys.json"));
-  assert.deepEqual(Object.keys(keys["layout:main"]).sort(), ["cmd-alt-1", "cmd-alt-2", "cmd-alt-3", "cmd-shift-j"]);
+  assert.deepEqual(Object.keys(keys["layout:main"]).sort(), ["cmd-alt-1", "cmd-alt-2", "cmd-alt-3", "cmd-alt-4", "cmd-shift-j"]);
+  // Numbered left to right, as the bar shows them: Terminal, Chat, Issues, Goals.
+  assert.deepEqual([1, 2, 3, 4].map((n) => keys["layout:deck"]["cmd-alt-" + n]),
+    ["deck.go:terminal", "deck.go:chat", "deck.go:issues", "deck.go:goals"]);
 });
 
 test("deck-new is an overlay mod that is never docked", () => {

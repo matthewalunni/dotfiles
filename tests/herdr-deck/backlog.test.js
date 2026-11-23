@@ -180,3 +180,13 @@ test("issueAt finds the agent started in a worktree", async () => {
   assert.equal(issueAt(issues, ""), null);
   assert.equal(issueAt(null, wt), null);
 });
+
+test("a backlog entry's goal reaches its card", () => {
+  const text = JSON.stringify({ id: "e1", title: "T", brief: "b", repo: "/r", goal: "G-3", createdAt: 5 }) + "\n"
+    + JSON.stringify({ id: "e2", title: "T2", brief: "b", repo: "/r", createdAt: 6 });
+  const entries = parseBacklog(text);
+  assert.equal(entries[0].goal, "G-3");
+  assert.equal(entries[1].goal, undefined);
+  const s = mergeBacklog(emptyStore(), entries, 10);
+  assert.deepEqual(s.issues.map((i) => i.goal ?? null), ["G-3", null]);
+});

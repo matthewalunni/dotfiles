@@ -6,11 +6,12 @@
 // Chat view } (host.busy, host.run(cx, fn, failTitle), host.canAnswer,
 // host.answer(option, cx)).
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, TextView } from "gpui-base";
 import { createRegistry, BLOCK_TYPES } from "../lib/chatregistry.js";
-import { clipDetail } from "../lib/chatview.js";
+import { clipDetail, plainHtml } from "../lib/chatview.js";
 import { button, dot } from "./ui.js";
 import { githubCard, deckCard } from "./chatcards.js";
+import { optionButton } from "./issues.js";
 
 const note = (k, text) => div().w_full().text_size(11).text_color(k.muted).child(text);
 
@@ -35,13 +36,16 @@ export function renderBlock(block, cx, ctx) {
   }
 }
 
-/** User: a bubble on the right. Agent: on the left, under a CHAT label. */
+/**
+ * User: a bubble on the right. Agent: on the left, under a CHAT label, as markdown.
+ * Both are selectable TextViews (plain div text cannot be selected or copied).
+ */
 function text(block, _cx, { k }) {
   if (block.role === "user") {
     return h_flex()
       .w_full()
       .justify_end()
-      .child(div().max_w(520).px(14).py(10).bg(k.raised).rounded(14).text_color(k.strong).line_height(1.5).child(block.text));
+      .child(div().max_w(520).px(14).py(10).bg(k.raised).rounded(14).text_color(k.strong).line_height(1.5).child(TextView.html(`chat-${block.id}`, plainHtml(block.text)).selectable(true)));
   }
   return v_flex()
     .w_full()
@@ -53,7 +57,7 @@ function text(block, _cx, { k }) {
         .child(dot(k.brand, 7, true))
         .child(div().font_weight(600).text_size(12).text_color(k.muted).child("Chat")),
     )
-    .child(div().w_full().text_color(k.text).line_height(1.6).child(block.text));
+    .child(div().w_full().text_color(k.text).line_height(1.6).child(TextView.markdown(`chat-${block.id}`, String(block.text ?? "")).selectable(true)));
 }
 
 /** What the agent did: check, verb, target, a muted detail (cut to ~120 characters). */
@@ -85,11 +89,41 @@ function divider(block, _cx, { k }) {
     .child(rule());
 }
 
+/** A question menu (AskUserQuestion): one button per option, keyed by its number. */
+function menu(block, k, host) {
+  const off = !host.canAnswer;
+  return v_flex()
+    .w_full()
+    .gap(10)
+    .p(14)
+    .bg(k.holdWash)
+    .rounded(12)
+    .when(Boolean(block.subtitle), (el) => el.child(div().text_size(11).text_color(k.muted).child(block.subtitle)))
+    .child(div().font_weight(600).text_color(k.strong).line_height(1.5).child(clipDetail(block.title, 400)))
+    .child(
+      v_flex()
+        .gap(6)
+        .children(
+          block.options.map((o, n) =>
+            optionButton(`chat-menu-${n}`, o.label, n === 0, (_e, cx) => host.answer(o, cx), off, o.keys?.[0] ?? null).w_full(),
+          ),
+        ),
+    )
+    .child(
+      h_flex()
+        .items_center()
+        .gap(8)
+        .child(div().flex_1().text_size(11).text_color(k.muted).child(host.focusedPane ? "off while the chat pane has the keyboard" : "To type an answer, open the terminal"))
+        .child(button("chat-menu-terminal", "Open terminal", "plain", (_e, cx) => host.openTerminal(cx))),
+    );
+}
+
 /**
- * The chat agent's pending permission prompt (lib/chatview.js approvalFrom).
- * Approve / Skip are off while the chat pane has the keyboard.
+ * The chat agent's pending prompt (lib/chatview.js approvalFrom): a permission
+ * prompt (Approve / Skip) or a question menu. Off while the chat pane has the keyboard.
  */
 function approval(block, _cx, { k, host }) {
+  if (block.menu) return menu(block, k, host);
   const off = !host.canAnswer;
   return v_flex()
     .w_full()

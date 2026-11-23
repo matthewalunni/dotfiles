@@ -35,4 +35,4 @@ Run it from inside the repo (a worktree is fine; it files against the main check
 herdr-backlog --title "Fix flaky login test" --brief "tests/login.test.js fails about 1 in 5 runs on the token refresh case because the clock is not mocked. Done when 50 consecutive runs pass. Attach the log of those runs as proof."
 ```
 
-Add `--repo /absolute/path` only if you are not inside the repo. Quote values; they are stored verbatim and never executed. It prints `Filed B-? <title>` (Deck assigns the number). A non-zero exit with a message means nothing was filed: fix the arguments and retry.
+Add `--repo /absolute/path` only if you are not inside the repo. Add `--goal G-n` when the task serves a goal Matt named (Deck's Goals view lists them); it stays on that goal once started. Quote values; they are stored verbatim and never executed. It prints `Filed B-? <title>` (Deck assigns the number). A non-zero exit with a message means nothing was filed: fix the arguments and retry.

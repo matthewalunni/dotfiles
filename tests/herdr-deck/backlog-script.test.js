@@ -144,3 +144,12 @@ test("Deck's login-shell call files hostile text verbatim and runs none of it", 
   assert.equal(e.title, title); assert.equal(e.brief, brief); assert.equal(e.source, "you");
   for (const f of ["pwned", "pwned2", "pwned3"]) assert.equal(existsSync(join(s.root, f)), false);
 });
+
+test("--goal is stored and survives parsing; a malformed goal is refused", () => {
+  const s = setup();
+  const r = run(s, ["--title", "Fix it", "--brief", "b", "--goal", "g-2"], s.repo);
+  assert.equal(r.status, 0, r.stderr);
+  const [e] = parseBacklog(readFileSync(s.inbox, "utf8"));
+  assert.equal(e.goal, "G-2");
+  assert.equal(run(s, ["--title", "x", "--brief", "b", "--goal", "two"], s.repo).status, 1);
+});
