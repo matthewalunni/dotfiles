@@ -26,6 +26,8 @@ tools=(
   unzip:unzip
   man:man-db
   col:util-linux:bsdextrautils   # cmd-help's man-page previews
+  cc:gcc                         # tree-sitter builds nvim-treesitter parsers with it
+  git:git                        # nvm install below
 )
 
 if   command -v pacman  >/dev/null; then mgr=pacman
@@ -73,8 +75,10 @@ fi
 # ---- Official release builds, for what the package manager can't give ------
 # Ubuntu/Debian don't package starship, lazygit or yazi (nor fastfetch before
 # Ubuntu 24.10 / Debian 13), and their fzf is too old for fzf-tab's menu in
-# ~/.config/zsh/completion.zsh (needs 0.58+ for change-nth). Put GitHub's release binaries in ~/.local/bin, which ~/.zshrc
-# puts ahead of /usr/bin. Arch gets everything from pacman, so this no-ops.
+# ~/.config/zsh/completion.zsh (needs 0.58+ for change-nth). Distro fastfetch,
+# neovim and tree-sitter are also often too old for the configs (minimums
+# below). Put GitHub's release binaries in ~/.local/bin, which ~/.zshrc puts
+# ahead of /usr/bin. Where the distro is new enough (Arch), these no-op.
 PATH="$HOME/.local/bin:$PATH"
 case $(uname -m) in
   x86_64) cpu=x86_64 ;; aarch64|arm64) cpu=aarch64 ;; armv7l|armv6l) cpu=arm ;; *) cpu= ;;
@@ -87,15 +91,26 @@ latest_tag() {  # owner/repo -> v1.2.3, via the redirect (no API rate limit)
   [ -n "$t" ] && [ "$t" != latest ] && echo "$t"
 }
 
-# release_install NAME URL MEMBER...: download a .tar.gz or .zip and put each
-# MEMBER (path inside the archive) into ~/.local/bin.
+# needs_release CMD MIN: true when CMD is missing or its version is below MIN.
+needs_release() {
+  local v
+  v=$("$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+  [ -z "$v" ] && return 0
+  [ "$(printf '%s\n' "$2" "$v" | sort -V | head -1)" != "$2" ] || return 1
+  echo "chezmoi: $1 $v is older than $2"
+}
+
+# release_install NAME URL MEMBER...: download a .tar.gz, .zip or single-file
+# .gz and put each MEMBER (path inside the archive) into ~/.local/bin. For a
+# single-file .gz the one MEMBER is just the name to give the binary.
 release_install() {
   local name=$1 url=$2; shift 2
   local tmp; tmp=$(mktemp -d)
   echo "chezmoi: installing $name from $url"
   if curl -fsSL -o "$tmp/a" "$url" && case $url in
-       *.zip) unzip -q -o "$tmp/a" -d "$tmp/x" ;;
-       *)     mkdir "$tmp/x" && tar -xzf "$tmp/a" -C "$tmp/x" ;;
+       *.zip)    unzip -q -o "$tmp/a" -d "$tmp/x" ;;
+       *.tar.gz) mkdir "$tmp/x" && tar -xzf "$tmp/a" -C "$tmp/x" ;;
+       *.gz)     mkdir "$tmp/x" && gunzip -c "$tmp/a" > "$tmp/x/$1" ;;
      esac; then
     mkdir -p "$HOME/.local/bin"
     local m
@@ -107,9 +122,9 @@ release_install() {
 }
 
 if [ -z "$cpu" ]; then
-  echo "chezmoi: no release builds for $(uname -m); install fzf/starship/lazygit/yazi/fastfetch by hand" >&2
+  echo "chezmoi: no release builds for $(uname -m); install fzf/starship/lazygit/yazi/fastfetch/nvim/tree-sitter by hand" >&2
 elif ! command -v curl >/dev/null; then
-  echo "chezmoi: curl missing; install fzf/starship/lazygit/yazi/fastfetch by hand" >&2
+  echo "chezmoi: curl missing; install fzf/starship/lazygit/yazi/fastfetch/nvim/tree-sitter by hand" >&2
 else
   fzf_min=0.58.0  # bump if completion.zsh starts needing newer
   fzf_ver=$(fzf --version 2>/dev/null | cut -d' ' -f1)
@@ -127,7 +142,9 @@ else
     case $cpu in x86_64) a=x86_64 ;; aarch64) a=arm64 ;; arm) a=armv6 ;; esac
     release_install lazygit "https://github.com/jesseduffield/lazygit/releases/download/$t/lazygit_${t#v}_linux_$a.tar.gz" lazygit
   fi
-  if ! command -v fastfetch >/dev/null && t=$(latest_tag fastfetch-cli/fastfetch); then
+  # 2.49+ for the display.duration/fraction keys in ~/.config/fastfetch/config.jsonc
+  # (Debian 13 ships 2.40, which rejects the whole config).
+  if needs_release fastfetch 2.49.0 && t=$(latest_tag fastfetch-cli/fastfetch); then
     # "polyfilled" builds run on older glibc too (Ubuntu 20.04/22.04).
     case $cpu in x86_64) d=fastfetch-linux-amd64-polyfilled ;; aarch64) d=fastfetch-linux-aarch64-polyfilled ;; arm) d=fastfetch-linux-armv7l ;; esac
     release_install fastfetch "https://github.com/fastfetch-cli/fastfetch/releases/download/$t/$d.tar.gz" "$d/usr/bin/fastfetch"
@@ -142,6 +159,50 @@ else
       echo "chezmoi: yazi needs unzip to install; install it by hand" >&2
     fi
   fi
+  # Neovim 0.12+: the nvim config's nvim-treesitter (main branch) requires it.
+  # The release is a whole tree (runtime files), so it lives in ~/.local/nvim
+  # with a symlink in ~/.local/bin.
+  if needs_release nvim 0.12.0 && t=$(latest_tag neovim/neovim); then
+    case $cpu in x86_64) a=x86_64 ;; aarch64) a=arm64 ;; *) a= ;; esac
+    if [ -z "$a" ]; then
+      echo "chezmoi: neovim has no 32-bit ARM build; install 0.12+ by hand" >&2
+    else
+      url="https://github.com/neovim/neovim/releases/download/$t/nvim-linux-$a.tar.gz"
+      tmp=$(mktemp -d)
+      echo "chezmoi: installing nvim from $url"
+      if curl -fsSL -o "$tmp/a" "$url" && mkdir "$tmp/x" && tar -xzf "$tmp/a" -C "$tmp/x" --strip-components=1; then
+        rm -rf "$HOME/.local/nvim" && mv "$tmp/x" "$HOME/.local/nvim" \
+          && mkdir -p "$HOME/.local/bin" && ln -sf "$HOME/.local/nvim/bin/nvim" "$HOME/.local/bin/nvim"
+      else
+        echo "chezmoi: couldn't install nvim; install it by hand" >&2
+      fi
+      rm -rf "$tmp"
+    fi
+  fi
+  # tree-sitter CLI 0.26.1+ builds the nvim-treesitter parsers (distros ship
+  # older; nvim-treesitter says not to use the npm one).
+  if needs_release tree-sitter 0.26.1 && t=$(latest_tag tree-sitter/tree-sitter); then
+    case $cpu in x86_64) a=x64 ;; aarch64) a=arm64 ;; arm) a=arm ;; esac
+    release_install tree-sitter "https://github.com/tree-sitter/tree-sitter/releases/download/$t/tree-sitter-linux-$a.gz" tree-sitter
+  fi
+fi
+
+# nvm + Node LTS. ~/.zshrc lazy-loads node/npm/npx through nvm from ~/.nvm, so
+# without it those commands fail even when a distro node is installed.
+export NVM_DIR="$HOME/.nvm"
+if [ ! -s "$NVM_DIR/nvm.sh" ] && command -v git >/dev/null; then
+  t=$(git ls-remote --tags --refs https://github.com/nvm-sh/nvm 'v*' 2>/dev/null | awk -F/ '{print $3}' | sort -V | tail -1)
+  if [ -n "$t" ]; then
+    echo "chezmoi: installing nvm $t into $NVM_DIR"
+    git -c advice.detachedHead=false clone -q --depth 1 --branch "$t" https://github.com/nvm-sh/nvm "$NVM_DIR" \
+      || echo "chezmoi: couldn't install nvm; see github.com/nvm-sh/nvm" >&2
+  fi
+fi
+if [ -s "$NVM_DIR/nvm.sh" ] && ! ls "$NVM_DIR"/versions/node/*/bin/node >/dev/null 2>&1; then
+  echo "chezmoi: installing Node LTS with nvm"
+  # nvm.sh isn't safe under `set -u`
+  ( set +u; . "$NVM_DIR/nvm.sh" && nvm install --lts --no-progress && nvm alias default 'lts/*' ) \
+    || echo "chezmoi: nvm couldn't install Node; run: nvm install --lts" >&2
 fi
 
 still=()
