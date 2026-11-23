@@ -362,7 +362,7 @@ config pointed at that agent's leased device, and starts the coding agent in it.
 ## Herdr Deck
 
 The deck lives in `dot_config/herdr-app/mods/deck`. Its views open at ⌥⌘1
-(Chat), ⌥⌘2 (Issues) and ⌥⌘3 (Terminal).
+(Terminal), ⌥⌘2 (Chat), ⌥⌘3 (Issues) and ⌥⌘4 (Goals).
 
 ### Chat
 

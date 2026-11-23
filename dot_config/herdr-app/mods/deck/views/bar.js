@@ -1,4 +1,4 @@
-// The top bar: brand, Chat / Issues / Terminal / Goals nav, the holding chip, "? keys"
+// The top bar: brand, Terminal / Chat / Issues / Goals nav, the holding chip, "? keys"
 // and the clock. The collector and the chat source run in this copy; main.js starts and stops them
 // (close() only reaches the root view). This copy also runs the keys.json
 // command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
@@ -19,9 +19,9 @@ import { backTarget } from "../lib/issuepage.js";
 const SANS = "SF Pro Text";
 const MONO = "JetBrains Mono";
 const NAV = [
-  { label: "Chat", key: "⌥⌘1", child: "deck-chat" },
-  { label: "Issues", key: "⌥⌘2", child: "deck-issues" },
-  { label: "Terminal", key: "⌥⌘3", child: "deck-terminal" },
+  { label: "Terminal", key: "⌥⌘1", child: "deck-terminal" },
+  { label: "Chat", key: "⌥⌘2", child: "deck-chat" },
+  { label: "Issues", key: "⌥⌘3", child: "deck-issues" },
   { label: "Goals", key: "⌥⌘4", child: "deck-goals" },
 ];
 // macOS draws the traffic lights over the bar's left edge.

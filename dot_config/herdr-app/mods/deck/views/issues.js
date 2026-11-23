@@ -808,7 +808,7 @@ export default class IssuesView extends View {
       .py(14)
       .gap(2)
       .overflow_y_scrollbar()
-      .child(this.sideItem("side-chat", null, "Chat", null, false, () => goTo("deck-chat"), "⌥⌘1"))
+      .child(this.sideItem("side-chat", null, "Chat", null, false, () => goTo("deck-chat"), "⌥⌘2"))
       .child(this.sideItem("side-issues", null, "Issues", issues.filter((i) => matchesView(i, null)).length, !this.filter, (_e, cx) => {
         this.filter = null;
         setShared(TAB_KEY, "overview");

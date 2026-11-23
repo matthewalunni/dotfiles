@@ -46,7 +46,7 @@ function pageOrder(current) {
   return shared(ISSUE_FROM_KEY) === "board" ? boardColumns(visible).flatMap((c) => c.items) : visible;
 }
 
-/** Gives the issue's terminal the keyboard (as ⌥⌘3 does), only while it is observed. */
+/** Gives the issue's terminal the keyboard (as ⌥⌘1 does), only while it is observed. */
 function typeInThread(issue) {
   if (issuePane(issue) !== "terminal") return;
   run("agent.focus", { terminal: issue.terminal });

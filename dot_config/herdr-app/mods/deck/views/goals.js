@@ -220,7 +220,7 @@ export default class GoalsView extends View {
         .child(sw(svg("mods/deck/icons/diamond.svg").w(10).h(10).text_color(k.text), "Time box ends"))
         .child(sw(div().w(18).h(10).rounded(5).bg(k.hold), "Waiting on you"))
         .child(div().flex_1())
-        .child(h_flex().gap(6).items_center().child(keyChip("⌥⌘1")).child("Ask Chat to make or link goals"));
+        .child(h_flex().gap(6).items_center().child(keyChip("⌥⌘2")).child("Ask Chat to make or link goals"));
     }
     const left = r.daysLeft > 0 ? `${r.daysLeft} day${r.daysLeft === 1 ? "" : "s"} left` : "time box spent";
     return base
