@@ -1,3 +1,12 @@
+# Load system-wide profile (snap, locale, etc.) before touching PATH: Debian's
+# /etc/profile overwrites PATH outright, which dropped ~/.local/bin and the
+# ~/.zshenv entries. Keep what was already on PATH (from ~/.zshenv) in front.
+_pre_profile_path=$PATH
+[[ -f /etc/profile ]] && source /etc/profile
+export PATH="$_pre_profile_path:$PATH"
+unset _pre_profile_path
+typeset -U path  # drop the duplicates that leaves
+
 [[ -d /snap/bin ]] && export PATH="/snap/bin:$PATH"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
@@ -6,8 +15,6 @@ command -v cargo &>/dev/null && export PATH="$HOME/.cargo/bin:$PATH"
 [[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
 [[ -d "$HOME/.local/share/bob/nvim-bin" ]] && export PATH="$HOME/.local/share/bob/nvim-bin:$PATH"
 
-# Load system-wide profile (snap, locale, etc.)
-[[ -f /etc/profile ]] && source /etc/profile
 # After /etc/profile: its path_helper reorders PATH and would bury Homebrew
 if [[ -x /opt/homebrew/bin/brew ]]; then
   # `brew shellenv` forks ruby (~0.1s); cache its output until brew itself changes.
