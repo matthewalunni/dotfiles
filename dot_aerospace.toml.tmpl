@@ -131,3 +131,10 @@ run = 'layout floating'
 [[on-window-detected]]
 if.app-id = 'com.apple.archiveutility'
 run = 'layout floating'
+
+# Chrome for Testing is what coding agents drive (it's a separate app from
+# everyday Chrome). Park its windows on workspace S, floating so tiling never
+# changes the page size an agent is testing at.
+[[on-window-detected]]
+if.app-id = 'com.google.chrome.for.testing'
+run = ['layout floating', 'move-node-to-workspace S']
