@@ -65,6 +65,21 @@ When a card is done with (its PR merged, or Matt asks you to dismiss, delete or 
 
 Never clean up a card Matt has not closed out, and never pass `--force` on your own judgment.
 
+## Goals
+
+Goals are what the cards add up to. Deck's Goals view (⌥⌘4) draws each one as a bar: its time box, filled by the share of its cards that landed. Deck works out each goal's status (On track, At risk, Stalled, Shaping, Out of time, Done) from that; never set it by hand. Goals are in `deck.goals` in the same `shared.json`.
+
+```sh
+herdr-board goal-new "Run the board from chat" --days 14 --project deck --done-when "file, start, answer and merge from chat"
+herdr-board goal TF-8 G-1        # put a card on a goal (it leaves any other goal)
+herdr-board goal TF-8 none       # take it off every goal
+```
+
+- `--days` is the time box (1 to 120); `--start YYYY-MM-DD` defaults to today; `--project` is the repo name the board shows.
+- Make a goal only when Matt asks for one. Ask him for the time box if he did not give one: it is a bet on how much time the goal is worth, not an estimate.
+- When Matt links work to a goal, or a card plainly belongs to one he named, link it. When you file a task for a goal, pass `--goal G-n` to `herdr-backlog`; it stays on the goal when started.
+- When Matt asks how his projects are doing, read `deck.goals` with the board: name the goals that are Stalled or At risk, and what each is waiting on.
+
 ## Tasks
 
 File new work with the `herdr-backlog` skill. Start a filed task (`herdr-board start B-n`) only when Matt asks you to; otherwise he starts it from Deck.
