@@ -185,6 +185,16 @@ test("roadmap: each goal lists its issues with a span from start to landing (or 
   assert.equal(t["D-1"].key, "k-D-1");
 });
 
+test("roadmap: the window shows at least last week and reaches back to when a goal's issues started", () => {
+  let g = make("New", { start: "2026-11-23" }).goals;
+  assert.ok(roadmap(g, [], NOW).from <= dayStart(NOW) - 7 * DAY, "a goal starting today still shows last week");
+  const early = card({ id: "D-1", createdAt: at(11, 4) });
+  g = syncGoals(linkCard(g, "G-1", early, NOW).goals, [early], NOW);
+  const m = roadmap(g, [early], NOW);
+  assert.equal(m.from, parseDay("2026-11-02"), "Monday on or before the issue's start");
+  assert.ok(m.groups[0].rows[0].tasks[0].startFrac < m.now - 0.2, "its span is visible, not clipped to Today");
+});
+
 test("roadmap: a landed issue whose card left the board still shows, without a key", () => {
   let g = make("A").goals;
   const c = card({ id: "D-9", stage: "landed", createdAt: at(11, 20), landedAt: at(11, 22) });

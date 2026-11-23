@@ -40,16 +40,23 @@ function backdrop(m, k) {
 function ruler(m, k) {
   const step = 1 / m.days;
   const cols = [];
+  const today = Math.floor(m.now * m.days);
   for (let i = 0; i < m.days; i++) {
     const d = day(m.from, i);
     const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const on = i === today;
     cols.push(
       v_flex()
         .absolute().top(0).bottom(0).left(pct(i * step)).w(pct(step))
-        .items_center().justify_center()
-        .text_size(10).text_color(weekend ? k.line : k.muted)
+        .items_center().justify_center().gap(1)
+        .text_size(10).text_color(on ? k.hold : weekend ? k.line : k.muted)
         .child(DOW[d.getDay()])
-        .child(div().text_size(11).child(String(d.getDate()))),
+        .child(
+          div().min_w(20).h(18).px(3).rounded(5).flex().items_center().justify_center()
+            .text_size(11)
+            .when(on, (el) => el.bg(k.hold).text_color(k.holdInk).font_weight(600))
+            .child(String(d.getDate())),
+        ),
     );
   }
   const first = day(m.from, 0), last = day(m.from, m.days - 1);
@@ -60,15 +67,7 @@ function ruler(m, k) {
     .border_b_1()
     .border_color(k.hair)
     .child(h_flex().flex_none().w(LEFT).h_full().px(18).items_center().text_size(12).text_color(k.muted).child(month))
-    .child(
-      div().flex_1().h_full().relative()
-        .children(cols)
-        .child(
-          div().absolute().top(9).left(pct(m.now)).ml(-22).w(44).h(22).rounded(6).bg(k.hold)
-            .flex().items_center().justify_center()
-            .text_size(11).font_weight(600).text_color(k.holdInk).child("Today"),
-        ),
-    );
+    .child(div().flex_1().h_full().relative().children(cols));
 }
 
 export default class GoalsView extends View {
@@ -83,7 +82,6 @@ export default class GoalsView extends View {
 
   /** One goal: the name column and its bar. */
   row(r, k, issues) {
-    const color = repoColor(r.project ?? "none", k.repo);
     const ink = tone(r.tone, k);
     const done = r.status === "Done";
     const span = Math.max(0.0001, r.endFrac - r.startFrac);
@@ -98,12 +96,13 @@ export default class GoalsView extends View {
       .child(div().flex_1().min_w(0).truncate().text_size(13).font_weight(500).text_color(k.strong).child(r.title))
       .child(div().flex_none().text_size(11).text_color(ink).child(r.status));
 
+    // Neutral bar, filled as tasks land: the project colour stays on its group's dot.
     const bar = div()
       .absolute().top(11).h(22)
       .left(pct(r.startFrac)).w(pct(span))
       .rounded(6).overflow_hidden()
-      .bg(color + "1f").border_1().border_color(color + (done ? "40" : "66"))
-      .child(div().absolute().top(0).bottom(0).left(0).w(pct(fill)).bg(color + (done ? "33" : "59")))
+      .bg(k.wash).border_1().border_color(r.tone === "fail" ? k.fail + "80" : k.line)
+      .child(div().absolute().top(0).bottom(0).left(0).w(pct(fill)).bg(k.ok + (done ? "33" : "59")))
       .children(
         r.landed.map((f) =>
           div().absolute().top(7).left(pct((f - r.startFrac) / span)).ml(-3).w(6).h(6).rounded(6).bg(done ? k.muted : k.strong),
@@ -160,7 +159,8 @@ export default class GoalsView extends View {
           .children(backdrop(this.model, k))
           .child(bar)
           .child(end)
-          .when(r.agents.length > 0, (el) => el.child(agents)),
+          // Folded, the agents show on the goal itself; open, each issue row shows its own.
+          .when(r.agents.length > 0 && this.collapsed.has(r.id), (el) => el.child(agents)),
       );
   }
 
@@ -170,7 +170,6 @@ export default class GoalsView extends View {
    * "not started" marker at Today for a backlog issue. Click: its issue page.
    */
   taskRow(t, r, m, k, issues) {
-    const color = repoColor(r.project ?? "none", k.repo);
     const pctFor = { backlog: 0, survey: 15, build: 50, verify: 75, holding: 100, landed: 100 };
     const ink = t.hold ? k.hold : t.landed ? k.ok : t.stage === "backlog" ? k.muted : k.work;
     const card = t.key ? issues.find((i) => i.key === t.key) : null;
@@ -190,7 +189,7 @@ export default class GoalsView extends View {
       : div()
           .absolute().top(12).h(8).rounded(8)
           .left(pct(t.startFrac)).w(pct(Math.max(0.004, t.endFrac - t.startFrac)))
-          .bg(t.hold ? k.hold : t.landed ? color + "4d" : color + "b3")
+          .bg(t.hold ? k.hold : t.landed ? k.ok + "66" : k.work + "99")
           .when(t.landed, (el) => el.child(div().absolute().right(-3).top(1).w(6).h(6).rounded(6).bg(k.strong)));
 
     return h_flex()

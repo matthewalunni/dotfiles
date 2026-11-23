@@ -239,7 +239,9 @@ const monday = (ms) => addDays(dayStart(ms), -((new Date(ms).getDay() + 6) % 7))
 export function roadmap(g, issues, now) {
   const all = g?.goals ?? [];
   const goals = all.filter((x) => x.end >= addDays(dayStart(now), -HIDE_AFTER_DAYS));
-  const from = monday(Math.max(addDays(dayStart(now), -MAX_WINDOW + 14), Math.min(dayStart(now), ...goals.map((x) => x.start))));
+  // At least last week, and back to when a shown goal or one of its issues started.
+  const starts = goals.flatMap((x) => [x.start, ...x.tasks.map((t) => t.startedAt).filter((s) => s != null)]);
+  const from = monday(Math.max(addDays(dayStart(now), -MAX_WINDOW + 14), Math.min(addDays(dayStart(now), -7), ...starts)));
   const last = Math.max(addDays(dayStart(now), 3), ...goals.map((x) => addDays(x.end, 3)));
   const days = Math.min(MAX_WINDOW, Math.max(MIN_WINDOW, Math.round((last - from) / DAY)));
   const span = addDays(from, days) - from;
