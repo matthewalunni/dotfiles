@@ -8,6 +8,7 @@ set -uo pipefail
 
 # command:package            (same package name on pacman, apt and dnf)
 # command:package:apt-name   (when Debian/Ubuntu name it differently)
+# command:package:apt-name:pacman-name  (when Arch differs; apt-name may be empty)
 tools=(
   zsh:zsh
   fastfetch:fastfetch
@@ -28,6 +29,7 @@ tools=(
   col:util-linux:bsdextrautils   # cmd-help's man-page previews
   cc:gcc                         # tree-sitter builds nvim-treesitter parsers with it
   git:git                        # nvm install below
+  gh:gh::github-cli              # .gitconfig's GitHub credential helper
 )
 
 if   command -v pacman  >/dev/null; then mgr=pacman
@@ -43,9 +45,13 @@ have() {
 
 missing=()
 for t in "${tools[@]}"; do
-  IFS=: read -r cmd pkg apt <<<"$t"
+  IFS=: read -r cmd pkg apt pac <<<"$t"
   have "$cmd" && continue
-  if [ "$mgr" = apt ]; then missing+=("${apt:-$pkg}"); else missing+=("$pkg"); fi
+  case $mgr in
+    apt)    missing+=("${apt:-$pkg}") ;;
+    pacman) missing+=("${pac:-$pkg}") ;;
+    *)      missing+=("$pkg") ;;
+  esac
 done
 pkg_install() {
   case $mgr in
