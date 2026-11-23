@@ -134,6 +134,15 @@ class ObsCtlTest(unittest.TestCase):
         self.assertIsNone(self.hook("Stop", session="s2"))
         self.assertFalse(self.obs.paused)
 
+    def test_only_an_obs_ctl_start_command_claims(self):
+        self.start()
+        for cmd in ("grep obs-ctl README.md && echo start", "obs-ctl status", "cat start.txt"):
+            self.assertIsNone(self.hook("PostToolUse", session="s2", tool_name="Bash",
+                                        tool_input={"command": cmd}), cmd)
+        self.assertEqual(self.hook("PostToolUse", session="s1", tool_name="Bash",
+                                   tool_input={"command": "~/.local/bin/obs-ctl start --title x"}),
+                         "claimed")
+
     def test_waiting_pauses_and_working_resumes(self):
         self.start()
         self.claim()
