@@ -133,6 +133,7 @@ export function planOp(op, issues, chat) {
   }
   if (op.op === "goal") {
     if (!op.goal || !op.goal.trim()) return { error: "goal needs a goal: a G-n, or none" };
+    if (issue.discarded && op.goal.trim().toLowerCase() !== "none") return { error: `${issue.id} is discarded: restore it first` };
     return { issue, goal: op.goal.trim() };
   }
   return { issue };

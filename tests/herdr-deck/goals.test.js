@@ -102,6 +102,26 @@ test("syncGoals: adds backlog cards filed with a goal, once", () => {
   assert.equal(syncGoals(g, [b], NOW), g);
 });
 
+test("syncGoals: a --goal backlog card taken off its goal stays off", () => {
+  const b = { key: "backlog|e2", id: "B-2", title: "filed", kind: "backlog", goal: "G-1", createdAt: at(11, 21) };
+  let g = syncGoals(make("A").goals, [b], NOW);
+  g = linkCard(g, "none", b, NOW).goals;
+  assert.equal(syncGoals(g, [b], NOW).goals[0].tasks.length, 0);
+});
+
+test("syncGoals: a card that leaves the board without landing leaves its goal; a started backlog card waits", () => {
+  let g = make("A").goals;
+  const gone = card({ id: "D-1" });
+  const disc = { key: "backlog|e3", id: "B-3", title: "d", kind: "backlog" };
+  const started = { key: "backlog|e4", id: "B-4", title: "s", kind: "backlog" };
+  const landed = card({ id: "D-2", stage: "landed", landedAt: at(11, 22) });
+  for (const c of [gone, disc, started, landed]) g = linkCard(g, "G-1", c, NOW).goals;
+  g = syncGoals(g, [landed, { ...disc, discarded: true }], NOW, { e4: { state: "started", at: NOW } });
+  assert.deepEqual(g.goals[0].tasks.map((t) => t.id), ["B-4", "D-2"]);
+  g = syncGoals(g, [], NOW + 30 * DAY, { e4: { state: "started", at: NOW } });
+  assert.deepEqual(g.goals[0].tasks.map((t) => t.id), ["B-4", "D-2"], "landed stays; started waits for its agent");
+});
+
 const goalWith = (tasks, o = {}) => ({ id: "G-1", title: "A", project: null, start: dayStart(at(11, 13)), end: dayStart(at(11, 13)) + 14 * DAY, doneWhen: "", createdAt: at(11, 13), tasks, ...o });
 const task = (o) => ({ ref: "r", id: "X", title: "x", addedAt: at(11, 13), startedAt: at(11, 21), landedAt: null, ...o });
 const live = [{ stage: "build" }];
@@ -112,6 +132,8 @@ test("goalStatus follows the spec's table", () => {
   assert.equal(goalStatus(goalWith([task({ startedAt: at(11, 14) })]), [], NOW).status, "Stalled");
   assert.equal(goalStatus(goalWith([task({})]), [], NOW).status, "Shaping", "recent start: not stalled");
   assert.equal(goalStatus(goalWith([]), [], NOW).status, "Shaping", "no tasks");
+  const fresh = goalWith([task({ startedAt: null, addedAt: NOW })], { createdAt: NOW, start: dayStart(NOW) });
+  assert.equal(goalStatus(fresh, [], NOW).status, "Shaping", "a new goal of backlog cards is not stalled");
   const half = [task({ landedAt: at(11, 22) }), task({}), task({}), task({})];
   assert.equal(goalStatus(goalWith(half), live, NOW).status, "At risk", "71% used, 25% landed");
   const most = [task({ landedAt: at(11, 22) }), task({ landedAt: at(11, 21) }), task({})];
@@ -142,4 +164,16 @@ test("roadmap: grouped by project, fractions in range, live agents, empty goals"
   const empty = m.groups[0].rows[1];
   assert.equal(empty.total, 0);
   assert.equal(empty.status, "Shaping");
+});
+
+test("roadmap: goals that ended over two weeks ago are hidden and don't stretch the window", () => {
+  let g = make("Old", { start: "2025-11-03", days: 10 }).goals;
+  g = make("Now", { start: "2026-11-16" }, g).goals;
+  const m = roadmap(g, [], NOW);
+  assert.deepEqual(m.groups.flatMap((x) => x.rows.map((r) => r.id)), ["G-2"]);
+  assert.equal(m.hidden, 1);
+  assert.equal(m.from, parseDay("2026-11-16"));
+  assert.ok(m.days <= 91);
+  const far = make("Far", { start: "2027-06-01", days: 60 }, g).goals;
+  assert.ok(roadmap(far, [], NOW).days <= 91, "window is capped");
 });

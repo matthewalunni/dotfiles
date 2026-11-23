@@ -115,4 +115,7 @@ test("planOp: goal-new needs no card; goal needs a card and a goal; chat only", 
   assert.deepEqual(planOp(op({ op: "goal", ref: "tf-8", goal: "G-1" }), issues, "t22"), { issue: issues[0], goal: "G-1" });
   assert.match(planOp(op({ op: "goal", ref: "TF-8" }), issues, "t22").error, /goal needs a goal/);
   assert.match(planOp(op({ op: "goal", ref: "TF-1", goal: "G-1" }), issues, "t22").error, /no card TF-1/);
+  const disc = [{ key: "backlog|e", id: "B-3", kind: "backlog", discarded: true }];
+  assert.match(planOp(op({ op: "goal", ref: "B-3", goal: "G-1" }), disc, "t22").error, /discarded/);
+  assert.equal(planOp(op({ op: "goal", ref: "B-3", goal: "none" }), disc, "t22").goal, "none");
 });

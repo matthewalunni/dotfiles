@@ -192,7 +192,8 @@ export default class GoalsView extends View {
     const header = h_flex()
       .flex_none().h(46).px(18).gap(10).items_center().border_b_1().border_color(k.hair)
       .child(div().text_size(14).font_weight(600).text_color(k.strong).child("Goals"))
-      .child(div().text_size(12).text_color(k.muted).child(rows.length ? `${rows.length} goal${rows.length === 1 ? "" : "s"} · ${landed} of ${total} tasks landed` : ""));
+      .child(div().text_size(12).text_color(k.muted).child(rows.length ? `${rows.length} goal${rows.length === 1 ? "" : "s"} · ${landed} of ${total} tasks landed` : ""))
+      .when(m.hidden > 0, (el) => el.child(div().text_size(12).text_color(k.muted).child(`· ${m.hidden} ended over two weeks ago`)));
 
     if (!rows.length) {
       return v_flex().size_full().bg(k.bg).child(header).child(

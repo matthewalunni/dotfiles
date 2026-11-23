@@ -13,6 +13,9 @@ const STALL_MS = 3 * DAY;
 /** Time box used minus share landed above this: At risk. */
 const RISK_GAP = 0.2;
 const MIN_WINDOW = 28;
+const MAX_WINDOW = 91;
+/** A goal that ended this many days ago leaves the roadmap. */
+const HIDE_AFTER_DAYS = 14;
 
 /** @typedef {{ ref: string, id: string, title: string, addedAt: number, startedAt: number|null, landedAt: number|null }} Task */
 /** @typedef {{ id: string, title: string, project: string|null, start: number, end: number, doneWhen: string, createdAt: number, tasks: Task[] }} Goal */
@@ -131,19 +134,30 @@ const atPath = (i, path) => !isBacklog(i) && (i.root === path || (typeof i.cwd =
 /**
  * Brings goals up to date with the board: a `path:` task becomes the card of
  * the agent working there; id, title and start follow the card; landing is
- * recorded once (and kept after the card leaves the board); backlog cards
- * filed with a goal join it. Returns `g` itself when nothing changed.
- * @param {Goals} g @param {any[]} issues @param {number} now @returns {Goals}
+ * recorded once (and kept after the card leaves the board); a card that
+ * leaves without landing (deleted, discarded, its session over) leaves the
+ * goal, except a backlog card that was started (`tombs`: store.backlogTombs),
+ * which waits for its agent; backlog cards filed with a goal join it once
+ * (`joined`), so taking one off sticks. Returns `g` itself when nothing changed.
+ * @param {Goals} g @param {any[]} issues @param {number} now
+ * @param {Record<string, {state: string}>} [tombs] @returns {Goals}
  */
-export function syncGoals(g, issues, now) {
+export function syncGoals(g, issues, now, tombs = {}) {
   const list = issues ?? [];
   const byKey = new Map(list.map((i) => [i.key, i]));
   const linked = new Set((g?.goals ?? []).flatMap((x) => x.tasks.map((t) => t.ref)));
+  const joined = new Set(g?.joined ?? []);
+  const startedBacklog = (ref) => ref.startsWith("backlog|") && tombs?.[ref.slice(8)]?.state === "started";
   let changed = false;
   const goals = (g?.goals ?? []).map((goal) => {
-    let tasks = goal.tasks.map((t) => {
+    let tasks = goal.tasks.flatMap((t) => {
       const issue = t.ref.startsWith("path:") ? list.find((i) => atPath(i, t.ref.slice(5))) : byKey.get(t.ref);
-      if (!issue) return t;
+      const gone = !issue || (isBacklog(issue) && issue.discarded);
+      if (gone && t.landedAt == null && !t.ref.startsWith("path:") && !startedBacklog(t.ref)) {
+        changed = true;
+        return [];
+      }
+      if (!issue) return [t];
       const next = {
         ...t, ref: issue.key, id: issue.id ?? t.id, title: issue.title ?? t.title,
         startedAt: t.startedAt ?? (isBacklog(issue) ? null : issue.createdAt ?? null),
@@ -151,18 +165,20 @@ export function syncGoals(g, issues, now) {
       };
       const same = Object.keys(next).every((k) => next[k] === t[k]);
       if (!same) changed = true;
-      return same ? t : next;
+      return [same ? t : next];
     });
     for (const i of list) {
-      if (!isBacklog(i) || i.discarded || linked.has(i.key) || !i.goal) continue;
+      if (!isBacklog(i) || i.discarded || linked.has(i.key) || joined.has(i.key) || !i.goal) continue;
       if (String(i.goal).trim().toUpperCase() !== goal.id.toUpperCase()) continue;
       tasks = [...tasks, taskFor(i, now)];
       linked.add(i.key);
+      joined.add(i.key);
       changed = true;
     }
-    return tasks === goal.tasks ? goal : { ...goal, tasks };
+    const same = tasks.length === goal.tasks.length && tasks.every((t, n) => t === goal.tasks[n]);
+    return same ? goal : { ...goal, tasks };
   });
-  return changed ? { ...g, goals } : g;
+  return changed ? { ...g, goals, joined: [...joined] } : g;
 }
 
 /**
@@ -176,7 +192,8 @@ export function goalStatus(goal, live, now) {
   const done = goal.tasks.filter((t) => t.landedAt != null).length;
   if (total > 0 && done === total) return { status: "Done", tone: "muted" };
   if (now > goal.end) return { status: "Out of time", tone: "fail" };
-  const last = Math.max(0, ...goal.tasks.flatMap((t) => [t.startedAt ?? 0, t.landedAt ?? 0]));
+  // The clock starts with the goal itself: a new goal of backlog cards is not stalled.
+  const last = Math.max(goal.createdAt ?? 0, goal.start, ...goal.tasks.flatMap((t) => [t.addedAt ?? 0, t.startedAt ?? 0, t.landedAt ?? 0]));
   if (total > 0 && !(live ?? []).length && now - last >= STALL_MS) return { status: "Stalled", tone: "fail" };
   if (done === 0) return { status: "Shaping", tone: "work" };
   if (usedOf(goal, now) - done / total > RISK_GAP) return { status: "At risk", tone: "hold" };
@@ -190,17 +207,19 @@ const usedOf = (goal, now) => clamp01((now - goal.start) / Math.max(1, goal.end 
 const monday = (ms) => addDays(dayStart(ms), -((new Date(ms).getDay() + 6) % 7));
 
 /**
- * The Gantt model: a window of whole days from the Monday on or before the
- * earliest goal start (or today), at least four weeks and through every end
- * plus three days; rows grouped by project (project order), each with its bar
- * and dots as fractions of the window.
+ * The Gantt model: goals that ended more than two weeks ago are left out
+ * (`hidden` counts them); a window of whole days from the Monday on or before
+ * the earliest shown start (or today), at least four weeks, through every end
+ * plus three days, at most 13 weeks; rows grouped by project (project order),
+ * each with its bar and dots as fractions of the window.
  * @param {Goals} g @param {any[]} issues @param {number} now
  */
 export function roadmap(g, issues, now) {
-  const goals = g?.goals ?? [];
-  const from = monday(Math.min(dayStart(now), ...goals.map((x) => x.start)));
+  const all = g?.goals ?? [];
+  const goals = all.filter((x) => x.end >= addDays(dayStart(now), -HIDE_AFTER_DAYS));
+  const from = monday(Math.max(addDays(dayStart(now), -MAX_WINDOW + 14), Math.min(dayStart(now), ...goals.map((x) => x.start))));
   const last = Math.max(addDays(dayStart(now), 3), ...goals.map((x) => addDays(x.end, 3)));
-  const days = Math.max(MIN_WINDOW, Math.round((last - from) / DAY));
+  const days = Math.min(MAX_WINDOW, Math.max(MIN_WINDOW, Math.round((last - from) / DAY)));
   const span = addDays(from, days) - from;
   const frac = (ms) => clamp01((ms - from) / span);
   const byKey = new Map((issues ?? []).map((i) => [i.key, i]));
@@ -221,6 +240,6 @@ export function roadmap(g, issues, now) {
   });
   const projects = [...new Set(rows.map((r) => r.project))].sort(projectOrder);
   const groups = projects.map((project) => ({ project, rows: rows.filter((r) => r.project === project) }));
-  return { from, days, now: frac(now), groups };
+  return { from, days, now: frac(now), groups, hidden: all.length - goals.length };
 }
 

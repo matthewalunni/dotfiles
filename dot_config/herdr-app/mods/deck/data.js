@@ -308,7 +308,7 @@ async function cycle(id) {
     memo.clear();
     lastWrite = now;
   }
-  syncGoalsNow(next.issues, now);
+  syncGoalsNow(next, now);
 }
 
 // ---------------------------------------------------------------- goals
@@ -318,10 +318,10 @@ export function currentGoals() {
   return asGoals(shared(GOALS_KEY));
 }
 
-/** Goals brought up to date with the board (landings, started backlog cards); written only when changed. */
-function syncGoalsNow(issues, now) {
+/** Goals brought up to date with the board (landings, started backlog cards); written only when changed. @param {Store} store */
+function syncGoalsNow(store, now) {
   const g = currentGoals();
-  const next = syncGoals(g, issues, now);
+  const next = syncGoals(g, store.issues, now, store.backlogTombs ?? {});
   if (next !== g) setShared(GOALS_KEY, next);
 }
 
