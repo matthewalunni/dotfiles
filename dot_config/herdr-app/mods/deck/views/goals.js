@@ -5,7 +5,7 @@
 // (herdr-board goal-new / goal); this view only shows them.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { roadmap, shortDay } from "../lib/goals.js";
+import { roadmap, shortDay, MONTHS } from "../lib/goals.js";
 import { repoColor } from "../lib/board.js";
 import { currentStore, currentGoals } from "../data.js";
 import { tokens, tone, ring, keyChip, MONO } from "./ui.js";
@@ -52,7 +52,8 @@ function ruler(m, k) {
         .child(div().text_size(11).child(String(d.getDate()))),
     );
   }
-  const month = day(m.from, 0).toLocaleDateString("en-US", { month: "long" });
+  const first = day(m.from, 0), last = day(m.from, m.days - 1);
+  const month = MONTHS[first.getMonth()] + (last.getMonth() !== first.getMonth() ? " – " + MONTHS[last.getMonth()] : "");
   return h_flex()
     .flex_none()
     .h(RULER)

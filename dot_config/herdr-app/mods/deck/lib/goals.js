@@ -49,9 +49,13 @@ export function parseDay(s) {
   return t.getFullYear() === y && t.getMonth() === mo && t.getDate() === d ? t.getTime() : null;
 }
 
+// Herdr's JS runtime ignores toLocaleDateString options: names by hand.
+export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 /** "Nov 23" for a day. @param {number} ms */
 export function shortDay(ms) {
-  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const d = new Date(ms);
+  return MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate();
 }
 
 /**

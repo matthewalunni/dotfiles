@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  emptyGoals, dayStart, parseDay, newGoal, findGoal, linkCard, linkStarted, syncGoals, goalStatus, roadmap,
+  emptyGoals, dayStart, parseDay, shortDay, newGoal, findGoal, linkCard, linkStarted, syncGoals, goalStatus, roadmap,
 } from "../../dot_config/herdr-app/mods/deck/lib/goals.js";
 
 const DAY = 86_400_000;
@@ -10,6 +10,11 @@ const NOW = at(11, 23, 15); // a Monday
 
 const card = (o) => ({ key: "k-" + o.id, id: o.id, title: "t " + o.id, stage: "build", observed: true, createdAt: at(11, 20), landedAt: null, ...o });
 const make = (title, opts = {}, g = emptyGoals(), now = NOW) => newGoal(g, { title, days: 14, ...opts }, now);
+
+test("shortDay names the month by hand (herdr's runtime ignores locale options)", () => {
+  assert.equal(shortDay(at(11, 23)), "Nov 23");
+  assert.equal(shortDay(at(1, 5)), "Jan 5");
+});
 
 test("dayStart and parseDay are local midnights; bad dates are null", () => {
   assert.equal(dayStart(NOW), new Date(2026, 10, 23).getTime());
