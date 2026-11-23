@@ -31,6 +31,10 @@ test("takesFocus: a new, recent show request for it counts once", () => {
 test("shownChild: the issue page is a Deck view", () => {
   assert.equal(shownChild("deck", "deck-issue"), "deck-issue");
 });
+test("Goals is a Deck view and a nav item", () => {
+  assert.equal(shownChild("deck", "deck-goals"), "deck-goals");
+  assert.equal(navChild("deck-goals"), "deck-goals");
+});
 test("navChild: the issue page underlines Issues", () => {
   assert.equal(navChild("deck-issue"), "deck-issues");
   assert.equal(navChild("deck-issues"), "deck-issues");

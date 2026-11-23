@@ -20,6 +20,7 @@ import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
 import { CLOSED_LOG, expandHome } from "./lib/chatpaths.js";
 import { closedRecord, appendExec, noteDue } from "./lib/chatarchive.js";
 import { createSharedMemo } from "./lib/sharedmemo.js";
+import { GOALS_KEY, asGoals, newGoal, linkCard, linkStarted, syncGoals, shortDay } from "./lib/goals.js";
 
 /** @typedef {import("./lib/store.js").Issue} Issue */
 /** @typedef {import("./lib/store.js").Store} Store */
@@ -307,6 +308,21 @@ async function cycle(id) {
     memo.clear();
     lastWrite = now;
   }
+  syncGoalsNow(next.issues, now);
+}
+
+// ---------------------------------------------------------------- goals
+
+/** The goals (lib/goals.js); Deck is their only writer. */
+export function currentGoals() {
+  return asGoals(shared(GOALS_KEY));
+}
+
+/** Goals brought up to date with the board (landings, started backlog cards); written only when changed. */
+function syncGoalsNow(issues, now) {
+  const g = currentGoals();
+  const next = syncGoals(g, issues, now);
+  if (next !== g) setShared(GOALS_KEY, next);
 }
 
 /**
@@ -810,6 +826,12 @@ export async function startBacklog(entry) {
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
       done: () => save(markStarted(currentStore(), it.key, Date.now())),
     });
+    // A backlog card on a goal stays on it: its agent's card takes its place (syncGoals).
+    if (r.ok && r.plan?.path) {
+      const g = currentGoals();
+      const next = linkStarted(g, it.key, r.plan.path);
+      if (next !== g) setShared(GOALS_KEY, next);
+    }
     return { ok: r.ok, error: r.error, path: r.plan?.path ?? null };
   } finally {
     starting.delete(it.key);
@@ -965,6 +987,18 @@ async function applyBoardOp(op, chat) {
   if (plan.error) return { ok: false, message: plan.error };
   const it = plan.issue;
   const ok = (message) => ({ ok: true, message });
+  if (op.op === "goal-new") {
+    const r = newGoal(currentGoals(), plan.goalNew, Date.now());
+    if ("error" in r) return { ok: false, message: r.error };
+    setShared(GOALS_KEY, r.goals);
+    return ok(`${r.goal.id} "${r.goal.title}" created: ${shortDay(r.goal.start)} → ${shortDay(r.goal.end)}`);
+  }
+  if (op.op === "goal") {
+    const r = linkCard(currentGoals(), plan.goal, it, Date.now());
+    if ("error" in r) return { ok: false, message: r.error };
+    setShared(GOALS_KEY, r.goals);
+    return ok(r.goal ? `${it.id} is on ${r.goal.id} "${r.goal.title}"` : `${it.id} is on no goal`);
+  }
   switch (op.op) {
     case "move":
       moveCard(it, plan.column, "chat");

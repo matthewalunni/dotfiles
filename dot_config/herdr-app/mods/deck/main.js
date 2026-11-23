@@ -19,9 +19,10 @@ import Machines from "./views/machines.js";
 import TermHints from "./views/termhints.js";
 import Keys from "./views/keys.js";
 import IssuePage, { ThreadView, GoneView, IssueHints } from "./views/issuepage.js";
+import Goals from "./views/goals.js";
 
 const VIEWS = {
-  bar: Bar, chat: Chat, issues: Issues, confirm: Confirm, startconfirm: StartConfirm, remove: Remove, newtask: NewTask, review: Review,
+  bar: Bar, chat: Chat, issues: Issues, goals: Goals, confirm: Confirm, startconfirm: StartConfirm, remove: Remove, newtask: NewTask, review: Review,
   machines: Machines, termhints: TermHints, keys: Keys,
   issue: IssuePage, thread: ThreadView, issuegone: GoneView, issuehints: IssueHints,
 };

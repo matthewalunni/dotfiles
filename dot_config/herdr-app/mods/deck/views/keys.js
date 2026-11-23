@@ -8,7 +8,7 @@ import { BARLOW, MONO, tokens, spaced, SANS } from "./ui.js";
 
 const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
-    ["⌥⌘1", "Chat"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"],
+    ["⌥⌘1", "Chat"], ["⌥⌘2", "Issues"], ["⌥⌘3", "Terminal"], ["⌥⌘4", "Goals"],
     ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"], ["⌘esc", "Back from an issue (also from its thread)"],
     ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
   ] },
