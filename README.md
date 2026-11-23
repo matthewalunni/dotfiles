@@ -105,8 +105,9 @@ You usually don't need to rerun it: `chezmoi apply` keeps tools in step by
 itself. On macOS it runs `brew bundle` whenever the `Brewfile` changes. On
 Linux (pacman, apt or dnf) it installs any missing CLI tools this repo uses
 (ripgrep, jq, fd, bat, fzf, zoxide, ...), fetches official release builds into
-`~/.local/bin` for what the distro lacks (starship, lazygit, yazi, fastfetch,
-and fzf when the packaged one is older than 0.58), and makes zsh the login
+`~/.local/bin` for what the distro lacks or ships too old (starship, lazygit,
+yazi; fzf < 0.58, fastfetch < 2.49, Neovim < 0.12, tree-sitter CLI < 0.26.1),
+installs nvm into `~/.nvm` with the current Node LTS, and makes zsh the login
 shell. Add a tool to the `Brewfile` or to the list in
 `run_onchange_before_10-install-packages-linux.sh.tmpl`.
 
