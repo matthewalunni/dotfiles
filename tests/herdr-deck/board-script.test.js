@@ -71,6 +71,26 @@ test("bad arguments exit 1 and queue nothing", () => {
   assert.equal(existsSync(s.ops), false);
 });
 
+test("goal-new and goal carry their fields; bad ones are refused before queuing", async () => {
+  const s = setup();
+  let seen;
+  const r = await runAnswered(s, ["goal-new", "Ship chat", "--days", "14", "--project", "deck", "--start", "2026-11-23", "--done-when", "all from chat"],
+    (op) => ((seen = op), { ok: true, message: "G-1 created" }));
+  assert.equal(r.code, 0, r.err);
+  assert.equal(seen.op, "goal-new"); assert.equal(seen.ref, "Ship chat"); assert.equal(seen.days, 14);
+  assert.equal(seen.project, "deck"); assert.equal(seen.start, "2026-11-23"); assert.equal(seen.doneWhen, "all from chat");
+  const s2 = setup();
+  const r2 = await runAnswered(s2, ["goal", "TF-8", "G-1"], (op) => ((seen = op), { ok: true, message: "linked" }));
+  assert.equal(r2.code, 0, r2.err);
+  assert.equal(seen.goal, "G-1");
+  for (const bad of [["goal-new", "X"], ["goal-new", "X", "--days", "0"], ["goal-new", "X", "--days", "abc"], ["goal-new", "X", "--days", "3", "--start", "soon"], ["goal", "TF-8"], ["goal", "TF-8", "G-1", "x"]]) {
+    const s3 = setup();
+    const r3 = runSync(s3, bad);
+    assert.equal(r3.status, 1, bad.join(" "));
+    assert.equal(existsSync(s3.ops), false, bad.join(" ") + " queued nothing");
+  }
+});
+
 // ---- cleanup: a real repo with a linked worktree, fake hc / herdr-app on PATH that log their calls.
 import { execFileSync } from "node:child_process";
 import { writeFileSync, chmodSync } from "node:fs";

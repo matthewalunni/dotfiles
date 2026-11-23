@@ -11,12 +11,16 @@ export const BOARD_RESULTS = "~/.local/state/herdr-deck/board-results.jsonl";
 /** A request older than this is never applied (the deck was closed when it was made). */
 export const OP_MAX_AGE = 10 * 60 * 1000;
 
-export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start"];
+export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "goal-new", "goal"];
 /** Ops on agent cards, and on backlog cards. */
 const ISSUE_OPS = new Set(["move", "dismiss", "delete"]);
 const BACKLOG_OPS = new Set(["discard", "restore", "start"]);
 
-/** @typedef {{ id: string, t: number, op: string, ref: string, from: string|null, column?: string, title?: string, brief?: string }} BoardOp */
+/**
+ * goal-new: `ref` is the new goal's title. goal: `ref` is the card, `goal` a G-n or "none".
+ * @typedef {{ id: string, t: number, op: string, ref: string, from: string|null, column?: string, title?: string, brief?: string,
+ *   goal?: string, project?: string, start?: string, doneWhen?: string, days?: number }} BoardOp
+ */
 
 /**
  * The well-formed requests in `text` (JSON lines), first of a duplicate id
@@ -40,6 +44,8 @@ export function parseOps(text) {
     if (typeof o.column === "string") op.column = o.column;
     if (typeof o.title === "string") op.title = o.title;
     if (typeof o.brief === "string") op.brief = o.brief;
+    for (const k of ["goal", "project", "start", "doneWhen"]) if (typeof o[k] === "string") op[k] = o[k];
+    if (typeof o.days === "number" && Number.isFinite(o.days)) op.days = o.days;
     out.push(op);
   }
   return out;
@@ -99,6 +105,10 @@ const COLUMN_NAMES = () => PIN_COLUMNS.map((c) => String(STAGE_LABEL[c] ?? c).to
  */
 export function planOp(op, issues, chat) {
   if (!chat || op.from !== chat) return { error: "only the deck chat agent can change the board" };
+  // Goal values (days, start) are checked where the goal is made (lib/goals.js newGoal).
+  if (op.op === "goal-new") {
+    return { goalNew: { title: op.ref, days: op.days, project: op.project ?? null, start: op.start ?? null, doneWhen: op.doneWhen ?? null } };
+  }
   const issue = resolveRef(issues, op.ref);
   if (!issue) return { error: `no card ${op.ref} on the board` };
   const backlog = issue.kind === "backlog";
@@ -120,6 +130,10 @@ export function planOp(op, issues, chat) {
     if (typeof op.brief === "string") edit.brief = op.brief;
     if (!("title" in edit) && !("brief" in edit)) return { error: "edit needs --title or --brief" };
     return { issue, edit };
+  }
+  if (op.op === "goal") {
+    if (!op.goal || !op.goal.trim()) return { error: "goal needs a goal: a G-n, or none" };
+    return { issue, goal: op.goal.trim() };
   }
   return { issue };
 }

@@ -93,3 +93,26 @@ test("planOp: move needs a real column; edit needs a non-empty title or a brief"
 test("resultLine: one JSON line the CLI can match by id", () => {
   assert.deepEqual(JSON.parse(resultLine("x", false, "nope", 5)), { id: "x", ok: false, message: "nope", t: 5 });
 });
+
+test("parseOps: goal requests keep their goal, project, start, done-when and days", () => {
+  const ops = parseOps([
+    line({ id: "g1", op: "goal-new", ref: "Ship chat", days: 14, project: "deck", start: "2026-11-23", doneWhen: "all from chat" }),
+    line({ id: "g2", op: "goal", ref: "TF-8", goal: "G-1" }),
+    line({ id: "g3", op: "goal-new", ref: "x", days: "14" }), // days must be a number: the field is dropped, not the request
+  ].join("\n"));
+  assert.deepEqual(ops.map((o) => o.id), ["g1", "g2", "g3"]);
+  assert.deepEqual(ops[0], { id: "g1", t: 1000, op: "goal-new", ref: "Ship chat", from: "t22", days: 14, project: "deck", start: "2026-11-23", doneWhen: "all from chat" });
+  assert.equal(ops[1].goal, "G-1");
+  assert.equal(ops[2].days, undefined);
+});
+
+test("planOp: goal-new needs no card; goal needs a card and a goal; chat only", () => {
+  const issues = [{ key: "k1", id: "TF-8" }];
+  const op = (o) => ({ id: "x", t: 1, from: "t22", ...o });
+  assert.deepEqual(planOp(op({ op: "goal-new", ref: "Ship chat", days: 14, project: "deck" }), issues, "t22"),
+    { goalNew: { title: "Ship chat", days: 14, project: "deck", start: null, doneWhen: null } });
+  assert.match(planOp(op({ op: "goal-new", ref: "Ship", from: "t9" }), issues, "t22").error, /only the deck chat agent/);
+  assert.deepEqual(planOp(op({ op: "goal", ref: "tf-8", goal: "G-1" }), issues, "t22"), { issue: issues[0], goal: "G-1" });
+  assert.match(planOp(op({ op: "goal", ref: "TF-8" }), issues, "t22").error, /goal needs a goal/);
+  assert.match(planOp(op({ op: "goal", ref: "TF-1", goal: "G-1" }), issues, "t22").error, /no card TF-1/);
+});

@@ -12,6 +12,9 @@
 //   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
 //                                           end the card's terminal (its space when it is alone there),
 //                                           remove its worktree and delete its branch
+//   herdr-board goal-new <title> --days N [--project NAME] [--start YYYY-MM-DD] [--done-when TEXT]
+//                                           a goal (G-n) with an N-day time box, shown in Deck's Goals view
+//   herdr-board goal <card> <G-n|none>      put a card on a goal (off any other), or off every goal
 //
 // <card> is the id the board shows (TF-8, B-3). Appends one JSON line to
 // ~/.local/state/herdr-deck/board.jsonl, then waits for Deck to apply it and
@@ -46,14 +49,17 @@ const USAGE = `usage:
   herdr-board edit <card> [--title TITLE] [--brief BRIEF]
   herdr-board start <card>
   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
+  herdr-board goal-new <title> --days N [--project NAME] [--start YYYY-MM-DD] [--done-when TEXT]
+  herdr-board goal <card> <G-n|none>
 `;
 const die = (msg) => { process.stderr.write("herdr-board: " + msg + "\n"); process.exit(1); };
 
 const a = process.argv.slice(2);
 if (!a.length || a[0] === "-h" || a[0] === "--help") { process.stdout.write(USAGE); process.exit(a.length ? 0 : 1); }
 const [op, ref, ...rest] = a;
-const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup"];
+const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup", "goal-new", "goal"];
 if (!OPS.includes(op)) die("unknown command: " + op + "\n" + USAGE);
+if (op === "goal-new" && (!ref || !ref.trim() || ref.startsWith("-"))) die("goal-new needs a title");
 if (!ref || !ref.trim() || ref.startsWith("-")) die(op + " needs a card id, like TF-8 or B-3");
 if (op === "cleanup") cleanup(ref.trim(), rest);
 
@@ -70,6 +76,20 @@ if (op === "move") {
   }
   if (req.title === undefined && req.brief === undefined) die("edit needs --title or --brief");
   if (req.title !== undefined && !req.title.trim()) die("--title must not be empty");
+} else if (op === "goal-new") {
+  const FLAGS = { "--days": "days", "--project": "project", "--start": "start", "--done-when": "doneWhen" };
+  for (let i = 0; i < rest.length; i++) {
+    const k = rest[i];
+    if (!(k in FLAGS)) die("unknown argument: " + k);
+    if (i + 1 >= rest.length) die(k + " needs a value");
+    req[FLAGS[k]] = rest[++i];
+  }
+  if (!/^\d+$/.test(String(req.days ?? "")) || Number(req.days) < 1 || Number(req.days) > 120) die("goal-new needs --days N, a whole number from 1 to 120 (the time box)");
+  req.days = Number(req.days);
+  if (req.start !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(req.start)) die("--start must be a date like 2026-11-23");
+} else if (op === "goal") {
+  if (rest.length !== 1 || !rest[0].trim()) die("goal needs one goal: a G-n (like G-1), or none");
+  req.goal = rest[0].trim();
 } else if (rest.length) die("unexpected argument: " + rest[0]);
 
 const home = process.env.HOME;
