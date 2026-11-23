@@ -27,6 +27,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -73,7 +74,6 @@ def _read_json(path):
 
 def load_config():
     cfg = {"host": "127.0.0.1", "port": 4455, "password": None, "dir": DEFAULT_DIR}
-    local = True
     user = _read_json(CONFIG_FILE)
     for key in cfg:
         if user.get(key) not in (None, ""):
@@ -401,8 +401,8 @@ def hook_action(event):
 def is_start_call(event):
     if event.get("hook_event_name") != "PostToolUse":
         return False
-    text = json.dumps(event.get("tool_input", {}))
-    return "obs-ctl" in text and "start" in text
+    command = (event.get("tool_input") or {}).get("command")
+    return isinstance(command, str) and re.search(r"obs-ctl\s+start\b", command) is not None
 
 
 def run_hook(event, connect_fn=connect):
