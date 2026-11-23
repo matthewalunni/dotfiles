@@ -1,0 +1,38 @@
+#!/usr/bin/env zsh
+# Open images in a Herdr pane to the right of the calling agent's pane.
+#
+#   herdr-show-images .herdr/proof/*.png
+#
+# The image-viewer mod can only load files under ~/.config/herdr-app, so the images are
+# copied into mods/image-viewer/shots/ (old copies are cleared after a day).
+emulate -L zsh
+setopt err_return pipe_fail
+
+(( $# )) || { print -u2 "usage: herdr-show-images <image>..."; exit 2 }
+
+local app=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
+local shots=$app/mods/image-viewer/shots
+mkdir -p $shots
+find $shots -type f -mtime +1 -delete 2>/dev/null || true
+
+local stamp=$(date +%s) f name
+local -a rel
+for f in "$@"; do
+  [[ -f $f ]] || { print -u2 "not a file: $f"; exit 1 }
+  name="$stamp-${f:t}"
+  cp "$f" "$shots/$name"
+  rel+=("mods/image-viewer/shots/$name")
+done
+
+# Split beside this agent's own pane when we know it, else beside the focused one.
+local pane=""
+if [[ -n ${HC_TERMINAL_ID:-} ]]; then
+  pane=$(herdr-app ls | jq -r --arg t "$HC_TERMINAL_ID" \
+    '[.spaces[].tabs[].terminals[] | select(.terminal == $t) | .pane][0] // empty')
+fi
+
+local props
+props=$(jq -cn --args '{images: $ARGS.positional}' "${rel[@]}")
+local -a where
+[[ -n $pane ]] && where=(--pane $pane)
+herdr-app do pane.split --direction right $where --mod image-viewer --props "$props"
