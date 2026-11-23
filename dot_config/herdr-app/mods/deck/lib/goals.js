@@ -203,6 +203,28 @@ export function goalStatus(goal, live, now) {
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 const usedOf = (goal, now) => clamp01((now - goal.start) / Math.max(1, goal.end - goal.start));
 
+/**
+ * A goal's issues for the roadmap: each with its span from start to landing
+ * (or now while it runs); a backlog issue has none (startFrac null). Landed
+ * first, then by start; backlog last. `key` is null once the card left the board.
+ */
+function taskRows(goal, byKey, now, frac) {
+  const rows = goal.tasks.map((t) => {
+    const card = t.ref.startsWith("path:") ? null : byKey.get(t.ref) ?? null;
+    const stage = t.landedAt != null ? "landed" : card?.stage ?? (t.startedAt == null ? "backlog" : "survey");
+    const start = t.startedAt;
+    return {
+      id: t.id, title: t.title, key: card ? card.key : null, stage, label: STAGE_LABEL[stage] ?? stage,
+      landed: t.landedAt != null, hold: stage === "holding",
+      startFrac: start == null ? null : frac(start),
+      endFrac: start == null ? null : frac(t.landedAt ?? now),
+      at: t.landedAt ?? start ?? Infinity,
+      order: t.landedAt != null ? 0 : start != null ? 1 : 2,
+    };
+  });
+  return rows.sort((a, b) => a.order - b.order || a.at - b.at).map(({ at, order, ...r }) => r);
+}
+
 /** Monday on or before `ms` (local). */
 const monday = (ms) => addDays(dayStart(ms), -((new Date(ms).getDay() + 6) % 7));
 
@@ -236,6 +258,7 @@ export function roadmap(g, issues, now) {
       landed: landed.map((t) => frac(t.landedAt)), usedFrac: usedOf(goal, now),
       daysLeft: Math.ceil((goal.end - now) / DAY),
       agents: live.map((i) => ({ id: i.id, key: i.key, what: STAGE_LABEL[i.stage] ?? i.stage, hold: i.stage === "holding" })),
+      tasks: taskRows(goal, byKey, now, frac),
     };
   });
   const projects = [...new Set(rows.map((r) => r.project))].sort(projectOrder);

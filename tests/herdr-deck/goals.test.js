@@ -166,6 +166,33 @@ test("roadmap: grouped by project, fractions in range, live agents, empty goals"
   assert.equal(empty.status, "Shaping");
 });
 
+test("roadmap: each goal lists its issues with a span from start to landing (or now); backlog ones have none", () => {
+  let g = make("Chat", { project: "deck", start: "2026-11-16" }).goals;
+  const run = card({ id: "D-1", createdAt: at(11, 20) });
+  const wait = card({ id: "D-2", stage: "holding", createdAt: at(11, 21) });
+  const done = card({ id: "D-3", stage: "landed", createdAt: at(11, 17), landedAt: at(11, 19) });
+  const back = { key: "backlog|e", id: "B-4", title: "queued", kind: "backlog", stage: "backlog" };
+  for (const c of [run, wait, done, back]) g = linkCard(g, "G-1", c, NOW).goals;
+  g = syncGoals(g, [run, wait, done, back], NOW);
+  const m = roadmap(g, [run, wait, done, back], NOW);
+  const t = Object.fromEntries(m.groups[0].rows[0].tasks.map((x) => [x.id, x]));
+  assert.deepEqual(m.groups[0].rows[0].tasks.map((x) => x.id), ["D-3", "D-1", "D-2", "B-4"], "landed first, then by start; backlog last");
+  assert.equal(t["D-1"].stage, "build"); assert.equal(t["D-1"].endFrac, m.now); assert.equal(t["D-1"].hold, false);
+  assert.equal(t["D-2"].hold, true);
+  assert.ok(t["D-3"].endFrac < m.now); assert.equal(t["D-3"].landed, true);
+  assert.equal(t["B-4"].startFrac, null); assert.equal(t["B-4"].stage, "backlog");
+  for (const x of [t["D-1"], t["D-2"], t["D-3"]]) assert.ok(x.startFrac < x.endFrac || x.startFrac === x.endFrac);
+  assert.equal(t["D-1"].key, "k-D-1");
+});
+
+test("roadmap: a landed issue whose card left the board still shows, without a key", () => {
+  let g = make("A").goals;
+  const c = card({ id: "D-9", stage: "landed", createdAt: at(11, 20), landedAt: at(11, 22) });
+  g = syncGoals(linkCard(g, "G-1", c, NOW).goals, [c], NOW);
+  const [t] = roadmap(g, [], NOW).groups[0].rows[0].tasks;
+  assert.equal(t.id, "D-9"); assert.equal(t.stage, "landed"); assert.equal(t.key, null);
+});
+
 test("roadmap: goals that ended over two weeks ago are hidden and don't stretch the window", () => {
   let g = make("Old", { start: "2025-11-03", days: 10 }).goals;
   g = make("Now", { start: "2026-11-16" }, g).goals;

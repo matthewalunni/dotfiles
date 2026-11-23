@@ -74,6 +74,8 @@ function ruler(m, k) {
 export default class GoalsView extends View {
   init(_p, cx) {
     this.hover = null;
+    /** Goal ids whose issues are folded away (click the goal's row). */
+    this.collapsed = new Set();
     keepFresh(this, cx, "deck-goals");
     // Today moves: redraw every few minutes.
     cx.timer.every(5 * 60_000, (cx) => cx.notify());
@@ -88,8 +90,10 @@ export default class GoalsView extends View {
     const fill = r.total ? r.done / r.total : 0;
     const hovered = this.hover === r.id;
 
+    const open = !this.collapsed.has(r.id) && r.tasks.length > 0;
     const left = h_flex()
       .flex_none().w(LEFT).h_full().px(18).gap(10).items_center()
+      .child(div().flex_none().w(8).text_size(10).text_color(k.muted).child(r.tasks.length ? (open ? "▾" : "▸") : ""))
       .child(ring(ink, fill * 100, 13))
       .child(div().flex_1().min_w(0).truncate().text_size(13).font_weight(500).text_color(k.strong).child(r.title))
       .child(div().flex_none().text_size(11).text_color(ink).child(r.status));
@@ -137,6 +141,12 @@ export default class GoalsView extends View {
       .flex_none().h(ROW)
       .border_b_1().border_color(k.hair)
       .bg(hovered ? k.wash : "#00000000")
+      .cursor_pointer()
+      .on_click((_e, cx) => {
+        if (this.collapsed.has(r.id)) this.collapsed.delete(r.id);
+        else this.collapsed.add(r.id);
+        cx.notify();
+      })
       .on_hover((on, cx) => {
         const next = on ? r.id : this.hover === r.id ? null : this.hover;
         if (next !== this.hover) {
@@ -152,6 +162,51 @@ export default class GoalsView extends View {
           .child(end)
           .when(r.agents.length > 0, (el) => el.child(agents)),
       );
+  }
+
+  /**
+   * One of a goal's issues, indented under it: stage ring, id, title, stage;
+   * on the timeline its span from start to landing (or now), or a hollow
+   * "not started" marker at Today for a backlog issue. Click: its issue page.
+   */
+  taskRow(t, r, m, k, issues) {
+    const color = repoColor(r.project ?? "none", k.repo);
+    const pctFor = { backlog: 0, survey: 15, build: 50, verify: 75, holding: 100, landed: 100 };
+    const ink = t.hold ? k.hold : t.landed ? k.ok : t.stage === "backlog" ? k.muted : k.work;
+    const card = t.key ? issues.find((i) => i.key === t.key) : null;
+
+    const left = h_flex()
+      .flex_none().w(LEFT).h_full().pl(54).pr(18).gap(8).items_center()
+      .child(ring(ink, pctFor[t.stage] ?? 15, 11))
+      .child(div().flex_none().font_family(MONO).text_size(10).text_color(k.muted).child(t.id))
+      .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.landed ? k.muted : k.text).child(t.title || "untitled"))
+      .child(div().flex_none().text_size(11).text_color(ink).child(t.hold ? "Waiting" : t.label));
+
+    const span = t.startFrac == null
+      ? h_flex()
+          .absolute().top(9).left(pct(m.now)).ml(-5).gap(6).items_center()
+          .child(div().w(10).h(10).rounded(10).border_1().border_color(k.muted))
+          .child(div().text_size(11).text_color(k.muted).child("not started"))
+      : div()
+          .absolute().top(12).h(8).rounded(8)
+          .left(pct(t.startFrac)).w(pct(Math.max(0.004, t.endFrac - t.startFrac)))
+          .bg(t.hold ? k.hold : t.landed ? color + "4d" : color + "b3")
+          .when(t.landed, (el) => el.child(div().absolute().right(-3).top(1).w(6).h(6).rounded(6).bg(k.strong)));
+
+    return h_flex()
+      .id("goal-task-" + r.id + "-" + t.id)
+      .flex_none().h(32)
+      .border_b_1().border_color(k.hair)
+      .when(Boolean(card), (el) =>
+        el.cursor_pointer()
+          .hover((s) => s.bg(k.wash))
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            openIssue(card, "board");
+          }),
+      )
+      .child(left)
+      .child(div().flex_1().h_full().relative().children(backdrop(m, k)).child(span));
   }
 
   /** The bottom strip: the hovered goal in words, else the legend. */
@@ -216,7 +271,10 @@ export default class GoalsView extends View {
           .child(div().font_weight(500).text_color(k.strong).child(name))
           .child(div().text_color(k.muted).child(String(g.rows.length))),
       );
-      for (const r of g.rows) body.push(this.row({ ...r, now: m.now }, k, store.issues));
+      for (const r of g.rows) {
+        body.push(this.row({ ...r, now: m.now }, k, store.issues));
+        if (!this.collapsed.has(r.id)) for (const t of r.tasks) body.push(this.taskRow(t, r, m, k, store.issues));
+      }
     }
 
     return v_flex()
