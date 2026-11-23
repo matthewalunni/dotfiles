@@ -26,7 +26,10 @@ Run this every time you finish a task, open a PR, or ask to merge, and start fro
 
 3. **Capture evidence** for each claim under `.herdr/proof/`:
    - Test or build output, failing if the command fails: `set -o pipefail; cmd 2>&1 | tee .herdr/proof/tests.log` (zsh and bash; without pipefail a failing `cmd` still exits 0 because of `tee`). If it fails, do not use the log as evidence.
-   - Screenshot: `.png` (e.g. `screencapture -x .herdr/proof/settings.png`, or a simulator/browser screenshot)
+   - Screenshot: `.png`. Take it with the tool that drives the thing, not a capture of the screen: agent browsers and simulators often sit on a hidden desktop or run headless, so `screencapture` would miss them.
+     - Web page: the browser tool's `take_screenshot` with `filePath: ".herdr/proof/<name>.png"` (add `fullPage: true` for the whole page).
+     - iOS Simulator: `xcrun simctl io booted screenshot .herdr/proof/<name>.png` (or the simulator tool's screenshot).
+     - A native Mac app in front of you: `screencapture -x .herdr/proof/<name>.png`.
    - Screen recording: `.mp4` or `.mov`
    - Other text output: `.txt`, `.md`, `.json`
 
