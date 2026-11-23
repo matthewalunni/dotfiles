@@ -25,6 +25,10 @@ test("empty theme falls back to Moss values", () => {
     fail: "#b5564f",
     addBg: "#0a1a0a",
     delBg: "#582f0e",
+    hair: "#dfe3cf14",
+    wash: "#dfe3cf0a",
+    brandWash: "#7fa07f26",
+    holdWash: "#b5803a24",
   });
 });
 
