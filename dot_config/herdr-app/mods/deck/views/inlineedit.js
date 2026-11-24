@@ -77,7 +77,7 @@ export const editingNow = (host, issue, field) => host.inline?.key === issue?.ke
 /**
  * The editor while it is open, else `shown` (the text as drawn) with the hover
  * hint and the gesture that opens it ("click", or "dblclick" on a board card).
- * `style(el)` styles the open editor's frame.
+ * `style(el)` styles the open editor's frame; `hover(s)` replaces the underline hint.
  */
 export function editable(host, issue, field, shown, k, opts = {}) {
   if (editingNow(host, issue, field)) {
@@ -104,7 +104,7 @@ export function editable(host, issue, field, shown, k, opts = {}) {
       .child((opts.style ? opts.style(el) : el).w_full());
   }
   const open = (cx) => startInlineEdit(host, issue, field, cx);
-  let el = shown.id(`editable-${field}-${issue.key}`).cursor_text().hover((s) => s.underline());
+  const el = shown.id(`editable-${field}-${issue.key}`).cursor_text().hover(opts.hover ?? ((s) => s.underline()));
   if (opts.gesture === "dblclick") {
     // A single click still opens the card; the second click of a double-click edits.
     return el.on_mouse_down("left", (e, cx) => {

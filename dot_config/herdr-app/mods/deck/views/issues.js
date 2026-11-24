@@ -126,9 +126,11 @@ function titleEditor(host, issue, size, k) {
  */
 function briefEditor(host, issue, k, empty) {
   const shown = div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted)
-    .hover((s) => s.bg(k.raised))
     .child(issue.brief ? String(issue.brief) : empty);
-  const box = editable(host, issue, "brief", shown, k, { style: (el) => el.text_size(12).line_height(1.6).text_color(k.strong) });
+  const box = editable(host, issue, "brief", shown, k, {
+    style: (el) => el.text_size(12).line_height(1.6).text_color(k.strong),
+    hover: (s) => s.bg(k.raised).underline(),
+  });
   if (!editingNow(host, issue, "brief")) return box;
   const note = issue.kind === "backlog" ? "⌘↵ save · esc cancel" : "⌘↵ save · esc cancel · the running agent is not told: R or T tells it";
   return v_flex().gap(4).child(box).child(div().text_size(11).text_color(k.muted).child(note));
