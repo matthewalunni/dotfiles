@@ -105,3 +105,22 @@ test("no Resume for a running card, a backlog card, or a card with no session", 
   const { s } = ended();
   assert.equal(resumeState({ ...s.issues[0], agent: null }, {}, 2000), null);
 });
+
+// ------------------------------------------------------------ the conversation shows up in the page
+
+test("the issue page switches to the resumed agent's own tab, not whichever tab was shown", async () => {
+  const { sideSwitch } = await import("../../dot_config/herdr-app/mods/deck/lib/issuepage.js");
+  const { s, key } = ended();
+  const gone = s.issues[0];
+  const agents = [{ address: "t9", tab: "tbOther", space: "spOther" }];
+  // Ended: the "Agent not running" side, nothing to select.
+  assert.deepEqual(sideSwitch(null, gone, agents), { pane: "gone" });
+  assert.equal(sideSwitch("gone", gone, agents), null);
+  // Back (relinked to t7), but its tab not listed yet: stay on "gone" rather than show another terminal.
+  const back = reconcile(relink(s, key, "t7", "100", 3000), [ob()], 4000).issues[0];
+  assert.equal(sideSwitch("gone", back, agents), null);
+  // Listed: show the pane and select that agent's tab and space.
+  const listed = [...agents, { address: "t7", tab: "tbHD", space: "spHD" }];
+  assert.deepEqual(sideSwitch("gone", back, listed), { pane: "terminal", tab: "tbHD", space: "spHD" });
+  assert.equal(sideSwitch("terminal", back, listed), null);
+});

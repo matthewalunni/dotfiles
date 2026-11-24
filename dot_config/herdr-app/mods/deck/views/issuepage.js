@@ -11,11 +11,11 @@
 // "issuehints" (the key strip along the bottom).
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { shared, setShared, run } from "herdr";
+import { shared, setShared, run, agents, focused } from "herdr";
 import { groupIssues, projectOf } from "../lib/present.js";
 import { boardColumns } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
-import { issuePane, stepIssue, backTarget } from "../lib/issuepage.js";
+import { issuePane, sideSwitch, stepIssue, backTarget } from "../lib/issuepage.js";
 import { currentStore, STORE_KEY, SEL_KEY, TAB_KEY, ISSUE_FROM_KEY, VIEW_KEY } from "../data.js";
 import { MONO, tokens, label, keyChip, heading, keyOf, SANS } from "./ui.js";
 import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./issues.js";
@@ -117,11 +117,18 @@ export default class IssuePage extends View {
     // Shown (opened, or a j / k step): the keys are ours (goTo focused us already; again once drawn).
     focusOnShow(this, "deck-issue", () => this.handle.focus(), cx);
     // Keep the right side in step: an agent that ends while its page is up
-    // turns the pane into "Agent not running".
-    const pane = issuePane(issue);
-    if (this.side !== pane && shownChild(shared("layout"), shared(VIEW_KEY)) === "deck-issue") {
-      this.side = pane;
-      cx.timer.after(0, () => showIssueSide(pane));
+    // turns the pane into "Agent not running"; one that comes back (Resume)
+    // shows again, with its own tab selected (the pane shows the selected tab).
+    const sw = shownChild(shared("layout"), shared(VIEW_KEY)) === "deck-issue" ? sideSwitch(this.side ?? null, issue, agents()) : null;
+    if (sw) {
+      this.side = sw.pane;
+      cx.timer.after(0, () => {
+        if (sw.pane === "terminal") {
+          if (sw.space && focused()?.space !== sw.space) run("space.select", { id: sw.space });
+          run("tab.select", { id: sw.tab });
+        }
+        showIssueSide(sw.pane);
+      });
     }
 
     const back = backTarget(shared(ISSUE_FROM_KEY));
