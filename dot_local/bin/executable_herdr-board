@@ -9,6 +9,8 @@
 //   herdr-board restore <card>              a discarded backlog card, back into the Backlog
 //   herdr-board edit <card> [--title T] [--brief B]
 //   herdr-board start <card>                a backlog card: new worktree and agent
+//   herdr-board resume <card>               a card whose agent ended: claude --resume its session, in
+//                                           its terminal when that is a live shell, else a new tab
 //   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
 //                                           end the card's terminal (its space when it is alone there),
 //                                           remove its worktree and delete its branch
@@ -50,6 +52,7 @@ const USAGE = `usage:
   herdr-board restore <card>
   herdr-board edit <card> [--title TITLE] [--brief BRIEF]
   herdr-board start <card>
+  herdr-board resume <card>
   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
   herdr-board goal-new <title> --days N [--project NAME] [--start YYYY-MM-DD] [--done-when TEXT]
   herdr-board goal <card> <G-n|none>
@@ -60,7 +63,7 @@ const die = (msg) => { process.stderr.write("herdr-board: " + msg + "\n"); proce
 const a = process.argv.slice(2);
 if (!a.length || a[0] === "-h" || a[0] === "--help") { process.stdout.write(USAGE); process.exit(a.length ? 0 : 1); }
 const [op, ref, ...rest] = a;
-const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup", "goal-new", "goal", "review"];
+const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "resume", "cleanup", "goal-new", "goal", "review"];
 if (!OPS.includes(op)) die("unknown command: " + op + "\n" + USAGE);
 if (op === "goal-new" && (!ref || !ref.trim() || ref.startsWith("-"))) die("goal-new needs a title");
 if (!ref || !ref.trim() || ref.startsWith("-")) die(op + " needs a card id, like TF-8 or B-3");
@@ -108,7 +111,7 @@ mkdirSync(dir, { recursive: true });
 appendFileSync(join(dir, "board.jsonl"), JSON.stringify(entry) + "\n");
 
 // Wait for Deck's answer: a start makes a worktree and an agent, so it gets longer.
-const waitMs = Number(process.env.HERDR_BOARD_WAIT_MS) || (op === "start" ? 120_000 : 20_000);
+const waitMs = Number(process.env.HERDR_BOARD_WAIT_MS) || (op === "start" ? 120_000 : op === "resume" ? 45_000 : 20_000);
 const results = join(dir, "board-results.jsonl");
 const TAIL = 64 * 1024;
 

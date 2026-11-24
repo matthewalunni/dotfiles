@@ -4,6 +4,7 @@ import { STAGE_LABEL, boardColumn } from "./stage.js";
 import { backlogFiler } from "./backlog.js";
 import { projectOf, projectOrder } from "./present.js";
 import { reviewOrder } from "./review.js";
+import { RESUME_MS } from "./store.js";
 
 /** @typedef {import("./store.js").Issue} Issue */
 
@@ -82,7 +83,7 @@ export function repoColor(name, palette) {
  * from Deck (source "you") says "you".
  * @param {Issue} issue @param {Issue[]} [issues]
  */
-export function boardNote(issue, issues) {
+export function boardNote(issue, issues, now = Date.now()) {
   if (issue.kind === "backlog") {
     if (issue.source === "you") return { text: "you", tone: "muted" };
     const by = backlogFiler(issue, issues);
@@ -94,9 +95,30 @@ export function boardNote(issue, issues) {
     return { text: q || "Waiting on you", tone: "hold" };
   }
   if (boardColumn(issue) === "landed") return { text: issue.pr?.state === "MERGED" || issue.stage === "landed" ? "Merged" : "Done", tone: "ok" };
-  if (issue.observed === false) return { text: "Session ended", tone: "muted" };
+  if (issue.observed === false) {
+    if (resuming(issue, now)) return { text: "Resuming…", tone: "work" };
+    const last = lastSummary(issue);
+    if (last) return { text: last.question ? "Asked: " + last.question : last.done, tone: "muted" };
+    return { text: "Session ended", tone: "muted" };
+  }
   const failing = (issue.pr?.checks ?? []).filter((c) => c.status === "fail").length;
   if (failing) return { text: `${failing} check${failing === 1 ? "" : "s"} failing`, tone: "fail" };
   if (issue.status === "working") return { text: "Working…", tone: "work" };
   return { text: STAGE_LABEL[issue.stage] ?? issue.stage, tone: "muted" };
+}
+
+/** The newest summary of an ended run, or null. @param {Issue} issue */
+export function lastSummary(issue) {
+  const s = issue?.summaries;
+  return Array.isArray(s) && s.length ? s[s.length - 1] : null;
+}
+
+/** A Resume was started under RESUME_MS ago and its agent has not shown up yet. */
+export function resuming(issue, now = Date.now()) {
+  return issue?.observed === false && typeof issue.resumedAt === "number" && now - issue.resumedAt < RESUME_MS;
+}
+
+/** Whether the card shows Resume: an agent card whose agent ended, with a Claude session to go back to. */
+export function canResume(issue, now = Date.now()) {
+  return Boolean(issue && issue.kind !== "backlog" && issue.observed === false && issue.agent?.id && !resuming(issue, now));
 }

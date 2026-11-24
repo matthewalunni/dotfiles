@@ -174,3 +174,13 @@ test("cleanup: refuses a backlog card or an unknown one, and never ends deck-cha
   assert.match(rb.stderr, /backlog card/);
   assert.equal(b.run(["--bogus"]).status, 1);
 });
+
+test("resume queues a resume request for the card and prints Deck's answer", async () => {
+  const s = setup();
+  let seen;
+  const r = await runAnswered(s, ["resume", "CH-3"], (op) => ((seen = op), { ok: true, message: "CH-3 resumed in t40" }));
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.out, "CH-3 resumed in t40\n");
+  assert.equal(seen.op, "resume"); assert.equal(seen.ref, "CH-3"); assert.equal(seen.from, "t22");
+  assert.equal(runSync(s, ["resume", "CH-3", "extra"]).status, 1);
+});

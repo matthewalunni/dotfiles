@@ -20,6 +20,7 @@ import { REVIEW_SORT_KEY, REVIEW_LABEL, reviewOf, otherReview } from "../lib/rev
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
 import { boardPane, modeToggle, sortChip } from "./board.js";
+import { resumeButton, sessionLog } from "./resume.js";
 import { boardColumns, moveBoard } from "../lib/board.js";
 import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
@@ -449,6 +450,8 @@ function actions(host, issue, k, stacked) {
     row.child(button("act-proof", "Request proof", "plain", (_e, cx) => runFor(host, cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
   }
   row.child(reviewButton("act-review", issue, busy));
+  const resume = issue.kind !== "backlog" ? resumeButton("act-resume", issue, "brand") : null;
+  if (resume) row.child(resume);
   if (issue.kind !== "backlog") row.child(button("act-dismiss", "Remove…", "plain", () => removeKey(host, issue), busy, "D"));
   row.children(mergeButtons(host, issue, "act"));
   if (stacked && issue.pr?.url) {
@@ -506,6 +509,7 @@ function overview(host, issue, store, k, stacked) {
                 .child(issue.brief ? String(issue.brief) : "Brief unknown"),
             ),
         )
+        .when(Boolean(sessionLog(issue, k)), (el) => el.child(sessionLog(issue, k)))
         .when(stacked, (el) => el.children(railSections(issue, k)))
         .child(
           v_flex()

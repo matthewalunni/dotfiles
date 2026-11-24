@@ -22,6 +22,8 @@ import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./iss
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide, keepFresh, drew } from "./focus.js";
 import { shownChild } from "../lib/views.js";
+import { resumeButton } from "./resume.js";
+import { lastSummary } from "../lib/board.js";
 
 /** The selected issue, or null (it was dismissed or expired). */
 function selectedIssue() {
@@ -213,6 +215,8 @@ export class GoneView extends View {
             .child(div().child(issue.discarded ? "Discarded. Restore it to start an agent." : "Press S to start one. Its live thread shows up here.")),
         );
     }
+    const last = lastSummary(issue);
+    const resume = issue ? resumeButton("gone-resume", issue, "brand") : null;
     return v_flex()
       .size_full()
       .items_center()
@@ -225,7 +229,14 @@ export class GoneView extends View {
       .text_size(12)
       .text_color(k.muted)
       .child(heading("Agent not running", 18, k.strong))
-      .child(div().child(issue ? `${issue.id}'s terminal has ended. The overview shows what Deck last saw.` : "No agent for this issue."));
+      .child(div().child(issue ? `${issue.id}'s terminal has ended. The overview shows what Deck last saw.` : "No agent for this issue."))
+      .when(Boolean(last), (el) => el.child(
+        v_flex().max_w(460).gap(4).p(12).rounded(10).bg(k.wash).line_height(1.5)
+          .child(div().text_color(k.strong).child(last.done))
+          .when(Boolean(last.question), (el) => el.child(div().text_color(k.hold).child("Open question: " + last.question))),
+      ))
+      .when(Boolean(resume), (el) => el.child(resume))
+      .when(!issue?.agent?.id && Boolean(issue), (el) => el.child(div().text_size(11).child("No Claude session was recorded, so it cannot be resumed.")));
   }
 }
 

@@ -1,10 +1,11 @@
 // Board operations queued by the chat agent (~/.local/bin/herdr-board) for the
-// deck to apply: move, dismiss, delete, discard, restore, edit, start. The CLI
+// deck to apply: move, dismiss, delete, discard, restore, edit, start, resume. The CLI
 // appends one JSON line per request to BOARD_OPS; the deck applies each one
 // once, through the same actions as its own buttons, and appends the outcome
 // to BOARD_RESULTS for the CLI to report. Pure; no herdr imports.
 import { PIN_COLUMNS, STAGE_LABEL } from "./stage.js";
 import { asReview } from "./review.js";
+import { resumePlan } from "./agentsession.js";
 
 export const BOARD_OPS = "~/.local/state/herdr-deck/board.jsonl";
 export const BOARD_RESULTS = "~/.local/state/herdr-deck/board-results.jsonl";
@@ -12,9 +13,9 @@ export const BOARD_RESULTS = "~/.local/state/herdr-deck/board-results.jsonl";
 /** A request older than this is never applied (the deck was closed when it was made). */
 export const OP_MAX_AGE = 10 * 60 * 1000;
 
-export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "goal-new", "goal", "review"];
+export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "resume", "goal-new", "goal", "review"];
 /** Ops on agent cards, and on backlog cards. */
-const ISSUE_OPS = new Set(["move", "dismiss", "delete"]);
+const ISSUE_OPS = new Set(["move", "dismiss", "delete", "resume"]);
 const BACKLOG_OPS = new Set(["discard", "restore", "start"]);
 
 /**
@@ -138,6 +139,10 @@ export function planOp(op, issues, chat) {
     if (!review) return { error: "review needs needs-me or unattended" };
     if (issue.discarded) return { error: `${issue.id} is discarded: restore it first` };
     return { issue, review };
+  }
+  if (op.op === "resume") {
+    const r = resumePlan(issue);
+    return r.error ? { error: r.error } : { issue };
   }
   if (op.op === "goal") {
     if (!op.goal || !op.goal.trim()) return { error: "goal needs a goal: a G-n, or none" };
