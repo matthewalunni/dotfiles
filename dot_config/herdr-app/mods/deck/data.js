@@ -250,7 +250,8 @@ async function observe(a, history, paneByTerminal, termByAddr) {
       } catch {
         o.brief = null;
       }
-      if (!o.agent) {
+      // Only a Claude agent gets a guessed id: another agent (pi, codex) in the same folder must not take a Claude chat's.
+      if (!o.agent && (a.app ?? term?.status?.app) === "claude-code") {
         try {
           o.agent = sessionFromHistory(history, { cwd, root: o.root, after, brief: o.brief });
         } catch {
@@ -532,7 +533,7 @@ export function startCollector(cx) {
     }
     // A resume whose agent never showed up stops reading "Resuming…".
     const st = currentStore();
-    const ex = expireResumes(st, Date.now());
+    const ex = expireResumes(st, Date.now(), new Set((agents() ?? []).map((x) => x.address)));
     if (ex !== st) save(ex);
     // An agent ended (or a new one started): poll now, not at the next slow cycle.
     const live = (agents() ?? []).map((a) => a.address).sort().join(",");

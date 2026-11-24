@@ -476,6 +476,7 @@ function overview(host, issue, store, k, stacked) {
   const events = store.log.filter((e) => e.key === issue.key).slice(-14);
   const toneColor = (t) => (t === "hold" ? k.hold : t === "warn" ? k.nodata : t === "ok" ? k.ok : k.work);
   const q = questionBox(host, issue, k);
+  const stopped = sessionLog(issue, k);
   return v_flex()
     .flex_1()
     .min_w(0)
@@ -509,7 +510,7 @@ function overview(host, issue, store, k, stacked) {
                 .child(issue.brief ? String(issue.brief) : "Brief unknown"),
             ),
         )
-        .when(Boolean(sessionLog(issue, k)), (el) => el.child(sessionLog(issue, k)))
+        .when(Boolean(stopped), (el) => el.child(stopped))
         .when(stacked, (el) => el.children(railSections(issue, k)))
         .child(
           v_flex()

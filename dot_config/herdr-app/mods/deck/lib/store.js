@@ -586,12 +586,13 @@ export function resumeFailed(store, key) {
 /**
  * Resumes still waiting after RESUME_MS whose agent never showed up: cleared
  * (resumeFailed), so the card offers Resume again instead of "Resuming…"
- * forever. Unchanged store when there are none.
- * @param {Store} store @param {number} now
+ * forever. A card whose terminal is in `live` (agents() addresses) did start:
+ * the next poll picks it up, so it is left alone. Unchanged store when there are none.
+ * @param {Store} store @param {number} now @param {Set<string>} [live]
  * @returns {Store}
  */
-export function expireResumes(store, now) {
-  const stale = store.issues.filter((i) => i.observed === false && typeof i.resumedAt === "number" && now - i.resumedAt >= RESUME_MS);
+export function expireResumes(store, now, live = new Set()) {
+  const stale = store.issues.filter((i) => i.observed === false && typeof i.resumedAt === "number" && now - i.resumedAt >= RESUME_MS && !live.has(i.terminal));
   if (!stale.length) return store;
   const log = [...store.log, ...stale.map((i) => ({ t: now, key: i.key, id: i.id, what: "resume did not start: Resume again", tone: "warn" }))].slice(-LOG_CAP);
   return { ...stale.reduce((s, i) => resumeFailed(s, i.key), store), log };
