@@ -4,7 +4,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { resumeIssue, sh } from "../data.js";
 import { canResume, resuming } from "../lib/board.js";
-import { hhmm } from "../lib/present.js";
+import { clockTime } from "../lib/present.js";
 import { button, label, act } from "./ui.js";
 
 // Clicks still running, by card key: the button reads "Resuming…" from the
@@ -43,7 +43,7 @@ export function resumeButton(id, issue, kind = "brand") {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const day = (t) => {
   const d = new Date(t);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${hhmm(t)}`;
+  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${clockTime(t)}`;
 };
 
 /**
