@@ -122,3 +122,29 @@ export function resuming(issue, now = Date.now()) {
 export function canResume(issue, now = Date.now()) {
   return Boolean(issue && issue.kind !== "backlog" && issue.observed === false && issue.agent?.id && !resuming(issue, now));
 }
+
+// A Resume click reads "Resuming…" for at most this long, answered or not.
+export const CLICK_MS = 25_000;
+
+/**
+ * What a card's Resume button shows: null (no button), "pending"
+ * ("Resuming…", disabled) or "ready" (Resume; `error` is why the last try
+ * failed, shown beside it). `clicks` is the shared card key -> click time map:
+ * a click counts as pending for CLICK_MS at most, so a click nobody answers
+ * (its task dropped by a reload) cannot keep the button busy.
+ * @param {any} issue @param {Record<string, number>|null|undefined} clicks @param {number} [now]
+ * @returns {{kind: "pending"}|{kind: "ready", error: string|null}|null}
+ */
+export function resumeState(issue, clicks, now = Date.now()) {
+  if (!issue || issue.kind === "backlog" || issue.observed !== false || !issue.agent?.id) return null;
+  const at = clicks?.[issue.key];
+  if ((typeof at === "number" && now - at < CLICK_MS) || resuming(issue, now)) return { kind: "pending" };
+  return { kind: "ready", error: issue.resumeError ?? null };
+}
+
+/** `clicks` without the ones past CLICK_MS; the same object when none are. */
+export function pruneClicks(clicks, now = Date.now()) {
+  const c = clicks && typeof clicks === "object" ? clicks : {};
+  const keep = Object.entries(c).filter(([, at]) => typeof at === "number" && now - at < CLICK_MS);
+  return keep.length === Object.keys(c).length && clicks ? clicks : Object.fromEntries(keep);
+}

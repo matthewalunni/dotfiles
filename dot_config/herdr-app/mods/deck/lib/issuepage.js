@@ -63,6 +63,24 @@ export function sidePane(issue, agents) {
 }
 
 /**
+ * What the shown issue page's right side should switch to, or null to leave
+ * it. `side` is what it shows now ("terminal" | "gone" | null). Switching to
+ * the terminal also names the agent's tab and space to select: the side pane
+ * shows the selected tab, so without it a resumed agent's page showed
+ * whichever terminal happened to be selected.
+ * @param {"terminal"|"gone"|null} side @param {Issue|null|undefined} issue
+ * @param {{address: string, tab: string, space: string}[]|null|undefined} agents
+ * @returns {{pane: "gone"}|{pane: "terminal", tab: string, space: string}|null}
+ */
+export function sideSwitch(side, issue, agents) {
+  if (issuePane(issue) === "gone") return side === "gone" ? null : { pane: "gone" };
+  if (side === "terminal") return null;
+  // Observed again but its tab not listed yet: leave the side as it is until the next draw.
+  const t = openTarget(issue, agents);
+  return "tab" in t ? { pane: "terminal", tab: t.tab, space: t.space } : null;
+}
+
+/**
  * The issue `d` steps from `key` in `order`, clamped at both ends (no wrap).
  * A key not in `order` lands on the first issue.
  * @param {Issue[]|null|undefined} order @param {string|null} key @param {number} d
