@@ -10,6 +10,7 @@ import { PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { heading, label, stageColor, dot, keyChip, reviewBadge } from "./ui.js";
 import { newTaskButton } from "./newtask.js";
 import { resumeButton } from "./resume.js";
+import { editable } from "./inlineedit.js";
 
 /** LIST / BOARD toggle; `after` runs on a switch (closes an open detail). */
 export function modeToggle(mode, k, after) {
@@ -56,6 +57,11 @@ const endDrag = () => Object.assign(dnd, { press: null, key: null, over: null })
 const PAD_X = 16;
 const GAP = 12;
 
+// A click on a card's title waits this long before opening the card, so a
+// double-click can edit the title in place instead (clicks elsewhere open at once).
+const DOUBLE_MS = 260;
+const titleClick = { press: null };
+
 const ago = (issue, now) => {
   const since = issue.holdingSince ?? issue.createdAt ?? issue.lastSeen;
   const m = minutesSince(since, now);
@@ -64,12 +70,22 @@ const ago = (issue, now) => {
 
 /**
  * The board pane. `onCard(issue)` handles clicks.
- * @param {{filterName: string|null, byReview?: boolean}} opts  byReview: unattended cards first (⇧U)
+ * @param {{filterName: string|null, byReview?: boolean, editHost?: any}} opts  byReview: unattended cards first (⇧U);
+ *   editHost: the view that edits a title in place (views/inlineedit.js) on a double-click
  */
 export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
   const now = Date.now();
   const cols = boardColumns(issues, Boolean(opts.byReview));
   const toneColor = { hold: k.hold, work: k.work, fail: k.fail, ok: k.ok, muted: k.muted };
+  const titleOf = (i) => {
+    const shown = div().text_color(k.strong).font_weight(500).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled");
+    if (!opts.editHost) return shown;
+    return div()
+      .on_mouse_down("left", () => {
+        titleClick.press = i.key;
+      })
+      .child(editable(opts.editHost, i, "title", shown, k, { gesture: "dblclick" }));
+  };
   const card = (i) => {
     const on = selected?.key === i.key;
     const entry = i.kind === "backlog";
@@ -95,9 +111,17 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         dnd.moved = false;
         dnd.press = entry ? null : { key: i.key, x: e.position.x, y: e.position.y };
       })
-      .on_click(() => {
+      .on_click((e, cx) => {
         if (dnd.moved) return;
-        onCard(i);
+        const onTitle = titleClick.press === i.key;
+        titleClick.press = null;
+        const editing = () => opts.editHost?.inline?.key === i.key;
+        // A click while this card's title is being edited (or the double-click that opened it) never opens the card.
+        if (editing() || e.click_count > 1) return;
+        if (!opts.editHost || !onTitle) return onCard(i);
+        cx.timer.after(DOUBLE_MS, () => {
+          if (!editing()) onCard(i);
+        });
       })
       .child(
         h_flex()
@@ -107,7 +131,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .child(div().flex_1())
           .child(div().text_color(k.muted).child(ago(i, now))),
       )
-      .child(div().text_color(k.strong).font_weight(500).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled"))
+      .child(titleOf(i))
       .child(div().text_color(entry && on ? k.brand : toneColor[note.tone]).line_height(1.35).max_h(34).overflow_hidden().child(note.text))
       .child(
         h_flex()
@@ -220,7 +244,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         )
         .when(Boolean(opts.byReview), (el) => el.child(sortChip(k)))
         .child(div().flex_1())
-        .child(div().text_size(11).text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move · ↵ open · S start · X discard · U review cost · ⇧U sort")),
+        .child(div().text_size(11).text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move · ↵ open · S start · X discard · U review cost · ⇧U sort · double-click a title to rename")),
     )
     .child(
       v_flex()

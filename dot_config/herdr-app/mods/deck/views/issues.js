@@ -26,6 +26,7 @@ import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stag
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue, keepFresh, drew } from "./focus.js";
+import { initInlineEdit, editable, editingNow } from "./inlineedit.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding for you" };
 const VIEWS = [
@@ -109,6 +110,30 @@ export function initDetail(host) {
   });
   host.filePath = null; // the diff file n / p is on
   host.fileFor = null; // the issue filePath belongs to
+  initInlineEdit(host);
+}
+
+/** The title, editable in place (click it). */
+function titleEditor(host, issue, size, k) {
+  return editable(host, issue, "title", heading(issue.title || issue.id, size).max_h(66).overflow_hidden(), k, {
+    style: (el) => el.text_size(Math.max(14, size - 4)).font_weight(600).text_color(k.strong),
+  });
+}
+
+/**
+ * The brief box, editable in place (click it). A started card's agent is not
+ * told of the change (lib/inlineedit.js); the editor says so.
+ */
+function briefEditor(host, issue, k, empty) {
+  const shown = div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted)
+    .child(issue.brief ? String(issue.brief) : empty);
+  const box = editable(host, issue, "brief", shown, k, {
+    style: (el) => el.text_size(12).line_height(1.6).text_color(k.strong),
+    hover: (s) => s.bg(k.raised).underline(),
+  });
+  if (!editingNow(host, issue, "brief")) return box;
+  const note = issue.kind === "backlog" ? "⌘↵ save · esc cancel" : "⌘↵ save · esc cancel · the running agent is not told: R or T tells it";
+  return v_flex().gap(4).child(box).child(div().text_size(11).text_color(k.muted).child(note));
 }
 
 /** The detail now shows `issue`: a draft typed for another issue is dropped, and n / p start over. */
@@ -302,7 +327,7 @@ function backlogDetail(host, issue, k, opts) {
           : div().child(issue.source === "you" ? "Filed by you from Deck" : `Filed by an ${issue.source || "agent"}`)),
     ))
     .child(section("Brief · what the agent will be told",
-      div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
+      briefEditor(host, issue, k, "No brief"),
     ))
     .child(section("When you start it",
       "error" in plan
@@ -328,7 +353,7 @@ function backlogDetail(host, issue, k, opts) {
       .child(
         v_flex()
           .gap(8)
-          .child(heading(issue.title || issue.id, opts.stacked ? 26 : 30).max_h(66).overflow_hidden())
+          .child(titleEditor(host, issue, opts.stacked ? 26 : 30, k))
           .child(
             h_flex()
               .items_center()
@@ -484,7 +509,7 @@ function overview(host, issue, store, k, stacked) {
     .px(22)
     .py(20)
     .gap(16)
-    .child(heading(issue.title || issue.id, stacked ? 24 : 30).max_h(66).overflow_hidden())
+    .child(titleEditor(host, issue, stacked ? 24 : 30, k))
     .when(stacked, (el) => el.child(metaLine(issue, k)))
     .child(tabs(issue, "overview", k))
     .when(stacked && Boolean(q), (el) => el.child(q))
@@ -500,15 +525,7 @@ function overview(host, issue, store, k, stacked) {
           v_flex()
             .gap(6)
             .child(label("Your brief"))
-            .child(
-              div()
-                .p(12)
-                .rounded(10)
-                .bg(k.wash)
-                .line_height(1.6)
-                .text_color(issue.brief ? k.strong : k.muted)
-                .child(issue.brief ? String(issue.brief) : "Brief unknown"),
-            ),
+            .child(briefEditor(host, issue, k, "Brief unknown")),
         )
         .when(Boolean(stopped), (el) => el.child(stopped))
         .when(stacked, (el) => el.children(railSections(issue, k)))
@@ -969,7 +986,7 @@ export default class IssuesView extends View {
         : this.filter.kind === "repo" ? this.filter.value ?? "no project"
         : VIEWS.find((v) => v.value === this.filter.value)?.text;
       // One click on a card opens its page.
-      return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName, byReview: byReview() }));
+      return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName, byReview: byReview(), editHost: this }));
     }
     root.child(this.list(issues, issue, k));
     if (!issue) {

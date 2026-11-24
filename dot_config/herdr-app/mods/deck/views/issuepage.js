@@ -128,6 +128,8 @@ export default class IssuePage extends View {
     const root = v_flex()
       .id("deck-issue")
       .track_focus(this.handle)
+      // Clicking away from an open title / brief editor saves it (its blur).
+      .on_mouse_down("left", () => { if (this.inline) this.handle.focus(); })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .size_full().min_h(0).bg(k.bg).font_family(SANS).text_size(12).text_color(k.text);
     if (!issue) {

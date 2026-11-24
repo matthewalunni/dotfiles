@@ -125,14 +125,8 @@ export function planOp(op, issues, chat) {
     return { issue, column };
   }
   if (op.op === "edit") {
-    const edit = {};
-    if (typeof op.title === "string") {
-      if (!op.title.trim()) return { error: "the title cannot be empty" };
-      edit.title = op.title.trim();
-    }
-    if (typeof op.brief === "string") edit.brief = op.brief;
-    if (!("title" in edit) && !("brief" in edit)) return { error: "edit needs --title or --brief" };
-    return { issue, edit };
+    const r = planEdit(op);
+    return "error" in r ? r : { issue, edit: r.edit };
   }
   if (op.op === "review") {
     const review = asReview(op.review);
@@ -150,6 +144,23 @@ export function planOp(op, issues, chat) {
     return { issue, goal: op.goal.trim() };
   }
   return { issue };
+}
+
+/**
+ * A title and/or brief edit, checked: { edit } or { error }. Shared by
+ * `herdr-board edit` (planOp) and Deck's in-place editors (data.js editCard).
+ * @param {{title?: unknown, brief?: unknown}} fields
+ * @returns {{edit: {title?: string, brief?: string}}|{error: string}}
+ */
+export function planEdit(fields) {
+  const edit = {};
+  if (typeof fields?.title === "string") {
+    if (!fields.title.trim()) return { error: "the title cannot be empty" };
+    edit.title = fields.title.trim();
+  }
+  if (typeof fields?.brief === "string") edit.brief = fields.brief;
+  if (!("title" in edit) && !("brief" in edit)) return { error: "edit needs --title or --brief" };
+  return { edit };
 }
 
 /** The result line the CLI waits for. @param {string} id @param {boolean} ok @param {string} message @param {number} now */
