@@ -48,6 +48,7 @@ herdr-board discard B-3                 # backlog card into Discarded (restorabl
 herdr-board restore B-3                 # back into the Backlog
 herdr-board start B-3                   # backlog card: new worktree and agent
 herdr-board review B-3 unattended       # review cost of any card: needs-me or unattended
+herdr-board resume TF-8                 # a card whose agent ended: claude --resume its conversation, same card
 herdr-board cleanup TF-8 --dry-run      # see "Closing out a card"
 ```
 

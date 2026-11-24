@@ -11,8 +11,9 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree, issueAt } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue, setReview, noteReviewPath } from "./lib/store.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue, setReview, noteReviewPath, needsSummary, addSummary, attachSession, relink, resumeFailed, expireResumes } from "./lib/store.js";
 import { REVIEW_LABEL } from "./lib/review.js";
+import { parsePidSession, sessionFromHistory, summarizeTranscript, transcriptPath, resumePlan, resumeArgv, resumeShellLine, isShell } from "./lib/agentsession.js";
 import { STAGE_LABEL } from "./lib/stage.js";
 import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, resultLine } from "./lib/boardops.js";
 import { findChatTerminal } from "./lib/chatsource.js";
@@ -63,6 +64,10 @@ const INBOX_MAX = 1024 * 1024;
 const T_BACKLOG = 15_000;
 // readTextFile stops at 1 MiB and history.jsonl is larger; the newest 4 MiB is plenty.
 const HISTORY_TAIL = String(4 * 1024 * 1024);
+// The newest part of a transcript read for an ended session's summary.
+const TRANSCRIPT_TAIL = String(1024 * 1024);
+// Ended sessions summarized per cycle (the rest wait for the next).
+const SUMMARIES_PER_CYCLE = 6;
 
 // One memo for every copy of the mod (they share this runtime, like the collector guard).
 const memo = (globalThis.__deckSharedMemo ??= createSharedMemo((k) => shared(k)));
@@ -194,6 +199,23 @@ export async function readScreen(t, status) {
   return r.code === 0 ? parsePrompt(String(r.stdout ?? ""), status) : null;
 }
 
+/**
+ * The Claude session running in terminal `t`: its foreground process's
+ * ~/.claude/sessions/<pid>.json (Claude's own record: sessionId and cwd).
+ * The pid comes from terminals() when it carries one, else from `hc get`.
+ * null when it cannot be read (not Claude, or an older Claude).
+ */
+async function claudeSession(t, term) {
+  let pid = Number(term?.foreground?.pid);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    const r = await hcRead(["get", t, "--json"]);
+    try { pid = Number(JSON.parse(String(r.stdout ?? "")).foreground?.pid); } catch { pid = NaN; }
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  const r = await sh("head", ["-c", "65536", `${home()}/.claude/sessions/${pid}.json`], { timeout: T_GIT });
+  return r.code === 0 ? parsePidSession(String(r.stdout ?? "")) : null;
+}
+
 /** @returns {Promise<Observation>} */
 async function observe(a, history, paneByTerminal, termByAddr) {
   const t = a.address;
@@ -214,6 +236,7 @@ async function observe(a, history, paneByTerminal, termByAddr) {
     ]);
     o.prompt = prompt;
     o.session = after == null ? null : String(after);
+    o.agent = await claudeSession(t, term);
     if (git) {
       o.repo = git.repo;
       o.root = git.root;
@@ -226,6 +249,14 @@ async function observe(a, history, paneByTerminal, termByAddr) {
         o.brief = findBrief(history, { cwd, root: o.root, after });
       } catch {
         o.brief = null;
+      }
+      // Only a Claude agent gets a guessed id: another agent (pi, codex) in the same folder must not take a Claude chat's.
+      if (!o.agent && (a.app ?? term?.status?.app) === "claude-code") {
+        try {
+          o.agent = sessionFromHistory(history, { cwd, root: o.root, after, brief: o.brief });
+        } catch {
+          o.agent = null;
+        }
       }
     }
     if (o.root) {
@@ -310,6 +341,72 @@ async function cycle(id) {
     lastWrite = now;
   }
   syncGoalsNow(next, now);
+  await summarizeEnded(id, history);
+}
+
+/** The newest part of `path` (a cut-off first line is dropped), or null when it cannot be read. */
+async function tailFile(path, bytes) {
+  const r = await sh("tail", ["-c", bytes, path], { timeout: T_GIT });
+  return r.code === 0 ? inboxTail(String(r.stdout ?? ""), Number(bytes)) : null;
+}
+
+/** Session `id`'s transcript: under its cwd's project folder, else wherever Claude put it. */
+async function readTranscript(agent) {
+  const h = home();
+  const at = await tailFile(transcriptPath(h, agent.cwd, agent.id), TRANSCRIPT_TAIL);
+  if (at != null) return at;
+  const f = await sh("find", [h + "/.claude/projects", "-maxdepth", "2", "-name", agent.id + ".jsonl"], { timeout: T_GIT });
+  const path = okText(f).split("\n")[0];
+  return path ? tailFile(path, TRANSCRIPT_TAIL) : null;
+}
+
+/** Ended cards already looked up in history.jsonl (once per card per Deck run). */
+const orphansTried = new Set();
+
+/**
+ * Ended agents: a card with no Claude session yet gets one from history.jsonl
+ * (cards from before sessions were recorded), then each run that ended gets a
+ * summary from its transcript (lib/agentsession.js summarizeTranscript),
+ * appended to the card. A few per cycle; the rest wait for the next.
+ * @param {number} id the cycle's id @param {string|null} history
+ */
+async function summarizeEnded(id, history) {
+  let store = currentStore();
+  const orphans = store.issues.filter((i) => i.kind !== "backlog" && i.observed === false && !i.agent?.id && i.cwd && !orphansTried.has(i.key));
+  for (const i of orphans) orphansTried.add(i.key);
+  if (orphans.length) {
+    if (history == null) {
+      const r = await sh("tail", ["-c", HISTORY_TAIL, home() + "/.claude/history.jsonl"], { timeout: T_GIT });
+      history = r.code === 0 ? String(r.stdout ?? "") : null;
+    }
+    const taken = new Set(store.issues.map((i) => i.agent?.id).filter(Boolean));
+    const found = [];
+    for (const i of orphans) {
+      const after = Number(i.session);
+      const s = sessionFromHistory(history, {
+        cwd: i.cwd, root: i.root, after: Number.isFinite(after) && after > 0 ? after : null, before: i.lastSeen ?? null, brief: i.brief, taken,
+      });
+      if (s) { taken.add(s.id); found.push([i.key, s]); }
+    }
+    if (id !== cycleId) return;
+    if (found.length) {
+      let next = currentStore();
+      for (const [key, s] of found) next = attachSession(next, key, s);
+      save(next);
+      store = next;
+    }
+  }
+  const due = store.issues.filter(needsSummary).slice(0, SUMMARIES_PER_CYCLE);
+  for (const i of due) {
+    const text = await readTranscript(i.agent);
+    const summary = summarizeTranscript(text, i.agent.id) ?? {
+      done: "No transcript found for this session", stopped: "Unknown", question: null, lastAt: null,
+    };
+    if (id !== cycleId) return;
+    const prev = currentStore();
+    const next = addSummary(prev, i.key, summary, Date.now());
+    if (next !== prev) save(next);
+  }
 }
 
 // ---------------------------------------------------------------- goals
@@ -351,6 +448,8 @@ async function selectedCycle(id, key) {
 }
 
 let running = null;
+// The agents() addresses at the last tick, to poll at once when one ends.
+let lastAgents = null;
 let cycleId = 0;
 let cycleStarted = 0;
 // When the last full cycle started, or 0 to run one at the next tick (refresh()).
@@ -431,6 +530,16 @@ export function startCollector(cx) {
       cx.spawn(async () => {
         await boardOpsCycle();
       });
+    }
+    // A resume whose agent never showed up stops reading "Resuming…".
+    const st = currentStore();
+    const ex = expireResumes(st, Date.now(), new Set((agents() ?? []).map((x) => x.address)));
+    if (ex !== st) save(ex);
+    // An agent ended (or a new one started): poll now, not at the next slow cycle.
+    const live = (agents() ?? []).map((a) => a.address).sort().join(",");
+    if (live !== lastAgents) {
+      if (lastAgents != null) lastStart = 0;
+      lastAgents = live;
     }
     const hung = running && Date.now() - cycleStarted > CYCLE_DEADLINE_MS;
     if (running && !hung) return;
@@ -772,6 +881,95 @@ export function focusTerminal(issue) {
   run("agent.focus", { terminal: issue.terminal });
 }
 
+// ---------------------------------------------------------------- resume
+
+/** Keys with a resume in flight: one click, one agent. */
+const resumingKeys = new Set();
+
+/** A terminal's created_ms read fresh (an address can be reused), as the store's `session` string. */
+async function freshCreated(t) {
+  createdCache.delete(t);
+  const ms = await createdMs(t);
+  return ms == null ? null : String(ms);
+}
+
+/** Whether terminal `t`'s foreground process is `claude --resume <id>`, checked for up to ~5 s. */
+async function resumedIn(t, id) {
+  for (let n = 0; n < 10; n++) {
+    const r = await hcRead(["get", t, "--json"]);
+    let argv = null;
+    try { argv = JSON.parse(String(r.stdout ?? "")).foreground?.argv; } catch {}
+    if (Array.isArray(argv) && argv.includes(id)) return true;
+    await sh("sleep", ["0.5"], { timeout: T_GIT });
+  }
+  return false;
+}
+
+/**
+ * Resume an ended card's Claude conversation (`claude --resume <id>` in the
+ * folder the session started in). Its terminal, when still alive as a plain
+ * shell, gets the command typed in; otherwise a new tab opens in the card's
+ * space (or a new space at that folder), and the card follows the new
+ * terminal (relink). The card stays the same card either way.
+ * @param {Issue} issue @param {string} [by] who resumed it, for the log
+ * @returns {Promise<{ok: boolean, error: string|null, terminal?: string}>}
+ */
+export async function resumeIssue(issue, by = "you") {
+  const it = latest(issue);
+  const plan = resumePlan(it);
+  if (plan.error) return { ok: false, error: plan.error };
+  if (resumingKeys.has(it.key)) return { ok: false, error: "Already resuming" };
+  resumingKeys.add(it.key);
+  // A resume that did not start leaves the card offering Resume again, with the reason.
+  const failed = (error) => {
+    save(resumeFailed(currentStore(), it.key));
+    return { ok: false, error };
+  };
+  try {
+    if (!(await sessionFile(it.agent))) return { ok: false, error: `Session not found: no transcript for ${plan.id.slice(0, 8)} in ~/.claude/projects` };
+    const live = new Set((agents() ?? []).map((a) => a.address));
+    const terms = terminals() ?? [];
+    const old = terms.find((x) => x.address === it.terminal);
+    if (old && old.state === "live" && !old.parent && !live.has(old.address) && isShell(old.foreground)) {
+      // Linked first: the card reads "Resuming…" at once and keeps this terminal's agent.
+      save(relink(currentStore(), it.key, old.address, await freshCreated(old.address), Date.now(), by));
+      // hc send types the line but often outlasts its timeout while claude starts up,
+      // so the send's result is not the answer: claude --resume <id> in the terminal is.
+      const r = await hcAct(["send", old.address, "--", resumeShellLine(plan.id, plan.cwd)], "send failed");
+      if (await resumedIn(old.address, plan.id)) return { ok: true, error: null, terminal: old.address };
+      return failed(r.ok || r.error === DRAFT ? `claude --resume did not start in ${old.address}` : r.error);
+    }
+    const before = new Set(terms.map((x) => x.address));
+    const argv = resumeArgv(plan.id);
+    const sp = (spaces() ?? []).find((x) => !x.machine && it.space && x.name === it.space)
+      ?? (spaces() ?? []).find((x) => !x.machine && x.folder && (x.folder === plan.cwd || x.folder === it.root));
+    if (sp) run("tab.new", { space: sp.id, folder: plan.cwd, argv, focus: false });
+    else run("space.new", { name: it.space || it.branch || it.id, folder: plan.cwd, argv, machine: "", focus: false });
+    let made = null;
+    for (let n = 0; n < 20 && !made; n++) {
+      made = (terminals() ?? []).find((x) => !before.has(x.address) && JSON.stringify(x.argv ?? []).includes(plan.id)) ?? null;
+      if (!made) await sh("sleep", ["0.4"], { timeout: T_GIT });
+    }
+    if (!made) return { ok: false, error: "The new terminal did not show up" };
+    const created = Number.isFinite(Number(made.created_ms)) ? String(made.created_ms) : await freshCreated(made.address);
+    save(relink(currentStore(), it.key, made.address, created, Date.now(), by));
+    if (await resumedIn(made.address, plan.id)) return { ok: true, error: null, terminal: made.address };
+    return failed(`claude --resume exited in ${made.address}: see that terminal`);
+  } finally {
+    resumingKeys.delete(it.key);
+    refresh();
+  }
+}
+
+/** Whether session `agent`'s transcript exists (where its cwd puts it, else anywhere under ~/.claude/projects). */
+async function sessionFile(agent) {
+  const h = home();
+  const at = await sh("test", ["-f", transcriptPath(h, agent.cwd, agent.id)], { timeout: T_GIT });
+  if (at.code === 0) return true;
+  const f = await sh("find", [h + "/.claude/projects", "-maxdepth", "2", "-name", agent.id + ".jsonl"], { timeout: T_GIT });
+  return okText(f) !== "";
+}
+
 // ---------------------------------------------------------------- backlog
 
 /** The store's live (not discarded) backlog entry for `entry`, or null. */
@@ -1045,6 +1243,10 @@ async function applyBoardOp(op, chat) {
       if (next === prev) return ok(`${it.id} unchanged (same text)`);
       save(next);
       return ok(`${it.id} edited`);
+    }
+    case "resume": {
+      const r = await resumeIssue(it, "chat");
+      return r.ok ? ok(`${it.id} resumed in ${r.terminal} (claude --resume ${it.agent?.id})`) : { ok: false, message: r.error || "resume failed" };
     }
     case "start": {
       const r = await startBacklog(it);

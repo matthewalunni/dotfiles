@@ -9,6 +9,7 @@ import { MODE_KEY, currentStore, moveCard } from "../data.js";
 import { PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { heading, label, stageColor, dot, keyChip, reviewBadge } from "./ui.js";
 import { newTaskButton } from "./newtask.js";
+import { resumeButton } from "./resume.js";
 
 /** LIST / BOARD toggle; `after` runs on a switch (closes an open detail). */
 export function modeToggle(mode, k, after) {
@@ -76,6 +77,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
     // A backlog card has no PR: the selected one shows its key.
     const pc = entry ? { text: on ? "S start" : "—" } : prChip(i);
     const waiting = i.stage === "holding";
+    const resume = entry ? null : resumeButton("resume-" + i.key, i, "ghost");
     return v_flex()
       .id("card-" + i.key)
       .flex_none()
@@ -106,7 +108,7 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .child(div().text_color(k.muted).child(ago(i, now))),
       )
       .child(div().text_color(k.strong).font_weight(500).line_height(1.35).max_h(48).overflow_hidden().child(i.title || "untitled"))
-      .child(div().text_color(entry && on ? k.brand : toneColor[note.tone]).truncate().child(note.text))
+      .child(div().text_color(entry && on ? k.brand : toneColor[note.tone]).line_height(1.35).max_h(34).overflow_hidden().child(note.text))
       .child(
         h_flex()
           .items_center()
@@ -117,7 +119,8 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           // Landed work is reviewed already: no badge there.
           .when(boardColumn(i) !== "landed", (el) => el.child(reviewBadge(i, k)))
           .child(div().flex_none().child(pc.text)),
-      );
+      )
+      .when(Boolean(resume), (el) => el.child(h_flex().justify_end().child(resume)));
   };
   const accentOf = (c) => (c.stage === "survey" ? k.muted : stageColor(c.stage, k));
   const head = (c) => {
