@@ -15,7 +15,7 @@ import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, mar
 import { REVIEW_LABEL } from "./lib/review.js";
 import { parsePidSession, sessionFromHistory, summarizeTranscript, transcriptPath, resumePlan, resumeArgv, resumeShellLine, isShell } from "./lib/agentsession.js";
 import { STAGE_LABEL } from "./lib/stage.js";
-import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, resultLine } from "./lib/boardops.js";
+import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, planEdit, resultLine } from "./lib/boardops.js";
 import { findChatTerminal } from "./lib/chatsource.js";
 import { parseMachines } from "./lib/machines.js";
 import { submitTask, backlogExec, startTask } from "./lib/newtask.js";
@@ -1196,6 +1196,23 @@ async function boardOpsCycle() {
 }
 
 /**
+ * A new title and/or brief for a card: `herdr-board edit` and Deck's in-place
+ * editors both come here (planEdit checks it, editIssue stores it, save
+ * persists it). A started card's agent is not told (lib/inlineedit.js says why).
+ * @param {any} issue @param {{title?: string, brief?: string}} fields @param {string} [by]
+ * @returns {{ok: true, changed: boolean}|{ok: false, message: string}}
+ */
+export function editCard(issue, fields, by = "you") {
+  const p = planEdit(fields);
+  if ("error" in p) return { ok: false, message: p.error };
+  const prev = currentStore();
+  const next = editIssue(prev, issue.key, p.edit, Date.now(), by);
+  if (next === prev) return { ok: true, changed: false };
+  save(next);
+  return { ok: true, changed: true };
+}
+
+/**
  * One request, through the same actions as the deck's own buttons.
  * @param {import("./lib/boardops.js").BoardOp} op @param {string|null} chat the chat agent's terminal address
  * @returns {Promise<{ok: boolean, message: string}>}
@@ -1238,11 +1255,9 @@ async function applyBoardOp(op, chat) {
       restoreEntry(it);
       return ok(`${it.id} restored to the Backlog`);
     case "edit": {
-      const prev = currentStore();
-      const next = editIssue(prev, it.key, plan.edit, Date.now(), "chat");
-      if (next === prev) return ok(`${it.id} unchanged (same text)`);
-      save(next);
-      return ok(`${it.id} edited`);
+      const r = editCard(it, plan.edit, "chat");
+      if (!r.ok) return r;
+      return ok(r.changed ? `${it.id} edited` : `${it.id} unchanged (same text)`);
     }
     case "resume": {
       const r = await resumeIssue(it, "chat");
