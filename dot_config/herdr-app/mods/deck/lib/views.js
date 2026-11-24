@@ -47,11 +47,11 @@ export function navChild(view) {
   return NAV.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-chat";
 }
 
-const SIG_KEYS = ["layout", "deck.view", "deck.selected", "deck.issueTab", "deck.issuesMode", "deck.issueFrom", "deck.goals"];
+const SIG_KEYS = ["layout", "deck.view", "deck.selected", "deck.issueTab", "deck.issuesMode", "deck.issueFrom", "deck.goals", "deck.reviewSort"];
 
 /**
  * A cheap fingerprint of what a Deck view draws from: the shown layout and
- * view, the selection, tab, mode and where the page came from, and the store's
+ * view, the selection, tab, mode, the review-cost sort and where the page came from, and the store's
  * size and last event. Two draws with the same fingerprint look the same as
  * far as navigation goes. `get` is shared().
  * @param {(key: string) => any} get @returns {string}

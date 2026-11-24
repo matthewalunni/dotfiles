@@ -4,6 +4,7 @@
 // once, through the same actions as its own buttons, and appends the outcome
 // to BOARD_RESULTS for the CLI to report. Pure; no herdr imports.
 import { PIN_COLUMNS, STAGE_LABEL } from "./stage.js";
+import { asReview } from "./review.js";
 
 export const BOARD_OPS = "~/.local/state/herdr-deck/board.jsonl";
 export const BOARD_RESULTS = "~/.local/state/herdr-deck/board-results.jsonl";
@@ -11,15 +12,16 @@ export const BOARD_RESULTS = "~/.local/state/herdr-deck/board-results.jsonl";
 /** A request older than this is never applied (the deck was closed when it was made). */
 export const OP_MAX_AGE = 10 * 60 * 1000;
 
-export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "goal-new", "goal"];
+export const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "goal-new", "goal", "review"];
 /** Ops on agent cards, and on backlog cards. */
 const ISSUE_OPS = new Set(["move", "dismiss", "delete"]);
 const BACKLOG_OPS = new Set(["discard", "restore", "start"]);
 
 /**
  * goal-new: `ref` is the new goal's title. goal: `ref` is the card, `goal` a G-n or "none".
+ * review: `ref` is the card (any kind), `review` "needs-me" or "unattended".
  * @typedef {{ id: string, t: number, op: string, ref: string, from: string|null, column?: string, title?: string, brief?: string,
- *   goal?: string, project?: string, start?: string, doneWhen?: string, days?: number }} BoardOp
+ *   goal?: string, review?: string, project?: string, start?: string, doneWhen?: string, days?: number }} BoardOp
  */
 
 /**
@@ -44,7 +46,7 @@ export function parseOps(text) {
     if (typeof o.column === "string") op.column = o.column;
     if (typeof o.title === "string") op.title = o.title;
     if (typeof o.brief === "string") op.brief = o.brief;
-    for (const k of ["goal", "project", "start", "doneWhen"]) if (typeof o[k] === "string") op[k] = o[k];
+    for (const k of ["goal", "review", "project", "start", "doneWhen"]) if (typeof o[k] === "string") op[k] = o[k];
     if (typeof o.days === "number" && Number.isFinite(o.days)) op.days = o.days;
     out.push(op);
   }
@@ -130,6 +132,12 @@ export function planOp(op, issues, chat) {
     if (typeof op.brief === "string") edit.brief = op.brief;
     if (!("title" in edit) && !("brief" in edit)) return { error: "edit needs --title or --brief" };
     return { issue, edit };
+  }
+  if (op.op === "review") {
+    const review = asReview(op.review);
+    if (!review) return { error: "review needs needs-me or unattended" };
+    if (issue.discarded) return { error: `${issue.id} is discarded: restore it first` };
+    return { issue, review };
   }
   if (op.op === "goal") {
     if (!op.goal || !op.goal.trim()) return { error: "goal needs a goal: a G-n, or none" };

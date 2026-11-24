@@ -17,6 +17,7 @@ const COLS = [
     ["/", "Next view filter"], ["V", "List / board"], ["1 – 9", "Answer the agent"],
     ["R", "Type a reply"], ["T", "Open its terminal"], ["esc", "Back / leave reply"],
     ["S", "Backlog: start agent (S again)"], ["X", "Backlog: discard"], ["D", "Remove: dismiss (D) or delete (X)"], ["N", "New task"],
+    ["U", "Review cost: needs me / unattended"], ["⇧U", "Sort unattended first / back"],
   ] },
   { title: "Pull request", tone: "work", rows: [
     ["⇧1 ⇧2", "Overview / Pull request"], ["n  p", "Next / previous file"],
@@ -41,7 +42,7 @@ const MOUSE_ONLY = "Restore and sidebar filters: mouse only. Drag a card to move
 
 /** Opens the keyboard map over the window. */
 export function openKeys() {
-  openOverlay({ mod: "deck", props: { view: "keys" }, kind: "dialog", width: 1240, height: 600 });
+  openOverlay({ mod: "deck", props: { view: "keys" }, kind: "dialog", width: 1240, height: 650 });
 }
 
 export default class KeysView extends View {

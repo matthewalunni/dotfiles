@@ -27,12 +27,21 @@ The brief is all the future agent will have, so make it stand alone. One paragra
 
 The title is short and specific, like an issue title ("Fix flaky login test"), not a sentence of explanation.
 
+## Choose the review cost
+
+Every card says how much of Matt its result will need, so he can let the cheap ones run unattended while he attends the others. Pass `--review` with one of two values:
+
+- `unattended`: Matt can accept the result from the tests and the proof file alone. Research and write-ups, prototypes and spikes, small maintenance (a dependency bump, a flaky test, a typo, a rename, dead code), and anything else the brief's proof checks in full.
+- `needs-me`: a significant change, anything that needs design or product judgment, anything Matt must watch while it runs or look at to accept (new UI, behaviour he will feel, data migrations, security, money, anything hard to undo).
+
+When you are unsure, use `needs-me`. Leaving `--review` out means `needs-me` too. Choose by what it costs Matt to review the result, not by how long the work takes: a long research task is `unattended`, a two-line change to how merges work is `needs-me`. Matt can change it on the card (U in Deck).
+
 ## Command
 
 Run it from inside the repo (a worktree is fine; it files against the main checkout):
 
 ```sh
-herdr-backlog --title "Fix flaky login test" --brief "tests/login.test.js fails about 1 in 5 runs on the token refresh case because the clock is not mocked. Done when 50 consecutive runs pass. Attach the log of those runs as proof."
+herdr-backlog --review unattended --title "Fix flaky login test" --brief "tests/login.test.js fails about 1 in 5 runs on the token refresh case because the clock is not mocked. Done when 50 consecutive runs pass. Attach the log of those runs as proof."
 ```
 
-Add `--repo /absolute/path` only if you are not inside the repo. Add `--goal G-n` when the task serves a goal Matt named (Deck's Goals view lists them); it stays on that goal once started. Quote values; they are stored verbatim and never executed. It prints `Filed B-? <title>` (Deck assigns the number). A non-zero exit with a message means nothing was filed: fix the arguments and retry.
+Add `--repo /absolute/path` only if you are not inside the repo. Add `--goal G-n` when the task serves a goal Matt named (Deck's Goals view lists them); it stays on that goal once started. Quote values; they are stored verbatim and never executed. It prints `Filed B-? <title> (review: <value>)` (Deck assigns the number). A non-zero exit with a message means nothing was filed: fix the arguments and retry.

@@ -15,6 +15,8 @@
 //   herdr-board goal-new <title> --days N [--project NAME] [--start YYYY-MM-DD] [--done-when TEXT]
 //                                           a goal (G-n) with an N-day time box, shown in Deck's Goals view
 //   herdr-board goal <card> <G-n|none>      put a card on a goal (off any other), or off every goal
+//   herdr-board review <card> <needs-me|unattended>
+//                                           a card's review cost: needs Matt, or safe to run unattended
 //
 // <card> is the id the board shows (TF-8, B-3). Appends one JSON line to
 // ~/.local/state/herdr-deck/board.jsonl, then waits for Deck to apply it and
@@ -51,13 +53,14 @@ const USAGE = `usage:
   herdr-board cleanup <card> [--dry-run] [--keep-worktree] [--keep-branch] [--keep-terminal] [--force]
   herdr-board goal-new <title> --days N [--project NAME] [--start YYYY-MM-DD] [--done-when TEXT]
   herdr-board goal <card> <G-n|none>
+  herdr-board review <card> <needs-me|unattended>
 `;
 const die = (msg) => { process.stderr.write("herdr-board: " + msg + "\n"); process.exit(1); };
 
 const a = process.argv.slice(2);
 if (!a.length || a[0] === "-h" || a[0] === "--help") { process.stdout.write(USAGE); process.exit(a.length ? 0 : 1); }
 const [op, ref, ...rest] = a;
-const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup", "goal-new", "goal"];
+const OPS = ["move", "dismiss", "delete", "discard", "restore", "edit", "start", "cleanup", "goal-new", "goal", "review"];
 if (!OPS.includes(op)) die("unknown command: " + op + "\n" + USAGE);
 if (op === "goal-new" && (!ref || !ref.trim() || ref.startsWith("-"))) die("goal-new needs a title");
 if (!ref || !ref.trim() || ref.startsWith("-")) die(op + " needs a card id, like TF-8 or B-3");
@@ -90,6 +93,10 @@ if (op === "move") {
 } else if (op === "goal") {
   if (rest.length !== 1 || !rest[0].trim()) die("goal needs one goal: a G-n (like G-1), or none");
   req.goal = rest[0].trim();
+} else if (op === "review") {
+  const v = rest.length === 1 ? rest[0].trim().toLowerCase() : "";
+  if (v !== "needs-me" && v !== "unattended") die("review needs one value: needs-me or unattended");
+  req.review = v;
 } else if (rest.length) die("unexpected argument: " + rest[0]);
 
 const home = process.env.HOME;

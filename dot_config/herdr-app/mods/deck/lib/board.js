@@ -3,6 +3,7 @@
 import { STAGE_LABEL, boardColumn } from "./stage.js";
 import { backlogFiler } from "./backlog.js";
 import { projectOf, projectOrder } from "./present.js";
+import { reviewOrder } from "./review.js";
 
 /** @typedef {import("./store.js").Issue} Issue */
 
@@ -13,11 +14,12 @@ const recency = (i) => i.holdingSince ?? i.lastSeen ?? 0;
 /**
  * Board columns (see boardColumn: a dragged card sits where it was put). Each column's cards are in project order (see boardLanes),
  * newest first within a project, so j/k walks a column lane by lane.
- * @param {Issue[]} issues
+ * `byReview`: within a project, unattended cards first.
+ * @param {Issue[]} issues @param {boolean} [byReview]
  */
-export function boardColumns(issues) {
+export function boardColumns(issues, byReview = false) {
   const live = (issues ?? []).filter((i) => !i.dismissed && !i.discarded);
-  const order = (a, b) => projectOrder(projectOf(a), projectOf(b)) || recency(b) - recency(a);
+  const order = (a, b) => projectOrder(projectOf(a), projectOf(b)) || (byReview ? reviewOrder(a, b) : 0) || recency(b) - recency(a);
   return COLS.map(([stage, label]) => ({
     stage, label,
     items: live.filter((i) => boardColumn(i) === stage).sort(order),

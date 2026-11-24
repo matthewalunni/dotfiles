@@ -1,11 +1,12 @@
 // The top bar: brand, Terminal / Chat / Issues / Goals nav, the holding chip, "? keys"
 // and the clock. The collector and the chat source run in this copy; main.js starts and stops them
 // (close() only reaches the root view). This copy also runs the keys.json
-// command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
+// command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task, deck.review-sort). The holding
 // chip, ⌘⇧J and ⌘⇧I open the issue page (views/issuepage.js).
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { shared, theme, nextCommand, notify } from "herdr";
+import { shared, setShared, theme, nextCommand, notify } from "herdr";
+import { REVIEW_SORT_KEY } from "../lib/review.js";
 import { deckTokens } from "../lib/tokens.js";
 import { currentStore, VIEW_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
@@ -44,8 +45,9 @@ function focusedIssue(issues) {
 const GO = { chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal", goals: "deck-goals" };
 
 /**
- * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back" or "new-task"
- * (the New task dialog, as N; nothing while another Deck dialog is open).
+ * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back", "new-task"
+ * (the New task dialog, as N; nothing while another Deck dialog is open) or
+ * "review-sort" (unattended cards first in Issues, or back, as ⇧U).
  * @param {string} c
  */
 export function runCommand(c) {
@@ -53,6 +55,7 @@ export function runCommand(c) {
   const go = /^go:(chat|issues|terminal|goals)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
   if (cmd === "new-task") return void openNewTask();
+  if (cmd === "review-sort") return void setShared(REVIEW_SORT_KEY, shared(REVIEW_SORT_KEY) !== true);
   // ⌘Esc: back out of the issue page (even from its terminal, where Esc is the agent's).
   if (cmd === "back") {
     if (shared(VIEW_KEY) !== "deck-issue") return;

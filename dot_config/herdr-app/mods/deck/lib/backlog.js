@@ -2,7 +2,10 @@
 // Entries live in store.issues with kind "backlog" (key "backlog|<entry id>", display id "B-<n>").
 // They are never reconciled against terminals; started/discarded ids are tombstoned in store.backlogTombs.
 
-/** @typedef {{ id: string, title: string, brief: string, repo: string, source: string, from: string|null, createdAt: number }} Entry */
+import { asReview } from "./review.js";
+import { noteReviewPath } from "./store.js";
+
+/** @typedef {{ id: string, title: string, brief: string, repo: string, source: string, from: string|null, createdAt: number, goal?: string, review?: "needs-me"|"unattended" }} Entry */
 /** @typedef {import("./store.js").Store} Store */
 
 export const DISCARD_TTL = 7 * 24 * 60 * 60 * 1000;
@@ -42,6 +45,7 @@ export function parseBacklog(text) {
       from: typeof o.from === "string" && o.from ? o.from : null,
       createdAt: typeof o.createdAt === "number" && Number.isFinite(o.createdAt) ? o.createdAt : 0,
       ...(typeof o.goal === "string" && o.goal ? { goal: o.goal } : {}),
+      ...(asReview(o.review) ? { review: asReview(o.review) } : {}),
     });
   }
   return out;
@@ -61,6 +65,7 @@ function toIssue(e, id, now) {
     status: "idle", terminal: null, branch: null, cwd: e.repo, commitsAhead: null, pr: null, ghError: null,
     claims: [], prompt: null, holdingSince: null, observed: false, lastSeen: now,
     ...(e.goal ? { goal: e.goal } : {}),
+    ...(e.review ? { review: e.review } : {}),
   };
 }
 
@@ -171,12 +176,16 @@ export function restoreBacklog(store, ref) {
   return { ...store, issues: store.issues.map((i) => (i === prev ? { ...prev, discarded: false, discardedAt: null } : i)), backlogTombs: tombs };
 }
 
-/** The entry started: it leaves the Backlog for good. @param {Store} store @param {string} ref key or B-n @param {number} now @returns {Store} */
-export function markStarted(store, ref, now) {
+/**
+ * The entry started: it leaves the Backlog for good. With `path` (the worktree
+ * it started in), its review cost waits there for the agent's card.
+ * @param {Store} store @param {string} ref key or B-n @param {number} now @param {string|null} [path] @returns {Store}
+ */
+export function markStarted(store, ref, now, path = null) {
   const prev = find(store, ref);
   if (!prev) return store;
   return {
-    ...store, issues: store.issues.filter((i) => i !== prev),
+    ...noteReviewPath(store, path, prev.review, now), issues: store.issues.filter((i) => i !== prev),
     backlogTombs: capTombs(tomb(store, prev.entryId, "started", now)),
   };
 }

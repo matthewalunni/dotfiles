@@ -7,7 +7,7 @@ import { boardColumns, boardLanes, boardNote, repoColor } from "../lib/board.js"
 import { minutesSince, prChip } from "../lib/present.js";
 import { MODE_KEY, currentStore, moveCard } from "../data.js";
 import { PIN_COLUMNS, boardColumn } from "../lib/stage.js";
-import { heading, label, stageColor, dot, keyChip } from "./ui.js";
+import { heading, label, stageColor, dot, keyChip, reviewBadge } from "./ui.js";
 import { newTaskButton } from "./newtask.js";
 
 /** LIST / BOARD toggle; `after` runs on a switch (closes an open detail). */
@@ -40,6 +40,11 @@ export function modeToggle(mode, k, after) {
     .child(keyChip("V"));
 }
 
+/** The header chip while ⇧U has unattended cards sorted first. */
+export function sortChip(k) {
+  return div().flex_none().px(9).h(24).flex().items_center().rounded(12).bg(k.okBg).text_size(12).text_color(k.ok).whitespace_nowrap().child("Unattended first");
+}
+
 // Drag state. A press on a card arms it; it becomes a drag once the pointer
 // moves DRAG_PX, so a plain click still opens the card. `x`/`y` is the pointer
 // in the board, `over` the column under it, `moved` stops the click that ends a drag.
@@ -58,11 +63,11 @@ const ago = (issue, now) => {
 
 /**
  * The board pane. `onCard(issue)` handles clicks.
- * @param {{filterName: string|null}} opts
+ * @param {{filterName: string|null, byReview?: boolean}} opts  byReview: unattended cards first (⇧U)
  */
 export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
   const now = Date.now();
-  const cols = boardColumns(issues);
+  const cols = boardColumns(issues, Boolean(opts.byReview));
   const toneColor = { hold: k.hold, work: k.work, fail: k.fail, ok: k.ok, muted: k.muted };
   const card = (i) => {
     const on = selected?.key === i.key;
@@ -109,6 +114,8 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
           .text_color(k.muted)
           .text_size(11)
           .child(div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").child(entry ? "not started" : i.branch ?? "no branch"))
+          // Landed work is reviewed already: no badge there.
+          .when(boardColumn(i) !== "landed", (el) => el.child(reviewBadge(i, k)))
           .child(div().flex_none().child(pc.text)),
       );
   };
@@ -208,8 +215,9 @@ export function boardPane(issues, selected, k, onCard, onToggled, opts = {}) {
         .when(Boolean(opts.filterName), (el) =>
           el.child(div().px(9).h(24).flex().items_center().rounded(12).bg(k.brandWash).text_size(12).text_color(k.brand).truncate().max_w(220).child(String(opts.filterName))),
         )
+        .when(Boolean(opts.byReview), (el) => el.child(sortChip(k)))
         .child(div().flex_1())
-        .child(div().text_size(11).text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move · ↵ open · S start · X discard")),
+        .child(div().text_size(11).text_color(k.muted).truncate().child("h l column · j k card · ⇧H ⇧L move · ↵ open · S start · X discard · U review cost · ⇧U sort")),
     )
     .child(
       v_flex()

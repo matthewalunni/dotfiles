@@ -1,6 +1,7 @@
 // The issue store: turns each poll's observations into stable issues. Pure; no herdr imports.
 import { deriveStage, nextHolding, pinHolds, PIN_COLUMNS, STAGE_LABEL } from "./stage.js";
 import { samePrompt } from "./prompt.js";
+import { asReview, reviewOf, REVIEW_LABEL } from "./review.js";
 
 /** @typedef {"working"|"blocked"|"done"|"idle"} Status */
 /** @typedef {"survey"|"build"|"verify"|"holding"|"landed"} Stage */
@@ -22,11 +23,12 @@ import { samePrompt } from "./prompt.js";
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number,
  *   pin?: { column: string, prState: string|null, at: number }|null,
- *   edits?: { title?: string, brief?: string }|null
+ *   edits?: { title?: string, brief?: string }|null,
+ *   review?: "needs-me"|"unattended"
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
-/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, log: LogEvent[] }} Store */
+/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, reviewPaths?: Record<string, { review: string, at: number }>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
  *   terminal: string, session?: string|null, space?: string|null, status: Status, title: string, cwd: string, repo: string|null,
@@ -150,6 +152,7 @@ export function reconcile(store, obs, now) {
   let issues = store.issues.filter((i) => !isBacklog(i)).map((i) => ({ ...i }));
   const log = [...store.log];
   const retired = { ...(store.retired ?? {}) };
+  const reviewPaths = { ...(store.reviewPaths ?? {}) };
   const seen = new Set();
   const liveTags = new Set();
   const drop = new Set();
@@ -212,7 +215,17 @@ export function reconcile(store, obs, now) {
     const holdingSince = landing || (inLanded && o.status !== "blocked")
       ? null
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
+    // A card keeps its review cost; a new one takes what its worktree was started with (noteReviewPath).
+    let review = prev?.review ?? null;
+    if (!prev) {
+      const at = reviewPathOf(reviewPaths, o);
+      if (at) {
+        review = reviewPaths[at].review;
+        delete reviewPaths[at];
+      }
+    }
     const next = {
+      ...(review ? { review } : {}),
       key, id, terminal: o.terminal, session: o.session ?? prev?.session ?? null, space: o.space ?? null, project,
       // An edit (editIssue) outlives what the agent's terminal reports.
       status: o.status, title: prev?.edits?.title ?? o.title, cwd: o.cwd,
@@ -251,7 +264,43 @@ export function reconcile(store, obs, now) {
     issues[n] = next;
   }
 
-  return finish({ issues: [...backlogItems, ...issues], counters, prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log }, now);
+  return finish({ issues: [...backlogItems, ...issues], counters, prefixes, retired, backlogTombs: store.backlogTombs ?? {}, reviewPaths, log }, now);
+}
+
+// A started worktree's review cost waits this long for its agent's card.
+const REVIEW_PATH_TTL = 24 * 60 * 60 * 1000;
+
+/** The reviewPaths entry an observation is in (its git root, or its folder inside the worktree), or null. */
+function reviewPathOf(paths, o) {
+  const inside = (x, p) => typeof x === "string" && (x === p || x.startsWith(p + "/"));
+  return Object.keys(paths).find((p) => o.root === p || inside(o.cwd, p)) ?? null;
+}
+
+/**
+ * A task started in worktree `path` with a review cost: the agent's card there
+ * takes it when it first shows up (reconcile). "needs-me" is every card's
+ * default, so only "unattended" is kept.
+ * @param {Store} store @param {string|null|undefined} path @param {unknown} review @param {number} now @returns {Store}
+ */
+export function noteReviewPath(store, path, review, now) {
+  const p = String(path ?? "").replace(/\/+$/, "");
+  if (!p.startsWith("/") || asReview(review) !== "unattended") return store;
+  return { ...store, reviewPaths: { ...(store.reviewPaths ?? {}), [p]: { review: "unattended", at: now } } };
+}
+
+/**
+ * Set a card's review cost (a backlog card or an agent's). Unchanged store for
+ * an unknown key, a bad value or the value it already reads as.
+ * @param {Store} store @param {string} key @param {unknown} review @param {number} now @param {string} [by]
+ * @returns {Store}
+ */
+export function setReview(store, key, review, now, by = "you") {
+  const value = asReview(review);
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || !value || reviewOf(prev) === value) return store;
+  const next = { ...prev, review: value };
+  const log = [...store.log, { t: now, key, id: prev.id, what: "review cost set to " + REVIEW_LABEL[value].toLowerCase() + " by " + by, tone: "work" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
 /**
@@ -305,7 +354,12 @@ function finish(store, now) {
     keys.sort((x, y) => retired[x] - retired[y]);
     for (const k of keys.slice(0, keys.length - RETIRED_CAP)) delete retired[k];
   }
-  return { issues, counters: store.counters, prefixes: store.prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log: store.log.slice(-LOG_CAP) };
+  const reviewPaths = Object.fromEntries(Object.entries(store.reviewPaths ?? {}).filter(([, v]) => v.at >= now - REVIEW_PATH_TTL));
+  return {
+    issues, counters: store.counters, prefixes: store.prefixes, retired, backlogTombs: store.backlogTombs ?? {},
+    ...(Object.keys(reviewPaths).length ? { reviewPaths } : {}),
+    log: store.log.slice(-LOG_CAP),
+  };
 }
 
 /**
