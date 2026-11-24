@@ -26,7 +26,7 @@ import { pickSession } from "./agentsession.js";
  *   pin?: { column: string, prState: string|null, at: number }|null,
  *   edits?: { title?: string, brief?: string }|null,
  *   agent?: import("./agentsession.js").AgentSession|null,
- *   summaries?: SessionSummary[], resumedAt?: number|null,
+ *   summaries?: SessionSummary[], resumedAt?: number|null, resumeError?: string|null,
  *   review?: "needs-me"|"unattended"
  * }} Issue
  */
@@ -252,7 +252,7 @@ export function reconcile(store, obs, now) {
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
       reviewedSha: prev?.reviewedSha ?? null,
       pin: pinHolds(prev?.pin, pr) ? prev.pin : null,
-      agent: pickSession(o.agent, prev?.agent), summaries: prev?.summaries ?? [], resumedAt: null,
+      agent: pickSession(o.agent, prev?.agent), summaries: prev?.summaries ?? [], resumedAt: null, resumeError: null,
       observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
     };
@@ -564,7 +564,7 @@ export function attachSession(store, key, agent) {
 export function relink(store, key, terminal, session, now, by = "you") {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev) || !terminal) return store;
-  const next = { ...prev, terminal, session: session ?? null, resumedAt: now };
+  const next = { ...prev, terminal, session: session ?? null, resumedAt: now, resumeError: null };
   const where = terminal === prev.terminal ? "in " + terminal : "in " + terminal + " (was " + prev.terminal + ")";
   const log = [...store.log, { t: now, key, id: prev.id, what: "resumed " + where + " by " + by, tone: "work" }].slice(-LOG_CAP);
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
@@ -572,20 +572,28 @@ export function relink(store, key, terminal, session, now, by = "you") {
 
 /**
  * A resume that did not start: the card stops reading "Resuming…" and offers
- * Resume again. Unchanged store when the card is not waiting on a resume.
- * @param {Store} store @param {string} key
+ * Resume again. With an `error`, it is kept on the card (resumeError, shown
+ * beside the button until the next try) and logged, whether or not the card
+ * was relinked yet. Without one, unchanged store when the card is not waiting.
+ * @param {Store} store @param {string} key @param {string|null} [error] @param {number} [now]
  * @returns {Store}
  */
-export function resumeFailed(store, key) {
+export function resumeFailed(store, key, error = null, now = Date.now()) {
   const prev = store.issues.find((i) => i.key === key);
-  if (!prev || prev.resumedAt == null) return store;
-  const next = { ...prev, resumedAt: null };
-  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+  if (!prev || isBacklog(prev)) return store;
+  if (!error) {
+    if (prev.resumedAt == null) return store;
+    const next = { ...prev, resumedAt: null };
+    return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+  }
+  const next = { ...prev, resumedAt: null, resumeError: String(error) };
+  const log = [...store.log, { t: now, key, id: prev.id, what: "resume failed: " + String(error), tone: "warn" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
 /**
- * Resumes still waiting after RESUME_MS whose agent never showed up: cleared
- * (resumeFailed), so the card offers Resume again instead of "Resuming…"
+ * Resumes still waiting after RESUME_MS whose agent never showed up: failed
+ * with a reason (resumeFailed), so the card offers Resume again instead of "Resuming…"
  * forever. A card whose terminal is in `live` (agents() addresses) did start:
  * the next poll picks it up, so it is left alone. Unchanged store when there are none.
  * @param {Store} store @param {number} now @param {Set<string>} [live]
@@ -594,6 +602,6 @@ export function resumeFailed(store, key) {
 export function expireResumes(store, now, live = new Set()) {
   const stale = store.issues.filter((i) => i.observed === false && typeof i.resumedAt === "number" && now - i.resumedAt >= RESUME_MS && !live.has(i.terminal));
   if (!stale.length) return store;
-  const log = [...store.log, ...stale.map((i) => ({ t: now, key: i.key, id: i.id, what: "resume did not start: Resume again", tone: "warn" }))].slice(-LOG_CAP);
-  return { ...stale.reduce((s, i) => resumeFailed(s, i.key), store), log };
+  const secs = Math.round(RESUME_MS / 1000);
+  return stale.reduce((s, i) => resumeFailed(s, i.key, `claude --resume did not come back within ${secs} s: see ${i.terminal}, or Resume again`, now), store);
 }

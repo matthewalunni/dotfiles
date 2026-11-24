@@ -15,6 +15,8 @@ import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, mar
 import { REVIEW_LABEL } from "./lib/review.js";
 import { parsePidSession, sessionFromHistory, summarizeTranscript, transcriptPath, resumePlan, resumeArgv, resumeShellLine, isShell } from "./lib/agentsession.js";
 import { STAGE_LABEL } from "./lib/stage.js";
+import { pruneClicks } from "./lib/board.js";
+import { RESUME_CLICKS_KEY } from "./lib/views.js";
 import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, planEdit, resultLine } from "./lib/boardops.js";
 import { findChatTerminal } from "./lib/chatsource.js";
 import { parseMachines } from "./lib/machines.js";
@@ -531,6 +533,10 @@ export function startCollector(cx) {
         await boardOpsCycle();
       });
     }
+    // A Resume click with no answer past CLICK_MS stops reading "Resuming…" in every view.
+    const cl = shared(RESUME_CLICKS_KEY);
+    const pruned = pruneClicks(cl, Date.now());
+    if (cl && pruned !== cl) setShared(RESUME_CLICKS_KEY, pruned);
     // A resume whose agent never showed up stops reading "Resuming…".
     const st = currentStore();
     const ex = expireResumes(st, Date.now(), new Set((agents() ?? []).map((x) => x.address)));
@@ -893,9 +899,13 @@ async function freshCreated(t) {
   return ms == null ? null : String(ms);
 }
 
-/** Whether terminal `t`'s foreground process is `claude --resume <id>`, checked for up to ~5 s. */
+// How long a resume waits for `claude --resume <id>` to be running in its terminal.
+const RESUMED_IN_MS = 8_000;
+
+/** Whether terminal `t`'s foreground process is `claude --resume <id>`, checked for up to RESUMED_IN_MS. */
 async function resumedIn(t, id) {
-  for (let n = 0; n < 10; n++) {
+  const until = Date.now() + RESUMED_IN_MS;
+  while (Date.now() < until) {
     const r = await hcRead(["get", t, "--json"]);
     let argv = null;
     try { argv = JSON.parse(String(r.stdout ?? "")).foreground?.argv; } catch {}
@@ -916,17 +926,17 @@ async function resumedIn(t, id) {
  */
 export async function resumeIssue(issue, by = "you") {
   const it = latest(issue);
-  const plan = resumePlan(it);
-  if (plan.error) return { ok: false, error: plan.error };
-  if (resumingKeys.has(it.key)) return { ok: false, error: "Already resuming" };
-  resumingKeys.add(it.key);
-  // A resume that did not start leaves the card offering Resume again, with the reason.
+  // A resume that did not start leaves the card offering Resume again, with the reason on it.
   const failed = (error) => {
-    save(resumeFailed(currentStore(), it.key));
+    noteResumeFailed(it?.key, error);
     return { ok: false, error };
   };
+  const plan = resumePlan(it);
+  if (plan.error) return failed(plan.error);
+  if (resumingKeys.has(it.key)) return { ok: false, error: "Already resuming" };
+  resumingKeys.add(it.key);
   try {
-    if (!(await sessionFile(it.agent))) return { ok: false, error: `Session not found: no transcript for ${plan.id.slice(0, 8)} in ~/.claude/projects` };
+    if (!(await sessionFile(it.agent))) return failed(`Session not found: no transcript for ${plan.id.slice(0, 8)} in ~/.claude/projects`);
     const live = new Set((agents() ?? []).map((a) => a.address));
     const terms = terminals() ?? [];
     const old = terms.find((x) => x.address === it.terminal);
@@ -950,7 +960,7 @@ export async function resumeIssue(issue, by = "you") {
       made = (terminals() ?? []).find((x) => !before.has(x.address) && JSON.stringify(x.argv ?? []).includes(plan.id)) ?? null;
       if (!made) await sh("sleep", ["0.4"], { timeout: T_GIT });
     }
-    if (!made) return { ok: false, error: "The new terminal did not show up" };
+    if (!made) return failed("The new terminal for claude --resume did not show up");
     const created = Number.isFinite(Number(made.created_ms)) ? String(made.created_ms) : await freshCreated(made.address);
     save(relink(currentStore(), it.key, made.address, created, Date.now(), by));
     if (await resumedIn(made.address, plan.id)) return { ok: true, error: null, terminal: made.address };
@@ -959,6 +969,14 @@ export async function resumeIssue(issue, by = "you") {
     resumingKeys.delete(it.key);
     refresh();
   }
+}
+
+/** Records why a resume of card `key` failed: "Resuming…" ends, the reason shows beside Resume, and views redraw. */
+export function noteResumeFailed(key, error) {
+  if (!key) return;
+  const prev = currentStore();
+  const next = resumeFailed(prev, key, error || "Resume failed", Date.now());
+  if (next !== prev) save(next);
 }
 
 /** Whether session `agent`'s transcript exists (where its cwd puts it, else anywhere under ~/.claude/projects). */

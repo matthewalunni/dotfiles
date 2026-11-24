@@ -2,42 +2,61 @@
 // "Agent not running" side) and the card's session summaries, newest first.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { resumeIssue, sh } from "../data.js";
-import { canResume, resuming } from "../lib/board.js";
+import { shared, setShared } from "herdr";
+import { resumeIssue, noteResumeFailed, sh } from "../data.js";
+import { resumeState, CLICK_MS } from "../lib/board.js";
+import { RESUME_CLICKS_KEY } from "../lib/views.js";
 import { clockTime } from "../lib/present.js";
-import { button, label, act } from "./ui.js";
+import { button, label, act, tokens } from "./ui.js";
 
-// Clicks still running, by card key: the button reads "Resuming…" from the
-// click on, not only once the card is relinked. Shared by every Deck view.
-const clicking = (globalThis.__deckResumeClicks ??= new Map());
-// A click gives up after this (resumeIssue's own steps are each timed, well inside it).
-const CLICK_MS = 25_000;
+// A click in flight is in shared state (RESUME_CLICKS_KEY, part of drawSig),
+// not in one view's memory: every view showing this card's button redraws
+// when it starts and when it ends. The collector drops clicks past CLICK_MS
+// (pruneClicks), so a click whose task was dropped cannot stay busy either.
+const clicks = () => shared(RESUME_CLICKS_KEY) ?? {};
+function setClick(key, at) {
+  const next = { ...clicks() };
+  if (at == null) delete next[key];
+  else next[key] = at;
+  setShared(RESUME_CLICKS_KEY, next);
+}
+
+const TOO_LONG = `Resume got no answer in ${CLICK_MS / 1000} s: open the card's terminal, or Resume again`;
 
 /** resumeIssue, or a clear error once CLICK_MS passes, so a click never hangs. (No setTimeout in this runtime: a timed sleep.) */
 function resumeBounded(issue) {
-  const late = sh("sleep", [String(CLICK_MS / 1000)], { timeout: CLICK_MS + 2000 })
-    .then(() => ({ ok: false, error: "Resume took too long: try again, or open the card's terminal" }));
+  const late = sh("sleep", [String(CLICK_MS / 1000 - 1)], { timeout: CLICK_MS })
+    .then(() => ({ ok: false, error: TOO_LONG, late: true }));
   return Promise.race([resumeIssue(issue), late]);
 }
 
 /**
- * Resume button for `issue`, or null when it cannot be resumed. Reads
- * "Resuming…" (disabled) from the click until the resume ends: the agent is
- * back, or it failed (a toast says why) and Resume shows again.
+ * Resume button for `issue`, or null when it cannot be resumed (lib/board.js
+ * resumeState). Reads "Resuming…" (disabled) from the click until the resume
+ * ends, CLICK_MS at most: the agent is back (the button goes), or it failed:
+ * Resume again, with the reason under it (also a toast).
  * @param {string} id element id @param {any} issue @param {"brand"|"ghost"|"plain"} [kind]
  */
 export function resumeButton(id, issue, kind = "brand") {
-  const at = clicking.get(issue?.key);
-  if ((at != null && Date.now() - at < CLICK_MS) || resuming(issue)) return button(id, "Resuming…", kind, () => {}, true);
-  if (!canResume(issue)) return null;
-  return button(id, "Resume", kind, (_e, cx) => {
-    clicking.set(issue.key, Date.now());
+  const st = resumeState(issue, clicks());
+  if (!st) return null;
+  if (st.kind === "pending") return button(id, "Resuming…", kind, () => {}, true);
+  const k = tokens();
+  const btn = button(id, st.error ? "Resume again" : "Resume", kind, (_e, cx) => {
+    const key = issue.key;
+    setClick(key, Date.now());
     cx.notify();
-    act(cx, () => resumeBounded(issue), "Could not resume", (_r, cx) => {
-      clicking.delete(issue.key);
+    act(cx, () => resumeBounded(issue), "Could not resume", (r, cx) => {
+      // No answer in time: the card says so (resumeIssue records every other failure itself).
+      if (r?.late) noteResumeFailed(key, r.error);
+      setClick(key, null);
       cx.notify();
     });
   });
+  if (!st.error) return btn;
+  return v_flex().items_end().gap(4).max_w(320)
+    .child(btn)
+    .child(div().text_size(11).line_height(1.35).text_color(k.fail).child(st.error));
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

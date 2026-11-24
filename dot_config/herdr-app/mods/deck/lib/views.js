@@ -47,17 +47,28 @@ export function navChild(view) {
   return NAV.includes(/** @type {string} */ (view)) ? /** @type {string} */ (view) : "deck-chat";
 }
 
-const SIG_KEYS = ["layout", "deck.view", "deck.selected", "deck.issueTab", "deck.issuesMode", "deck.issueFrom", "deck.goals", "deck.reviewSort"];
+// Resume clicks still running, card key -> click time (views/resume.js); shared so every view redraws when one starts or ends.
+export const RESUME_CLICKS_KEY = "deck.resumeClicks";
+const SIG_KEYS = ["layout", "deck.view", "deck.selected", "deck.issueTab", "deck.issuesMode", "deck.issueFrom", "deck.goals", "deck.reviewSort", RESUME_CLICKS_KEY];
 
 /**
  * A cheap fingerprint of what a Deck view draws from: the shown layout and
- * view, the selection, tab, mode, the review-cost sort and where the page came from, and the store's
- * size and last event. Two draws with the same fingerprint look the same as
- * far as navigation goes. `get` is shared().
+ * view, the selection, tab, mode, the review-cost sort, where the page came
+ * from, Resume clicks in flight, and the store's size, last event and resume
+ * state (cards ended, resuming, failed to resume). Two draws with the same
+ * fingerprint look the same as far as navigation goes. The resume counts are
+ * here because those changes add no log line: without them a card whose agent
+ * came back, or whose resume failed, kept showing "Resuming…". `get` is shared().
  * @param {(key: string) => any} get @returns {string}
  */
 export function drawSig(get) {
   const s = get("deck.store");
   const last = s?.log?.at?.(-1);
-  return JSON.stringify([...SIG_KEYS.map((k) => get(k) ?? null), s?.issues?.length ?? 0, s?.log?.length ?? 0, last?.t ?? 0, last?.key ?? null]);
+  let ended = 0, resuming = 0, failed = 0;
+  for (const i of s?.issues ?? []) {
+    if (i.observed === false) ended++;
+    if (i.resumedAt != null) resuming++;
+    if (i.resumeError) failed++;
+  }
+  return JSON.stringify([...SIG_KEYS.map((k) => get(k) ?? null), s?.issues?.length ?? 0, s?.log?.length ?? 0, last?.t ?? 0, last?.key ?? null, ended, resuming, failed]);
 }

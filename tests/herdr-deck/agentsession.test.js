@@ -258,7 +258,7 @@ test("a resume whose agent never shows up expires: Resume again, with a log line
   const t = expireResumes(s, 3000 + RESUME_MS);
   assert.equal(t.issues[0].resumedAt, null);
   assert.equal(canResume(t.issues[0], 3000 + RESUME_MS), true);
-  assert.equal(t.log.at(-1).what, "resume did not start: Resume again");
+  assert.match(t.log.at(-1).what, /^resume failed: claude --resume did not come back within 30 s/);
   // Its agent is running but not polled yet (a slow cycle): left alone.
   assert.equal(expireResumes(s, 3000 + RESUME_MS, new Set(["t7"])), s);
   // A resume that worked is never touched.
