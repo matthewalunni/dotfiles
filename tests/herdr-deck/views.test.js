@@ -57,6 +57,7 @@ test("drawSig changes with the selection, view and store events, not otherwise",
   assert.notEqual(sig({}), sig({ "deck.selected": "b" }));
   assert.notEqual(sig({}), sig({ "deck.view": "deck-issues" }));
   assert.notEqual(sig({}), sig({ layout: "main" }));
+  assert.notEqual(sig({}), sig({ "deck.reviewSort": true })); // ⇧U / deck.review-sort redraws
   assert.notEqual(sig({}), sig({ "deck.store": { issues: [1, 2], log: [{ t: 5, key: "a" }, { t: 6, key: "b" }] } }));
   assert.equal(drawSig(() => undefined), drawSig(() => null));
 });

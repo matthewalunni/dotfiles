@@ -2,6 +2,8 @@
 // Colors are tone names ("work", "ok", "fail", "nodata", "hold", "muted", "off");
 // the views map them onto deckTokens.
 
+import { reviewOf, reviewOrder } from "./review.js";
+
 /** @typedef {import("./store.js").Issue} Issue */
 /** @typedef {import("./store.js").Stage} Stage */
 /** @typedef {{ kind: "view"|"repo", value: string|null }|null} Filter */
@@ -69,17 +71,20 @@ export function matchesView(issue, filter) {
     case "failing": return hasFailingCheck(issue);
     case "nodata": return hasNoData(issue);
     case "landed": return issue.stage === "landed";
+    // What can run without Matt: not yet landed, and safe unattended.
+    case "unattended": return issue.stage !== "landed" && reviewOf(issue) === "unattended";
     default: return true;
   }
 }
 
 /**
- * @param {Issue[]} issues @param {Filter} filter
+ * `byReview`: within each stage, unattended cards first (then by project).
+ * @param {Issue[]} issues @param {Filter} filter @param {boolean} [byReview]
  * @returns {{ stage: Stage, items: Issue[] }[]}
  */
-export function groupIssues(issues, filter) {
+export function groupIssues(issues, filter, byReview = false) {
   const shown = issues.filter((i) => matchesView(i, filter));
-  const byProject = (a, b) => projectOrder(projectOf(a), projectOf(b));
+  const byProject = (a, b) => (byReview ? reviewOrder(a, b) : 0) || projectOrder(projectOf(a), projectOf(b));
   return LIST_ORDER.map((stage) => ({ stage, items: shown.filter((i) => i.stage === stage).sort(byProject) })).filter((g) => g.items.length);
 }
 

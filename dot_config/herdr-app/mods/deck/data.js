@@ -11,7 +11,8 @@ import { parseProofFile, buildClaims, mergeState, evidenceOpenArgs } from "./lib
 import { parsePrompt, samePrompt } from "./lib/prompt.js";
 import { findBrief } from "./lib/brief.js";
 import { parseBacklog, mergeBacklog, inboxTail, runStart, discardBacklog, restoreBacklog, markStarted, setPendingWorktree, issueAt } from "./lib/backlog.js";
-import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue } from "./lib/store.js";
+import { emptyStore, reconcile, dismiss as dismissIn, markReplied, updatePr, markReviewed, pinColumn, removeIssue, editIssue, setReview, noteReviewPath } from "./lib/store.js";
+import { REVIEW_LABEL } from "./lib/review.js";
 import { STAGE_LABEL } from "./lib/stage.js";
 import { BOARD_OPS, BOARD_RESULTS, parseOps, pendingOps, pruneDone, planOp, resultLine } from "./lib/boardops.js";
 import { findChatTerminal } from "./lib/chatsource.js";
@@ -711,6 +712,20 @@ export function moveCard(issue, column, by = "you") {
   if (next !== prev) save(next);
 }
 
+/**
+ * A card's review cost (U, or the chat agent's `herdr-board review`): "needs-me"
+ * or "unattended". Any card but a discarded backlog entry.
+ * @param {Issue} issue @param {string} review @param {string} [by] who set it, for the log
+ * @returns {boolean} whether it changed
+ */
+export function setReviewCost(issue, review, by = "you") {
+  if (!issue?.key || (issue.kind === "backlog" && issue.discarded)) return false;
+  const prev = currentStore();
+  const next = setReview(prev, issue.key, review, Date.now(), by);
+  if (next !== prev) save(next);
+  return next !== prev;
+}
+
 /** Opens a web link in the default browser (http/https only). */
 export async function openUrl(url) {
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false, error: "not a web link" };
@@ -824,7 +839,8 @@ export async function startBacklog(entry) {
       appeared: folderAppeared,
       git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
-      done: () => save(markStarted(currentStore(), it.key, Date.now())),
+      // Its review cost waits at the worktree for the agent's card (lib/store.js noteReviewPath).
+      done: (plan) => save(markStarted(currentStore(), it.key, Date.now(), plan?.path ?? null)),
     });
     // A backlog card on a goal stays on it: its agent's card takes its place (syncGoals).
     if (r.ok && r.plan?.path) {
@@ -878,7 +894,7 @@ export function restoreEntry(entry) {
  * On success the inbox is re-read and merged at once and the new card is
  * selected. Returns the dialog's next state (lib/newtask.js submitTask): done,
  * or the script's error with the text kept.
- * @param {{title: string, brief: string, root: string|null}} form
+ * @param {{title: string, brief: string, root: string|null, review?: string|null}} form
  */
 export function fileTask(form) {
   return submitTask(form, {
@@ -904,10 +920,11 @@ export function fileTask(form) {
  * The New task dialog's ⌘↵ Start now (lib/newtask.js startTask): the backlog
  * Start's path (safe repo, toplevel, git worktree add -b, space.new on this
  * computer, the agent appeared) for the dialog's entry-like form, then
- * space.select to the new space. Nothing goes to the store: the new agent shows
+ * space.select to the new space. Only a review cost of "unattended" goes to the
+ * store (it waits at the worktree for the agent's card): the new agent shows
  * up as an issue on the next cycle. One start per dialog press is the
  * dialog's busy guard (oneAtATime).
- * @param {{id: string, title: string, brief: string, root: string|null, terminal?: boolean, pendingWorktree?: {path: string, branch: string}|null}} form
+ * @param {{id: string, title: string, brief: string, root: string|null, terminal?: boolean, review?: string|null, pendingWorktree?: {path: string, branch: string}|null}} form
  */
 export async function startNow(form) {
   const root = typeof form?.root === "string" ? form.root : "";
@@ -918,7 +935,10 @@ export async function startNow(form) {
       appeared: folderAppeared,
       git: (argv) => sh(argv[0], argv.slice(1), { timeout: T_WORKTREE }),
       spaceNew: (args) => run("space.new", { ...args, machine: "" }),
-      select: (plan) => {
+      select: (plan, started) => {
+        const before = currentStore();
+        const noted = noteReviewPath(before, plan.path, started?.review, Date.now());
+        if (noted !== before) save(noted);
         const at = (p) => typeof p === "string" && (p === plan.path || p.startsWith(plan.path + "/"));
         // Best effort: the agent has started; a failed switch must not read as a failed start.
         try {
@@ -998,6 +1018,10 @@ async function applyBoardOp(op, chat) {
     if ("error" in r) return { ok: false, message: r.error };
     setShared(GOALS_KEY, r.goals);
     return ok(r.goal ? `${it.id} is on ${r.goal.id} "${r.goal.title}"` : `${it.id} is on no goal`);
+  }
+  if (op.op === "review") {
+    const changed = setReviewCost(it, plan.review, "chat");
+    return ok(`${it.id} review cost ${changed ? "set to" : "is already"} ${REVIEW_LABEL[plan.review].toLowerCase()}`);
   }
   switch (op.op) {
     case "move":

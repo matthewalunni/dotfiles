@@ -47,6 +47,7 @@ herdr-board edit TF-8 --title "Ready adapter quality gate" --brief "..."
 herdr-board discard B-3                 # backlog card into Discarded (restorable for 7 days)
 herdr-board restore B-3                 # back into the Backlog
 herdr-board start B-3                   # backlog card: new worktree and agent
+herdr-board review B-3 unattended       # review cost of any card: needs-me or unattended
 herdr-board cleanup TF-8 --dry-run      # see "Closing out a card"
 ```
 
