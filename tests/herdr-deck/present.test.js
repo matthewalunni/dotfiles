@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   STAGES, LIST_ORDER, stagePct, quickReplies, matchesView, groupIssues, repoTelemetry,
-  checkTally, prChip, minutesSince, hhmm, diffRows, issueNote, projectOf,
+  checkTally, prChip, minutesSince, clockTime, diffRows, issueNote, projectOf,
 } from "../../dot_config/herdr-app/mods/deck/lib/present.js";
 import { parseDiff } from "../../dot_config/herdr-app/mods/deck/lib/github.js";
 
@@ -101,8 +101,16 @@ test("time helpers", () => {
   assert.equal(minutesSince(1_000_000, 1_000_000 + 12 * 60_000 + 59_000), 12);
   assert.equal(minutesSince(null, 5), 0);
   assert.equal(minutesSince(10, 5), 0);
-  const t = new Date(2026, 10, 12, 9, 5).getTime();
-  assert.equal(hhmm(t), "09:05");
+});
+
+test("clockTime is 12-hour with AM/PM and no leading zero", () => {
+  const at = (h, m) => new Date(2026, 10, 12, h, m).getTime();
+  assert.equal(clockTime(at(0, 5)), "12:05 AM");
+  assert.equal(clockTime(at(9, 5)), "9:05 AM");
+  assert.equal(clockTime(at(12, 0)), "12:00 PM");
+  assert.equal(clockTime(at(13, 7)), "1:07 PM");
+  assert.equal(clockTime(at(23, 59)), "11:59 PM");
+  assert.equal(clockTime(new Date(2026, 10, 12, 16, 38)), "4:38 PM");
 });
 
 test("diffRows flattens files, hunks and lines with sizes", () => {

@@ -163,12 +163,11 @@ export function minutesSince(since, now) {
   return Math.floor((now - since) / 60_000);
 }
 
-const pad2 = (n) => String(n).padStart(2, "0");
-
-/** Local HH:MM. */
-export function hhmm(t) {
+/** Local 12-hour time, e.g. "4:38 PM" or "12:05 AM" (midnight is 12 AM). Takes a Date or epoch ms. */
+export function clockTime(t) {
   const d = new Date(t);
-  return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  const h = d.getHours();
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 // Text draws a tab as nothing: pad each to the next 4-column stop.

@@ -16,6 +16,7 @@ import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
 import { goTo, focusedAgent, openIssue, keepFresh, drew } from "./focus.js";
 import { backTarget } from "../lib/issuepage.js";
+import { clockTime } from "../lib/present.js";
 
 const SANS = "SF Pro Text";
 const MONO = "JetBrains Mono";
@@ -30,8 +31,6 @@ const LEFT_ROOM = 84;
 
 /** Letter-spaced uppercase: a hair space between letters (no tracking in gpui). */
 const spaced = (s) => [...s.toUpperCase()].join(" ");
-
-const pad2 = (n) => String(n).padStart(2, "0");
 
 /** A press on a control inside the window_drag bar belongs to the control. */
 const own = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
@@ -160,8 +159,7 @@ export default class BarView extends View {
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;
     // "next" is the holding issue after the focused agent's (wrapping).
     const next = nextHolding(issues, focusedIssue(issues)?.key ?? null);
-    const now = new Date();
-    const clock = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    const clock = clockTime(new Date());
 
     const nav = NAV.map(({ label, key, child }) => {
       const on = active === child;

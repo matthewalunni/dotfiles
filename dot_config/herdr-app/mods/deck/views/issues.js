@@ -5,7 +5,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared, notify, home } from "herdr";
-import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince, projectOf } from "../lib/present.js";
+import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, clockTime, minutesSince, projectOf } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
   currentStore, reply, pressOption, requestProof, dismiss, moveCard, openUrl, openEvidence, focusTerminal,
@@ -518,7 +518,7 @@ function overview(host, issue, store, k, stacked) {
                   .gap(12)
                   .items_start()
                   .child(div().mt(5).child(dot(toneColor(e.tone), 7, true)))
-                  .child(div().w(40).flex_none().text_color(k.muted).child(hhmm(e.t)))
+                  .child(div().w(64).flex_none().text_color(k.muted).child(clockTime(e.t)))
                   .child(div().flex_1().min_w(0).child(String(e.what ?? "").replace(/^moved to Survey$/, "moved to Started"))),
               ),
             ),
