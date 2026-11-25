@@ -33,11 +33,12 @@ selection_bg = "{{ $t.selected_bg }}"
 # New panes, tabs and workspaces open in the current pane's directory
 new_cwd = "follow"
 kitty_graphics = false
-{{- if eq .chezmoi.os "linux" }}
-# Panes otherwise use the herdr server's $SHELL, which is whatever the server
-# inherited when it started (bash on a codespace, even after chsh to zsh)
-default_shell = "{{ lookPath "zsh" | default "/usr/bin/zsh" }}"
-{{- end }}
+{{- if eq .chezmoi.os "linux" }}{{ with lookPath "zsh" }}
+# Open panes in zsh. Without this herdr uses $SHELL, which is bash on a
+# codespace (the remote server inherits the container's env, not the chsh'd
+# login shell), so every SSH session needed a manual `exec zsh`
+default_shell = {{ . | quote }}
+{{- end }}{{ end }}
 
 [advanced]
 scrollback_limit_bytes = 8000000

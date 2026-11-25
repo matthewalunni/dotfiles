@@ -1,6 +1,8 @@
 // The issue store: turns each poll's observations into stable issues. Pure; no herdr imports.
 import { deriveStage, nextHolding, pinHolds, PIN_COLUMNS, STAGE_LABEL } from "./stage.js";
 import { samePrompt } from "./prompt.js";
+import { asReview, reviewOf, REVIEW_LABEL } from "./review.js";
+import { pickSession } from "./agentsession.js";
 
 /** @typedef {"working"|"blocked"|"done"|"idle"} Status */
 /** @typedef {"survey"|"build"|"verify"|"holding"|"landed"} Stage */
@@ -21,23 +23,37 @@ import { samePrompt } from "./prompt.js";
  *   quiet: boolean, quietPrompt: Prompt|null, quietAt: number|null,
  *   dismissed: boolean, createdAt: number, landedAt: number|null,
  *   observed: boolean, lastSeen: number,
- *   pin?: { column: string, prState: string|null, at: number }|null
+ *   pin?: { column: string, prState: string|null, at: number }|null,
+ *   edits?: { title?: string, brief?: string }|null,
+ *   agent?: import("./agentsession.js").AgentSession|null,
+ *   summaries?: SessionSummary[], resumedAt?: number|null, resumeError?: string|null,
+ *   review?: "needs-me"|"unattended"
  * }} Issue
  */
 /** @typedef {{ t: number, key: string, id: string, what: string, tone: "work"|"ok"|"warn"|"hold" }} LogEvent */
-/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, log: LogEvent[] }} Store */
+/**
+ * One ended run of a card's agent: `run` is the card's lastSeen when it ended (one summary per run).
+ * @typedef {{ t: number, run: number, session: string, done: string, stopped: string, question: string|null, lastAt: number|null }} SessionSummary
+ */
+/** @typedef {{ issues: Issue[], counters: Record<string, number>, prefixes: Record<string, string>, retired: Record<string, number>, backlogTombs?: Record<string, { state: "started"|"discarded", at: number }>, reviewPaths?: Record<string, { review: string, at: number }>, log: LogEvent[] }} Store */
 /**
  * @typedef {{
  *   terminal: string, session?: string|null, space?: string|null, status: Status, title: string, cwd: string, repo: string|null,
  *   root: string|null, branch: string|null, commitsAhead: number|null, dirty?: boolean, pr: Pr|null,
- *   ghError: string|null, claims: Claim[], prompt: Prompt|null, brief: any, replied: boolean
+ *   ghError: string|null, claims: Claim[], prompt: Prompt|null, brief: any, replied: boolean,
+ *   agent?: import("./agentsession.js").AgentSession|null
  * }} Observation
  */
 
 const LANDED_TTL = 7 * 24 * 60 * 60 * 1000;
-// An ended session's card (not landed) clears itself after a day.
+// An ended session's card (not landed) clears itself after a day; one with a
+// Claude session to resume stays as long as any card (LANDED_TTL).
 const ENDED_TTL = 24 * 60 * 60 * 1000;
 const LOG_CAP = 200;
+// Summaries kept per card (oldest dropped first).
+const SUMMARY_CAP = 20;
+// A Resume that has not shown up as a running agent yet stops reading "Resuming…" after this.
+export const RESUME_MS = 30_000;
 const RETIRED_TTL = 30 * 24 * 60 * 60 * 1000;
 const RETIRED_CAP = 500;
 const NO_PROMPT = { kind: "none", text: "", options: [] };
@@ -149,6 +165,7 @@ export function reconcile(store, obs, now) {
   let issues = store.issues.filter((i) => !isBacklog(i)).map((i) => ({ ...i }));
   const log = [...store.log];
   const retired = { ...(store.retired ?? {}) };
+  const reviewPaths = { ...(store.reviewPaths ?? {}) };
   const seen = new Set();
   const liveTags = new Set();
   const drop = new Set();
@@ -169,7 +186,7 @@ export function reconcile(store, obs, now) {
     const sameSession = (i) => i.session != null && o.session != null && i.session === o.session;
     const same = issues
       .filter((i) => i.terminal === o.terminal && !seen.has(i.key) && !drop.has(i.key))
-      .filter((i) => (i.observed !== false && compatible(i.session, o.session)) || sameSession(i))
+      .filter((i) => ((i.observed !== false || i.resumedAt != null) && compatible(i.session, o.session)) || sameSession(i))
       .sort((a, b) => Number(b.observed !== false) - Number(a.observed !== false)
         || Number((b.project ?? b.repo ?? null) === project) - Number((a.project ?? a.repo ?? null) === project)
         || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
@@ -211,11 +228,23 @@ export function reconcile(store, obs, now) {
     const holdingSince = landing || (inLanded && o.status !== "blocked")
       ? null
       : nextHolding(prev?.holdingSince ?? null, o.status, now, o.replied || stillAck);
+    // A card keeps its review cost; a new one takes what its worktree was started with (noteReviewPath).
+    let review = prev?.review ?? null;
+    if (!prev) {
+      const at = reviewPathOf(reviewPaths, o);
+      if (at) {
+        review = reviewPaths[at].review;
+        delete reviewPaths[at];
+      }
+    }
     const next = {
+      ...(review ? { review } : {}),
       key, id, terminal: o.terminal, session: o.session ?? prev?.session ?? null, space: o.space ?? null, project,
-      status: o.status, title: o.title, cwd: o.cwd,
+      // An edit (editIssue) outlives what the agent's terminal reports.
+      status: o.status, title: prev?.edits?.title ?? o.title, cwd: o.cwd,
       repo: o.repo, root: o.root, branch, commitsAhead: o.commitsAhead, dirty: o.dirty ?? false, pr,
-      ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: o.brief,
+      ghError: o.ghError, claims: o.claims, prompt: o.prompt, brief: prev?.edits && "brief" in prev.edits ? prev.edits.brief : o.brief,
+      edits: prev?.edits ?? null,
       holdingSince, awaitingAck: stillAck, dismissed, quiet: mergedNow || quietHeld,
       quietPrompt: mergedNow ? o.prompt ?? null : quietHeld ? prev?.quietPrompt ?? null : null,
       quietAt: mergedNow ? now : quietHeld ? prev?.quietAt ?? null : null,
@@ -223,6 +252,7 @@ export function reconcile(store, obs, now) {
       createdAt: prev?.createdAt ?? now, landedAt: prev?.landedAt ?? null,
       reviewedSha: prev?.reviewedSha ?? null,
       pin: pinHolds(prev?.pin, pr) ? prev.pin : null,
+      agent: pickSession(o.agent, prev?.agent), summaries: prev?.summaries ?? [], resumedAt: null, resumeError: null,
       observed: true, lastSeen: now,
       stage: /** @type {Stage} */ ("survey"),
     };
@@ -241,6 +271,7 @@ export function reconcile(store, obs, now) {
   for (let n = 0; n < issues.length; n++) {
     const i = issues[n];
     if (seen.has(i.key)) continue;
+    if (i.observed !== false) log.push({ t: now, key: i.key, id: i.id, what: "agent session ended", tone: "warn" });
     const next = {
       ...i, observed: false, holdingSince: null, awaitingAck: false, answered: null, repliedAt: null, prompt: NO_PROMPT,
     };
@@ -248,7 +279,43 @@ export function reconcile(store, obs, now) {
     issues[n] = next;
   }
 
-  return finish({ issues: [...backlogItems, ...issues], counters, prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log }, now);
+  return finish({ issues: [...backlogItems, ...issues], counters, prefixes, retired, backlogTombs: store.backlogTombs ?? {}, reviewPaths, log }, now);
+}
+
+// A started worktree's review cost waits this long for its agent's card.
+const REVIEW_PATH_TTL = 24 * 60 * 60 * 1000;
+
+/** The reviewPaths entry an observation is in (its git root, or its folder inside the worktree), or null. */
+function reviewPathOf(paths, o) {
+  const inside = (x, p) => typeof x === "string" && (x === p || x.startsWith(p + "/"));
+  return Object.keys(paths).find((p) => o.root === p || inside(o.cwd, p)) ?? null;
+}
+
+/**
+ * A task started in worktree `path` with a review cost: the agent's card there
+ * takes it when it first shows up (reconcile). "needs-me" is every card's
+ * default, so only "unattended" is kept.
+ * @param {Store} store @param {string|null|undefined} path @param {unknown} review @param {number} now @returns {Store}
+ */
+export function noteReviewPath(store, path, review, now) {
+  const p = String(path ?? "").replace(/\/+$/, "");
+  if (!p.startsWith("/") || asReview(review) !== "unattended") return store;
+  return { ...store, reviewPaths: { ...(store.reviewPaths ?? {}), [p]: { review: "unattended", at: now } } };
+}
+
+/**
+ * Set a card's review cost (a backlog card or an agent's). Unchanged store for
+ * an unknown key, a bad value or the value it already reads as.
+ * @param {Store} store @param {string} key @param {unknown} review @param {number} now @param {string} [by]
+ * @returns {Store}
+ */
+export function setReview(store, key, review, now, by = "you") {
+  const value = asReview(review);
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || !value || reviewOf(prev) === value) return store;
+  const next = { ...prev, review: value };
+  const log = [...store.log, { t: now, key, id: prev.id, what: "review cost set to " + REVIEW_LABEL[value].toLowerCase() + " by " + by, tone: "work" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
 /**
@@ -291,7 +358,7 @@ function finish(store, now) {
       ? i.pin.at < now - LANDED_TTL
       : i.stage === "landed"
       ? i.landedAt != null && i.landedAt < now - LANDED_TTL
-      : i.lastSeen != null && i.lastSeen < now - (i.observed === false ? ENDED_TTL : LANDED_TTL);
+      : i.lastSeen != null && i.lastSeen < now - (i.observed === false && !i.agent?.id ? ENDED_TTL : LANDED_TTL);
     // A still-running session's issue is retired so the next poll does not bring it back.
     if (expired && i.observed !== false) retired[RETIRED_TAG + sessionTag(i.terminal, i.session ?? null)] = now;
     return !expired;
@@ -302,7 +369,12 @@ function finish(store, now) {
     keys.sort((x, y) => retired[x] - retired[y]);
     for (const k of keys.slice(0, keys.length - RETIRED_CAP)) delete retired[k];
   }
-  return { issues, counters: store.counters, prefixes: store.prefixes, retired, backlogTombs: store.backlogTombs ?? {}, log: store.log.slice(-LOG_CAP) };
+  const reviewPaths = Object.fromEntries(Object.entries(store.reviewPaths ?? {}).filter(([, v]) => v.at >= now - REVIEW_PATH_TTL));
+  return {
+    issues, counters: store.counters, prefixes: store.prefixes, retired, backlogTombs: store.backlogTombs ?? {},
+    ...(Object.keys(reviewPaths).length ? { reviewPaths } : {}),
+    log: store.log.slice(-LOG_CAP),
+  };
 }
 
 /**
@@ -366,12 +438,12 @@ export function updatePr(store, key, fresh, now) {
  * @param {Store} store @param {string} key @param {number} now
  * @returns {Store}
  */
-export function removeIssue(store, key, now) {
+export function removeIssue(store, key, now, by = "you") {
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev)) return store;
   const retired = { ...(store.retired ?? {}) };
   if (prev.observed !== false) retired[RETIRED_TAG + sessionTag(prev.terminal, prev.session ?? null)] = now;
-  const log = [...store.log, { t: now, key, id: prev.id, what: "deleted by you", tone: "warn" }];
+  const log = [...store.log, { t: now, key, id: prev.id, what: "deleted by " + by, tone: "warn" }];
   return { ...store, issues: store.issues.filter((i) => i !== prev), retired, log };
 }
 
@@ -379,10 +451,11 @@ export function removeIssue(store, key, now) {
  * The person dragged a card to a board column: it stays there until a PR opens
  * or merges (see pinHolds). Unchanged store for a backlog entry, an unknown
  * key or a column cards cannot be dragged to.
- * @param {Store} store @param {string} key @param {string} column @param {number} now
+ * `by` names who moved it in the log ("you", or "chat" for the chat agent).
+ * @param {Store} store @param {string} key @param {string} column @param {number} now @param {string} [by]
  * @returns {Store}
  */
-export function pinColumn(store, key, column, now) {
+export function pinColumn(store, key, column, now, by = "you") {
   if (!PIN_COLUMNS.includes(column)) return store;
   const prev = store.issues.find((i) => i.key === key);
   if (!prev || isBacklog(prev)) return store;
@@ -392,7 +465,7 @@ export function pinColumn(store, key, column, now) {
     next.holdingSince = null;
     next.stage = deriveStage(next);
   }
-  const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by you", tone: "work" }];
+  const log = [...store.log, { t: now, key, id: prev.id, what: "moved to " + (STAGE_LABEL[column] ?? cap(column)) + " by " + by, tone: "work" }];
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
 }
 
@@ -408,4 +481,127 @@ export function markReviewed(store, key, sha) {
   if (!prev || isBacklog(prev) || prev.reviewedSha === sha) return store;
   const next = { ...prev, reviewedSha: sha };
   return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+}
+
+/**
+ * A new title and/or brief for a card. A backlog card takes them as its own;
+ * an agent card keeps them in `edits`, which reconcile prefers over what the
+ * agent's terminal reports. Unchanged store for an unknown key or no change.
+ * @param {Store} store @param {string} key @param {{ title?: string, brief?: string }} edit @param {number} now @param {string} [by]
+ * @returns {Store}
+ */
+export function editIssue(store, key, edit, now, by = "you") {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || !edit) return store;
+  const has = (k) => typeof edit[k] === "string" && edit[k] !== prev[k];
+  const title = has("title") && edit.title.trim() ? edit.title.trim() : null;
+  const brief = has("brief") ? edit.brief : null;
+  if (title == null && brief == null) return store;
+  const next = { ...prev };
+  if (title != null) next.title = title;
+  if (brief != null) next.brief = brief;
+  if (!isBacklog(prev)) {
+    next.edits = { ...(prev.edits ?? {}) };
+    if (title != null) next.edits.title = title;
+    if (brief != null) next.edits.brief = brief;
+  }
+  const what = [title != null ? "title" : null, brief != null ? "brief" : null].filter(Boolean).join(" and ") + " edited by " + by;
+  const log = [...store.log, { t: now, key, id: prev.id, what, tone: "work" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
+}
+
+/**
+ * Whether `issue`'s agent ended and this run has no summary yet (one per run:
+ * a run is told apart by the card's lastSeen when it ended).
+ * @param {Issue} issue
+ */
+export function needsSummary(issue) {
+  if (!issue || isBacklog(issue) || issue.observed !== false || !issue.agent?.id) return false;
+  return !(issue.summaries ?? []).some((s) => s.run === issue.lastSeen);
+}
+
+/**
+ * Appends a summary of the run that just ended (see needsSummary); earlier
+ * ones stay (the newest SUMMARY_CAP). Unchanged store when the card is gone,
+ * running again, or already has this run's summary.
+ * @param {Store} store @param {string} key
+ * @param {{ done: string, stopped: string, question: string|null, lastAt: number|null }} summary
+ * @param {number} now
+ * @returns {Store}
+ */
+export function addSummary(store, key, summary, now) {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || !summary || !needsSummary(prev)) return store;
+  const entry = {
+    t: now, run: prev.lastSeen, session: prev.agent.id,
+    done: String(summary.done ?? ""), stopped: String(summary.stopped ?? ""),
+    question: summary.question ?? null, lastAt: summary.lastAt ?? null,
+  };
+  const next = { ...prev, summaries: [...(prev.summaries ?? []), entry].slice(-SUMMARY_CAP) };
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+}
+
+/**
+ * Records the Claude session of an ended card that had none (found later in
+ * history.jsonl). Unchanged store when the card already has one.
+ * @param {Store} store @param {string} key @param {import("./agentsession.js").AgentSession} agent
+ * @returns {Store}
+ */
+export function attachSession(store, key, agent) {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || isBacklog(prev) || prev.agent?.id || !agent?.id) return store;
+  const next = { ...prev, agent };
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+}
+
+/**
+ * Resume started: the card now follows `terminal` (created at `session`, its
+ * created_ms as a string, or null when unknown), so the resumed agent there
+ * keeps this card instead of making a new one. `by` names who resumed it.
+ * @param {Store} store @param {string} key @param {string} terminal @param {string|null} session @param {number} now @param {string} [by]
+ * @returns {Store}
+ */
+export function relink(store, key, terminal, session, now, by = "you") {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || isBacklog(prev) || !terminal) return store;
+  const next = { ...prev, terminal, session: session ?? null, resumedAt: now, resumeError: null };
+  const where = terminal === prev.terminal ? "in " + terminal : "in " + terminal + " (was " + prev.terminal + ")";
+  const log = [...store.log, { t: now, key, id: prev.id, what: "resumed " + where + " by " + by, tone: "work" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
+}
+
+/**
+ * A resume that did not start: the card stops reading "Resuming…" and offers
+ * Resume again. With an `error`, it is kept on the card (resumeError, shown
+ * beside the button until the next try) and logged, whether or not the card
+ * was relinked yet. Without one, unchanged store when the card is not waiting.
+ * @param {Store} store @param {string} key @param {string|null} [error] @param {number} [now]
+ * @returns {Store}
+ */
+export function resumeFailed(store, key, error = null, now = Date.now()) {
+  const prev = store.issues.find((i) => i.key === key);
+  if (!prev || isBacklog(prev)) return store;
+  if (!error) {
+    if (prev.resumedAt == null) return store;
+    const next = { ...prev, resumedAt: null };
+    return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)) };
+  }
+  const next = { ...prev, resumedAt: null, resumeError: String(error) };
+  const log = [...store.log, { t: now, key, id: prev.id, what: "resume failed: " + String(error), tone: "warn" }].slice(-LOG_CAP);
+  return { ...store, issues: store.issues.map((i) => (i === prev ? next : i)), log };
+}
+
+/**
+ * Resumes still waiting after RESUME_MS whose agent never showed up: failed
+ * with a reason (resumeFailed), so the card offers Resume again instead of "Resuming…"
+ * forever. A card whose terminal is in `live` (agents() addresses) did start:
+ * the next poll picks it up, so it is left alone. Unchanged store when there are none.
+ * @param {Store} store @param {number} now @param {Set<string>} [live]
+ * @returns {Store}
+ */
+export function expireResumes(store, now, live = new Set()) {
+  const stale = store.issues.filter((i) => i.observed === false && typeof i.resumedAt === "number" && now - i.resumedAt >= RESUME_MS && !live.has(i.terminal));
+  if (!stale.length) return store;
+  const secs = Math.round(RESUME_MS / 1000);
+  return stale.reduce((s, i) => resumeFailed(s, i.key, `claude --resume did not come back within ${secs} s: see ${i.terminal}, or Resume again`, now), store);
 }

@@ -74,7 +74,8 @@ export function defaultRepo(issues, selKey) {
 
 /**
  * The herdr-backlog argv for the dialog's text, verbatim, or {error}.
- * @param {{title?: string, brief?: string, root?: string|null}} f
+ * A review cost of "unattended" adds `--review unattended` (needs-me is the script's default).
+ * @param {{title?: string, brief?: string, root?: string|null, review?: string|null}} f
  * @returns {string[] | {error: string}}
  */
 export function newTaskArgs(f) {
@@ -84,7 +85,8 @@ export function newTaskArgs(f) {
   const root = typeof f?.root === "string" ? f.root : "";
   if (!root.startsWith("/")) return { error: "Choose a repo" };
   if ((title + brief + root).includes("\0")) return { error: "The text contains a NUL character" };
-  return ["--title", title, "--brief", brief, "--repo", root, "--source", "you"];
+  const argv = ["--title", title, "--brief", brief, "--repo", root, "--source", "you"];
+  return f?.review === "unattended" ? [...argv, "--review", "unattended"] : argv;
 }
 
 /**
@@ -115,14 +117,16 @@ export function newTaskSubmit(ev) {
 
 /**
  * What a key does in the dialog. `field` is the control that has the keyboard
- * ("title" | "brief" | "terminal": the Just a terminal checkbox), or null.
+ * ("title" | "brief" | "review": the Safe unattended checkbox | "terminal": the
+ * Just a terminal checkbox), or null.
  * Everything not listed is text for the input: no Deck shortcut ever runs from
  * here. ⌘↵ starts and ⌥⌘↵ adds to the Backlog (newTaskSubmit; a held key never
  * does), esc cancels, Tab / Shift-Tab move between fields, Enter in Title moves
- * to Brief; Enter in Brief is a newline; Space on the checkbox toggles it.
+ * to Brief; Enter in Brief is a newline; Space on a checkbox toggles it
+ * ("toggle": Just a terminal, "review": Safe unattended).
  * @param {{key: string, shift: boolean, cmd: boolean, alt?: boolean, mod?: boolean, held?: boolean}} ev
- * @param {"title"|"brief"|"terminal"|null} field
- * @returns {"start"|"backlog"|"cancel"|"next"|"prev"|"toggle"|null}
+ * @param {"title"|"brief"|"review"|"terminal"|null} field
+ * @returns {"start"|"backlog"|"cancel"|"next"|"prev"|"toggle"|"review"|null}
  */
 export function dialogKeyNewTask(ev, field) {
   const k = String(ev?.key ?? "").toLowerCase();
@@ -132,6 +136,7 @@ export function dialogKeyNewTask(ev, field) {
   if (k === "tab") return ev?.shift ? "prev" : "next";
   if (k === "enter" && field === "title" && !ev?.shift) return "next";
   if ((k === "space" || k === " ") && field === "terminal") return ev?.held ? null : "toggle";
+  if ((k === "space" || k === " ") && field === "review") return ev?.held ? null : "review";
   return null;
 }
 
@@ -231,7 +236,7 @@ export function oneAtATime(fn) {
  * and the text is kept.
  * @template {{id: string, title: string, brief: string, root: string|null, terminal?: boolean, pendingWorktree?: {path: string, branch: string}|null}} F
  * @param {F} form @param {string} home
- * @param {Omit<Parameters<typeof runStart>[2], "done"|"pending"|"again"> & { select: (plan: any) => void }} io
+ * @param {Omit<Parameters<typeof runStart>[2], "done"|"pending"|"again"> & { select: (plan: any, form: F) => void }} io
  * @returns {Promise<F & {error: string|null, busy: false, done: boolean}>}
  */
 export async function startTask(form, home, io) {
@@ -254,7 +259,7 @@ export async function startTask(form, home, io) {
       ...io,
       pending: (plan) => { pending = { path: plan.path, branch: plan.branch }; },
       again: "press ⌘↵ again",
-      done: (plan) => io.select(plan),
+      done: (plan) => io.select(plan, form),
     });
   } catch (e) {
     r = { ok: false, error: String(e?.message ?? e ?? "failed") };

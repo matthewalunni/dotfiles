@@ -8,7 +8,7 @@
 // The handle registry is on globalThis (like the collector guard): every copy
 // of the mod shares it, and a reloaded build's copies register again in init.
 import { shared, setShared, agents, focused, run } from "herdr";
-import { showView, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
+import { showView, sharedOnce, VIEW_KEY, SEL_KEY, TAB_KEY, MODE_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { shownChild, takesFocus, drawSig } from "../lib/views.js";
 
 const FRESH_MS = 250;
@@ -115,11 +115,11 @@ export function keepFresh(view, cx, child) {
   view.drawnSig = null;
   cx.timer.every(FRESH_MS, (cx) => {
     if (child && shownChild(shared("layout"), shared(VIEW_KEY)) !== child) return;
-    if (drawSig(shared) !== view.drawnSig) cx.notify();
+    if (drawSig(sharedOnce) !== view.drawnSig) cx.notify();
   });
 }
 
 /** Records what this draw drew from (see keepFresh). */
 export function drew(view) {
-  view.drawnSig = drawSig(shared);
+  view.drawnSig = drawSig(sharedOnce);
 }

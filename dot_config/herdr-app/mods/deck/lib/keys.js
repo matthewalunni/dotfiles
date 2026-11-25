@@ -9,7 +9,9 @@
  *   N (new task) works in Chat and Issues, with or without an issue; on the
  *   Pull request tab n is the next file instead.
  *   backlog: the selected issue is a (not discarded) backlog entry: only S (start,
- *   which opens the confirm) and X (discard) act on it; the agent keys are off.
+ *   which opens the confirm), X (discard) and U (review cost) act on it; the agent keys are off.
+ *   U flips the selected card's review cost (needs me / unattended); ⇧U (Issues)
+ *   sorts unattended cards first, or back.
  *   tab "changes": the Pull request tab (its file list and diff)
  *   view "issue": the issue page (overview + live thread). j/k step issues,
  *   esc while typing leaves the reply box ("leave"), then goes back.
@@ -68,11 +70,13 @@ function action(ev, ctx) {
   }
   if (k === "v") return issues ? { type: "toggleMode" } : null;
   if (k === "n") return !page && !ctx.dialog ? { type: "newTask" } : null;
+  if (k === "u" && shift) return issues ? { type: "reviewSort" } : null;
 
   if (!ctx.hasIssue) return null;
   if (ctx.backlog) {
     if (k === "s") return { type: "start" };
     if (k === "x") return { type: "discard" };
+    if (k === "u") return { type: "review" };
     return null;
   }
   switch (k) {
@@ -81,6 +85,7 @@ function action(ev, ctx) {
     case "t": return { type: "terminal" };
     case "p": return { type: "proof" };
     case "o": return { type: "github" };
+    case "u": return { type: "review" };
     case "m": return shift ? { type: "mergeShip" } : { type: "merge" };
     default: return null;
   }

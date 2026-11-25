@@ -37,7 +37,7 @@ test("herdr-history: has jq and grep examples", () => {
   assert.match(history, /grep /);
 });
 test("orchestrator: required commands and rules", () => {
-  for (const s of ["herdr-history", "hc send", "hc ls", "hc read", "hc keys", "hc wait", "herdr-backlog", "never start a filed task", CHAT_NAME]) {
+  for (const s of ["herdr-history", "hc send", "hc ls", "hc read", "hc keys", "hc wait", "herdr-backlog", "herdr-board", "herdr-board cleanup", "only when Matt asks", "never pass `--force` on your own judgment", CHAT_NAME]) {
     assert.ok(orch.includes(s), s);
   }
   assert.match(orch, /hc send <name> -- /);

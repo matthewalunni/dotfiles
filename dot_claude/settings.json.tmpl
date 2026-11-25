@@ -6,13 +6,25 @@
     ~/.claude/automode.local.json       the "autoMode" value only
   Neither file is in this repo. Both are optional.
 */ -}}
-{{- $s := dict
-  "hooks" (dict "SessionStart" (list (dict
+{{- $hooks := dict "SessionStart" (list (dict
     "matcher" "*"
     "hooks" (list (dict
       "type" "command"
       "command" "f=\"$HOME/.claude/hooks/herdr-agent-state.sh\"; [ -f \"$f\" ] && bash \"$f\" session || true"
-      "timeout" 10)))))
+      "timeout" 10)))) -}}
+{{- /* Screen recording (`obs-ctl`, /record skill): pause OBS while the agent
+       waits for you, resume when it works. A no-op unless a recording is on. */ -}}
+{{- $record := dict
+    "matcher" "*"
+    "hooks" (list (dict
+      "type" "command"
+      "command" "f=\"$HOME/.claude/hooks/agent-record.sh\"; [ -f \"$f\" ] && bash \"$f\" || true"
+      "timeout" 10)) -}}
+{{- range $ev := list "PreToolUse" "PostToolUse" "PermissionRequest" "Notification" "Stop" "UserPromptSubmit" "SessionEnd" -}}
+{{-   $_ := set $hooks $ev (append (get $hooks $ev | default list) $record) -}}
+{{- end -}}
+{{- $s := dict
+  "hooks" $hooks
   "statusLine" (dict "type" "command" "command" "bash \"$HOME/.claude/statusline-command.sh\"")
 -}}
 {{- $overrides := joinPath .chezmoi.homeDir ".claude/settings.overrides.json" -}}

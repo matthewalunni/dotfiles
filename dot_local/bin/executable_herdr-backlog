@@ -2,13 +2,16 @@
 //
 // herdr-backlog — file a task into the Herdr Deck backlog.
 //
-//   herdr-backlog --title "Short title" --brief "One paragraph brief" [--repo PATH] [--source agent|you]
+//   herdr-backlog --title "Short title" --brief "One paragraph brief" [--repo PATH] [--source agent|you] [--goal G-n] [--review needs-me|unattended]
 //
 // Appends one JSON line to ~/.local/state/herdr-deck/backlog.jsonl. The repo
 // defaults to the main checkout of the current directory (worktrees resolve to
 // their main checkout). --source is "agent" (default; `from` is $HC_TERMINAL_ID)
-// or "you" (Matt, from Deck's New task dialog; `from` is null). Never starts
-// any work; Matt starts it from Deck.
+// or "you" (Matt, from Deck's New task dialog; `from` is null). --review is the
+// card's review cost: "needs-me" (the default when left out: a significant
+// change, design judgment, anything Matt must watch) or "unattended" (research,
+// prototypes, small maintenance, anything fully checked by tests and the proof
+// file). Never starts any work; Matt starts it from Deck.
 //
 const { execFileSync } = require("node:child_process");
 const { appendFileSync, mkdirSync } = require("node:fs");
@@ -17,16 +20,18 @@ const { dirname, basename, resolve, join } = require("node:path");
 
 const die = (msg) => { process.stderr.write("herdr-backlog: " + msg + "\n"); process.exit(1); };
 
-let title = "", brief = "", repoArg = "", source = "agent";
+let title = "", brief = "", repoArg = "", source = "agent", goal = "", review = "";
 const a = process.argv.slice(2);
 for (let i = 0; i < a.length; i++) {
   const k = a[i];
-  if (k === "--title" || k === "--brief" || k === "--repo" || k === "--source") {
+  if (k === "--title" || k === "--brief" || k === "--repo" || k === "--source" || k === "--goal" || k === "--review") {
     if (i + 1 >= a.length) die(k + " needs a value");
     const v = a[++i];
-    if (k === "--title") title = v; else if (k === "--brief") brief = v; else if (k === "--repo") repoArg = v; else source = v;
+    if (k === "--title") title = v; else if (k === "--brief") brief = v; else if (k === "--repo") repoArg = v;
+    else if (k === "--goal") goal = v.trim().toUpperCase(); else if (k === "--review") review = v.trim().toLowerCase();
+    else source = v;
   } else if (k === "-h" || k === "--help") {
-    process.stdout.write("usage: herdr-backlog --title TITLE --brief BRIEF [--repo PATH] [--source agent|you]\n");
+    process.stdout.write("usage: herdr-backlog --title TITLE --brief BRIEF [--repo PATH] [--source agent|you] [--goal G-n] [--review needs-me|unattended]\n");
     process.exit(0);
   } else die("unknown argument: " + k);
 }
@@ -34,6 +39,8 @@ title = title.trim();
 if (!title) die("--title is required and must not be empty");
 if (!brief.trim()) die("--brief is required and must not be empty");
 if (source !== "agent" && source !== "you") die("--source must be agent or you");
+if (goal && !/^G-\d+$/.test(goal)) die("--goal must be a goal id like G-2");
+if (a.includes("--review") && review !== "needs-me" && review !== "unattended") die("--review must be needs-me or unattended");
 
 function mainCheckout(dir) {
   try {
@@ -54,7 +61,9 @@ const entry = {
   source,
   from: source === "agent" ? process.env.HC_TERMINAL_ID || null : null,
   createdAt: Date.now(),
+  ...(goal ? { goal } : {}),
+  ...(review ? { review } : {}),
 };
 mkdirSync(dir, { recursive: true });
 appendFileSync(join(dir, "backlog.jsonl"), JSON.stringify(entry) + "\n");
-process.stdout.write("Filed B-? " + title.replace(/[\r\n]+/g, " ") + "\n");
+process.stdout.write("Filed B-? " + title.replace(/[\r\n]+/g, " ") + (review ? " (review: " + review + ")" : "") + "\n");

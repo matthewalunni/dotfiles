@@ -5,8 +5,8 @@ import { tokens } from "./ui.js";
 
 // Three short lines: the 268 px sidebar truncates anything longer.
 const LINES = [
-  "⌘[ ⌘] agent · ⌘⇧J next holding",
-  "⌘⇧I this issue · ⌥⌘1/2/3 views",
+  "⌘1–9 ⌘[ ⌘] agent · ⌘⇧J holding",
+  "⌘⇧I this issue · ⌥⌘1–4 views",
   "⌘⇧L main layout",
 ];
 

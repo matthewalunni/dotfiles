@@ -15,9 +15,9 @@ default-root-container-orientation = 'auto'
 
 accordion-padding = 30
 
-# Theme-green border on the focused window (JankyBorders)
+# Cream glowing border on the focused window only; unfocused windows get none (JankyBorders)
 after-startup-command = [
-  'exec-and-forget {{ if eq .chezmoi.arch "arm64" }}/opt/homebrew/bin{{ else }}/usr/local/bin{{ end }}/borders style=round width=5.0 hidpi=on active_color=0xee{{ trimPrefix "#" $t.green }} inactive_color=0xaa{{ trimPrefix "#" $t.border_inactive }}',
+  'exec-and-forget {{ if eq .chezmoi.arch "arm64" }}/opt/homebrew/bin{{ else }}/usr/local/bin{{ end }}/borders style=round width=6.0 hidpi=on "active_color=glow(0xff{{ trimPrefix "#" $t.fg }})" inactive_color=0x00000000',
 ]
 
 # Keep the mouse on the focused monitor
@@ -131,3 +131,10 @@ run = 'layout floating'
 [[on-window-detected]]
 if.app-id = 'com.apple.archiveutility'
 run = 'layout floating'
+
+# Chrome for Testing is what coding agents drive (it's a separate app from
+# everyday Chrome). Park its windows on workspace S, floating so tiling never
+# changes the page size an agent is testing at.
+[[on-window-detected]]
+if.app-id = 'com.google.chrome.for.testing'
+run = ['layout floating', 'move-node-to-workspace S']

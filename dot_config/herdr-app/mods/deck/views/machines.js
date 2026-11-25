@@ -3,7 +3,7 @@
 // Styled like the shipped spaces/agents sidebar blocks it sits between.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { shared, run } from "herdr";
+import { shared, run, spaces } from "herdr";
 import { MACHINES_KEY } from "../data.js";
 import { tokens } from "./ui.js";
 
@@ -14,6 +14,13 @@ function machineList() {
 }
 
 const addMachine = () => run("mod.open", { name: "machine-add" });
+
+/** Show the machine's first space, or start one there (in its home) when it has none. */
+function openMachine(name) {
+  const sp = spaces().find((s) => s.machine === name);
+  if (sp) run("space.select", { id: sp.id });
+  else run("space.new", { machine: name });
+}
 
 export default class MachinesView extends View {
   init() {}
@@ -62,6 +69,16 @@ export default class MachinesView extends View {
         .px(8)
         .gap(8)
         .items_center()
+        .rounded(6)
+        .when(m.online, (el) =>
+          el
+            .cursor_pointer()
+            .hover((s) => s.bg(k.wash))
+            .on_click((_e, cx) => {
+              cx.stop_propagation();
+              openMachine(m.name);
+            }),
+        )
         .child(
           m.online
             ? div().flex_none().w(8).h(8).rounded(8).bg(k.ok)

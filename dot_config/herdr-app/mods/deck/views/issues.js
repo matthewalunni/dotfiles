@@ -5,31 +5,35 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared, notify, home } from "herdr";
-import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, hhmm, minutesSince, projectOf } from "../lib/present.js";
+import { groupIssues, matchesView, repoTelemetry, stagePct, prChip, checkTally, quickReplies, clockTime, minutesSince, projectOf } from "../lib/present.js";
 import { stampText } from "../lib/proof.js";
 import {
   currentStore, reply, pressOption, requestProof, dismiss, moveCard, openUrl, openEvidence, focusTerminal,
-  discardEntry, restoreEntry, STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY, START_ERR_KEY,
+  discardEntry, restoreEntry, setReviewCost, STORE_KEY, SEL_KEY, TAB_KEY, MODE_KEY, START_ERR_KEY,
 } from "../data.js";
 import { previewPlan, backlogFiler } from "../lib/backlog.js";
 import { startKey } from "./startconfirm.js";
 import { removeKey } from "./remove.js";
 import { openNewTask, newTaskButton } from "./newtask.js";
-import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf, SANS } from "./ui.js";
+import { MONO, tokens, tone, stageColor, label, heading, button, ring, chip, dot, act, keyChip, keyOf, reviewBadge, SANS } from "./ui.js";
+import { REVIEW_SORT_KEY, REVIEW_LABEL, reviewOf, otherReview } from "../lib/review.js";
 import { mergeButtons, mergeKey, anyDialogOpen } from "./merge.js";
 import { prTab, diffFiles } from "./pr.js";
-import { boardPane, modeToggle } from "./board.js";
+import { boardPane, modeToggle, sortChip } from "./board.js";
+import { resumeButton, sessionLog } from "./resume.js";
 import { boardColumns, moveBoard } from "../lib/board.js";
 import { STAGE_LABEL as STAGE_NAME, PIN_COLUMNS, boardColumn } from "../lib/stage.js";
 import { keyAction } from "../lib/keys.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue, keepFresh, drew } from "./focus.js";
+import { initInlineEdit, editable, editingNow } from "./inlineedit.js";
 
 const STAGE_LABEL = { ...STAGE_NAME, holding: "Holding for you" };
 const VIEWS = [
   { value: "holding", text: "Holding for you" },
   { value: "failing", text: "Failing checks" },
   { value: "nodata", text: "No data" },
+  { value: "unattended", text: "Safe unattended" },
   { value: "landed", text: "Landed" },
   { value: "discarded", text: "Discarded" },
 ];
@@ -40,6 +44,12 @@ const REVIEW = {
 };
 const MAX_FILES = 8;
 const MAX_QUESTION = 400;
+
+/** ⇧U: unattended cards first, in the list and on the board. */
+const byReview = () => shared(REVIEW_SORT_KEY) === true;
+/** The U button: says what the card is now; a press flips it. */
+const reviewButton = (id, issue, busy) =>
+  button(id, "Review cost: " + REVIEW_LABEL[reviewOf(issue)].toLowerCase(), "plain", () => setReviewCost(issue, otherReview(issue)), busy, "U");
 
 const sameFilter = (a, b) => (a?.kind ?? null) === (b?.kind ?? null) && (a?.value ?? null) === (b?.value ?? null);
 const clip = (s, n) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
@@ -100,6 +110,30 @@ export function initDetail(host) {
   });
   host.filePath = null; // the diff file n / p is on
   host.fileFor = null; // the issue filePath belongs to
+  initInlineEdit(host);
+}
+
+/** The title, editable in place (click it). */
+function titleEditor(host, issue, size, k) {
+  return editable(host, issue, "title", heading(issue.title || issue.id, size).max_h(66).overflow_hidden(), k, {
+    style: (el) => el.text_size(Math.max(14, size - 4)).font_weight(600).text_color(k.strong),
+  });
+}
+
+/**
+ * The brief box, editable in place (click it). A started card's agent is not
+ * told of the change (lib/inlineedit.js); the editor says so.
+ */
+function briefEditor(host, issue, k, empty) {
+  const shown = div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted)
+    .child(issue.brief ? String(issue.brief) : empty);
+  const box = editable(host, issue, "brief", shown, k, {
+    style: (el) => el.text_size(12).line_height(1.6).text_color(k.strong),
+    hover: (s) => s.bg(k.raised).underline(),
+  });
+  if (!editingNow(host, issue, "brief")) return box;
+  const note = issue.kind === "backlog" ? "⌘↵ save · esc cancel" : "⌘↵ save · esc cancel · the running agent is not told: R or T tells it";
+  return v_flex().gap(4).child(box).child(div().text_size(11).text_color(k.muted).child(note));
 }
 
 /** The detail now shows `issue`: a draft typed for another issue is dropped, and n / p start over. */
@@ -149,7 +183,7 @@ export function sendDraft(host, cx) {
 
 /**
  * What the detail's keys see: the tab, the options 1–9 answer, whether R has a
- * box, and `backlog` (a live backlog entry: only S and X act on it).
+ * box, and `backlog` (a live backlog entry: only S, X and U act on it).
  * @param {any} issue @param {boolean} detail whether the detail is on screen
  */
 export function detailKeys(issue, detail) {
@@ -164,7 +198,7 @@ export function detailKeys(issue, detail) {
 }
 
 /**
- * Handles a detail key action (answer, reply, proof, merge, github, tab, file)
+ * Handles a detail key action (answer, reply, proof, merge, github, tab, file, review)
  * for `issue`. Returns false when the action is not a detail one or does nothing.
  * T is the caller's (the Issues view opens the Terminal view, the page focuses its pane).
  */
@@ -179,6 +213,9 @@ export function detailKey(host, a, issue, st, cx) {
       if (!st.backlog || host.busy) return false;
       discardEntry(issue);
       return true;
+    case "review":
+      // U flips the review cost: needs me <-> unattended.
+      return setReviewCost(issue, otherReview(issue));
     case "answer": {
       const o = st.options[a.n - 1];
       if (!o || host.busy) return false;
@@ -272,7 +309,8 @@ function backlogDetail(host, issue, k, opts) {
   } else {
     buttons
       .child(button("bk-start", "Start agent", "brand", () => startKey(host, issue), busy, "S"))
-      .child(button("bk-discard", "Discard", "plain", () => discardEntry(issue), busy, "X"));
+      .child(button("bk-discard", "Discard", "plain", () => discardEntry(issue), busy, "X"))
+      .child(reviewButton("bk-review", issue, busy));
   }
   const body = v_flex()
     .id("backlog-body")
@@ -289,7 +327,7 @@ function backlogDetail(host, issue, k, opts) {
           : div().child(issue.source === "you" ? "Filed by you from Deck" : `Filed by an ${issue.source || "agent"}`)),
     ))
     .child(section("Brief · what the agent will be told",
-      div().p(12).rounded(10).bg(k.wash).line_height(1.6).text_color(issue.brief ? k.strong : k.muted).child(issue.brief || "No brief"),
+      briefEditor(host, issue, k, "No brief"),
     ))
     .child(section("When you start it",
       "error" in plan
@@ -315,7 +353,7 @@ function backlogDetail(host, issue, k, opts) {
       .child(
         v_flex()
           .gap(8)
-          .child(heading(issue.title || issue.id, opts.stacked ? 26 : 30).max_h(66).overflow_hidden())
+          .child(titleEditor(host, issue, opts.stacked ? 26 : 30, k))
           .child(
             h_flex()
               .items_center()
@@ -323,6 +361,7 @@ function backlogDetail(host, issue, k, opts) {
               .text_color(k.muted)
               .child(div().px(9).py(2).rounded(10).bg(issue.discarded ? k.wash : k.brandWash).text_size(11).text_color(issue.discarded ? k.muted : k.brand)
                 .child(issue.discarded ? "Discarded · " + age(issue.discardedAt, now) : "Backlog · " + age(issue.createdAt, now)))
+              .when(!issue.discarded, (el) => el.child(reviewBadge(issue, k)))
               .child(div().child(projectOf(issue) ?? "no project"))
               .child(div().child(issue.discarded ? "· kept 7 days" : "· not started")),
           ),
@@ -435,6 +474,9 @@ function actions(host, issue, k, stacked) {
   if (live && issue.root) {
     row.child(button("act-proof", "Request proof", "plain", (_e, cx) => runFor(host, cx, issue, () => requestProof(issue), "Request proof failed"), busy, "P"));
   }
+  row.child(reviewButton("act-review", issue, busy));
+  const resume = issue.kind !== "backlog" ? resumeButton("act-resume", issue, "brand") : null;
+  if (resume) row.child(resume);
   if (issue.kind !== "backlog") row.child(button("act-dismiss", "Remove…", "plain", () => removeKey(host, issue), busy, "D"));
   row.children(mergeButtons(host, issue, "act"));
   if (stacked && issue.pr?.url) {
@@ -459,6 +501,7 @@ function overview(host, issue, store, k, stacked) {
   const events = store.log.filter((e) => e.key === issue.key).slice(-14);
   const toneColor = (t) => (t === "hold" ? k.hold : t === "warn" ? k.nodata : t === "ok" ? k.ok : k.work);
   const q = questionBox(host, issue, k);
+  const stopped = sessionLog(issue, k);
   return v_flex()
     .flex_1()
     .min_w(0)
@@ -466,7 +509,7 @@ function overview(host, issue, store, k, stacked) {
     .px(22)
     .py(20)
     .gap(16)
-    .child(heading(issue.title || issue.id, stacked ? 24 : 30).max_h(66).overflow_hidden())
+    .child(titleEditor(host, issue, stacked ? 24 : 30, k))
     .when(stacked, (el) => el.child(metaLine(issue, k)))
     .child(tabs(issue, "overview", k))
     .when(stacked && Boolean(q), (el) => el.child(q))
@@ -482,16 +525,9 @@ function overview(host, issue, store, k, stacked) {
           v_flex()
             .gap(6)
             .child(label("Your brief"))
-            .child(
-              div()
-                .p(12)
-                .rounded(10)
-                .bg(k.wash)
-                .line_height(1.6)
-                .text_color(issue.brief ? k.strong : k.muted)
-                .child(issue.brief ? String(issue.brief) : "Brief unknown"),
-            ),
+            .child(briefEditor(host, issue, k, "Brief unknown")),
         )
+        .when(Boolean(stopped), (el) => el.child(stopped))
         .when(stacked, (el) => el.children(railSections(issue, k)))
         .child(
           v_flex()
@@ -504,7 +540,7 @@ function overview(host, issue, store, k, stacked) {
                   .gap(12)
                   .items_start()
                   .child(div().mt(5).child(dot(toneColor(e.tone), 7, true)))
-                  .child(div().w(40).flex_none().text_color(k.muted).child(hhmm(e.t)))
+                  .child(div().w(64).flex_none().text_color(k.muted).child(clockTime(e.t)))
                   .child(div().flex_1().min_w(0).child(String(e.what ?? "").replace(/^moved to Survey$/, "moved to Started"))),
               ),
             ),
@@ -664,8 +700,8 @@ export default class IssuesView extends View {
 
   /** The issues in on-screen order: the list's, or the board's columns left to right. */
   order() {
-    const visible = groupIssues(currentStore().issues, this.filter).flatMap((g) => g.items);
-    return shared(MODE_KEY) === "board" ? boardColumns(visible).flatMap((c) => c.items) : visible;
+    const visible = groupIssues(currentStore().issues, this.filter, byReview()).flatMap((g) => g.items);
+    return shared(MODE_KEY) === "board" ? boardColumns(visible, byReview()).flatMap((c) => c.items) : visible;
   }
 
   onKey(e, cx) {
@@ -678,12 +714,12 @@ export default class IssuesView extends View {
       dialog: anyDialogOpen(),
     });
     if (!a) return;
-    const visible = groupIssues(currentStore().issues, this.filter).flatMap((g) => g.items);
+    const visible = groupIssues(currentStore().issues, this.filter, byReview()).flatMap((g) => g.items);
     switch (a.type) {
       case "move":
       case "col": {
         if (board) {
-          const cols = boardColumns(visible);
+          const cols = boardColumns(visible, byReview());
           let col = cols.findIndex((c) => c.items.some((i) => i.key === issue?.key));
           const row = col < 0 ? 0 : cols[col].items.findIndex((i) => i.key === issue.key);
           if (col < 0) col = Math.max(0, cols.findIndex((c) => c.items.length));
@@ -713,7 +749,7 @@ export default class IssuesView extends View {
         this.openPage(issue);
         break;
       case "filter": {
-        // "/" steps through the sidebar views: all → Holding → Failing → No data → Landed → all.
+        // "/" steps through the sidebar views: all → Holding → Failing → No data → Safe unattended → Landed → Discarded → all.
         const at = this.filter?.kind === "view" ? VIEWS.findIndex((v) => v.value === this.filter.value) : -1;
         const v = VIEWS[at + 1];
         this.filter = v ? { kind: "view", value: v.value } : null;
@@ -732,6 +768,10 @@ export default class IssuesView extends View {
         break;
       case "help":
         openKeys();
+        break;
+      case "reviewSort":
+        // ⇧U: unattended cards first within each stage (list) or project (board), or back.
+        setShared(REVIEW_SORT_KEY, !byReview());
         break;
       case "toggleMode":
         setShared(MODE_KEY, board ? "list" : "board");
@@ -796,6 +836,7 @@ export default class IssuesView extends View {
       v === "holding" ? dot(k.hold, 10, true)
         : v === "landed" ? dot(k.ok, 10, true)
         : v === "discarded" ? dot(k.muted, 10, false)
+        : v === "unattended" ? ring(k.ok, 0, 10)
         : ring(v === "failing" ? k.fail : k.nodata, 0, 10);
     const repos = repoTelemetry(issues);
     return v_flex()
@@ -808,7 +849,7 @@ export default class IssuesView extends View {
       .py(14)
       .gap(2)
       .overflow_y_scrollbar()
-      .child(this.sideItem("side-chat", null, "Chat", null, false, () => goTo("deck-chat"), "⌥⌘1"))
+      .child(this.sideItem("side-chat", null, "Chat", null, false, () => goTo("deck-chat"), "⌥⌘2"))
       .child(this.sideItem("side-issues", null, "Issues", issues.filter((i) => matchesView(i, null)).length, !this.filter, (_e, cx) => {
         this.filter = null;
         setShared(TAB_KEY, "overview");
@@ -835,7 +876,7 @@ export default class IssuesView extends View {
   // ------------------------------------------------------------ list
 
   list(issues, selected, k) {
-    const groups = groupIssues(issues, this.filter);
+    const groups = groupIssues(issues, this.filter, byReview());
     const rows = [];
     this.rowAt = new Map();
     for (const g of groups) {
@@ -872,6 +913,8 @@ export default class IssuesView extends View {
             .child(ring(c, stagePct(i.stage)))
             .child(div().w(48).flex_none().truncate().font_family(MONO).text_size(11).text_color(k.muted).child(i.id))
             .child(div().flex_1().min_w(0).truncate().text_color(k.strong).child(i.title || "untitled"))
+            // Landed work is reviewed already: no badge there.
+            .when(i.stage !== "landed" && !i.discarded, (el) => el.child(reviewBadge(i, k)))
             .child(h_flex().flex_none().items_center().gap(5).text_color(k.muted).child(dot(tone(pc.tone, k), 7, true)).child(pc.text)),
         );
       }
@@ -900,8 +943,9 @@ export default class IssuesView extends View {
           .when(Boolean(filterName), (el) =>
             el.child(div().px(9).h(24).flex().items_center().rounded(12).bg(k.brandWash).text_size(12).text_color(k.brand).truncate().max_w(220).child(String(filterName))),
           )
+          .when(byReview(), (el) => el.child(sortChip(k)))
           .child(div().flex_1().min_w(0))
-          .child(h_flex().min_w(0).flex_shrink(1).overflow_hidden().gap(4).text_color(k.muted).child(div().flex_none().text_color(k.text).child("j k")).child(div().flex_none().child("move ·")).child(div().flex_none().text_color(k.text).child("/")).child(div().flex_none().child("filter")))
+          .child(h_flex().min_w(0).flex_shrink(1).overflow_hidden().gap(4).text_color(k.muted).child(div().flex_none().text_color(k.text).child("j k")).child(div().flex_none().child("move ·")).child(div().flex_none().text_color(k.text).child("/")).child(div().flex_none().child("filter ·")).child(div().flex_none().text_color(k.text).child("⇧U")).child(div().flex_none().child("sort")))
           .child(div().flex_none().text_color(k.muted).child(String(groups.reduce((n, g) => n + g.items.length, 0)))),
       )
       .child(v_flex().id("issues-list").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.listScroll).children(rows));
@@ -916,9 +960,9 @@ export default class IssuesView extends View {
     const selKey = shared(SEL_KEY);
     // Only an issue the list shows can be the detail's: a filter that hides
     // the selected one moves the detail to the first visible issue.
-    const visible = groupIssues(issues, this.filter).flatMap((g) => g.items);
+    const visible = groupIssues(issues, this.filter, byReview()).flatMap((g) => g.items);
     const board = shared(MODE_KEY) === "board";
-    const order = board ? boardColumns(visible).flatMap((c) => c.items) : visible;
+    const order = board ? boardColumns(visible, byReview()).flatMap((c) => c.items) : visible;
     const issue = order.find((i) => i.key === selKey) ?? order[0] ?? null;
     showIssue(this, issue);
     // Shown (first draw, back from another view): the keys are ours.
@@ -942,7 +986,7 @@ export default class IssuesView extends View {
         : this.filter.kind === "repo" ? this.filter.value ?? "no project"
         : VIEWS.find((v) => v.value === this.filter.value)?.text;
       // One click on a card opens its page.
-      return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName }));
+      return root.child(boardPane(visible, issue, k, (i) => this.openPage(i), null, { filterName, byReview: byReview(), editHost: this }));
     }
     root.child(this.list(issues, issue, k));
     if (!issue) {

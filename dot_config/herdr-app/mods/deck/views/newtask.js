@@ -3,10 +3,11 @@
 // and from any layout by the global ⌘⇧N (the deck-new mod opens this same view,
 // without a repo: the selected issue's is the default then). Repo chips (the
 // repos of the issues and backlog entries, plus Choose folder…), a Title input,
-// a Brief textarea and a Just a terminal checkbox. The dialog owns the
+// a Brief textarea, a Safe unattended checkbox (the card's review cost:
+// lib/review.js) and a Just a terminal checkbox. The dialog owns the
 // keyboard: typing is only text (lib/newtask.js dialogKeyNewTask); ⌘↵ starts
 // now, ⌥⌘↵ adds to the Backlog, esc cancels, Tab / Shift-Tab move, Enter in
-// Title goes to Brief, Space on the checkbox toggles it.
+// Title goes to Brief, Space on a checkbox toggles it.
 // Start now is data.js startNow: the backlog Start's path (worktree, space.new
 // with claude and the brief, or with Just a terminal the default shell), then
 // the new space is selected. No S, S confirm: Matt typed it and pressed ⌘↵.
@@ -78,12 +79,14 @@ export default class NewTaskView extends View {
     this.error = null;
     this.busy = false;
     this.terminal = false; // Just a terminal
+    this.unattended = false; // Safe unattended (review cost); off is "needs me"
     this.id = freshId(); // the entry id a Start now uses (kept for a retry)
     this.pendingWorktree = null; // a worktree a lost start left, reused by the next ⌘↵
     this.startOnce = oneAtATime((form) => startNow(form));
     this.field = "title";
     this.handle = cx.focus_handle();
     this.termHandle = cx.focus_handle();
+    this.reviewHandle = cx.focus_handle();
     this.title = InputState.new({ placeholder: "Short title" });
     // Its placeholder is drawn by the view, so it wraps (the state's own stays on one line).
     this.brief = TextareaState.new({ rows: 5 });
@@ -138,25 +141,32 @@ export default class NewTaskView extends View {
     }
   }
 
-  /** Which control has the keyboard: Title, Brief or the checkbox. */
+  /** Which control has the keyboard: Title, Brief or a checkbox. */
   focusedField() {
     try {
       if (this.termHandle.is_focused()) return "terminal";
+      if (this.reviewHandle.is_focused()) return "review";
     } catch {
       // closed meanwhile
     }
-    return this.field === "terminal" ? null : this.field;
+    return this.field === "terminal" || this.field === "review" ? null : this.field;
   }
 
-  /** Tab / Shift-Tab: Title → Brief → Just a terminal → Title. */
+  /** Tab / Shift-Tab: Title → Brief → Safe unattended → Just a terminal → Title. */
   move(d) {
-    const order = ["title", "brief", "terminal"];
+    const order = ["title", "brief", "review", "terminal"];
     const at = order.indexOf(this.focusedField() ?? "");
-    const next = at < 0 ? (d > 0 ? "title" : "terminal") : order[(at + (d > 0 ? 1 : 2)) % 3];
-    if (next === "terminal") {
-      this.field = "terminal";
-      this.termHandle.focus();
+    const next = at < 0 ? (d > 0 ? "title" : "terminal") : order[(at + (d > 0 ? 1 : order.length - 1)) % order.length];
+    if (next === "terminal" || next === "review") {
+      this.field = next;
+      (next === "terminal" ? this.termHandle : this.reviewHandle).focus();
     } else (next === "title" ? this.title : this.brief).focus();
+  }
+
+  toggleReview(cx) {
+    if (this.busy) return;
+    this.unattended = !this.unattended;
+    cx.notify();
   }
 
   toggleTerminal(cx) {
@@ -174,7 +184,7 @@ export default class NewTaskView extends View {
     cx.notify();
     const form = {
       id: this.id, title: this.title.value(), brief: this.brief.value(), root: this.root,
-      terminal: this.terminal, pendingWorktree: this.pendingWorktree,
+      terminal: this.terminal, pendingWorktree: this.pendingWorktree, review: this.unattended ? "unattended" : null,
     };
     cx.spawn(async (cx) => {
       let next;
@@ -207,7 +217,7 @@ export default class NewTaskView extends View {
     this.busy = "backlog";
     this.error = null;
     cx.notify();
-    const form = { title: this.title.value(), brief: this.brief.value(), root: this.root };
+    const form = { title: this.title.value(), brief: this.brief.value(), root: this.root, review: this.unattended ? "unattended" : null };
     cx.spawn(async (cx) => {
       let next;
       try {
@@ -242,7 +252,7 @@ export default class NewTaskView extends View {
 
   render(_cx) {
     const k = tokens();
-    const termOn = this.focusedField() === "terminal";
+    const focused = this.focusedField();
     const chips = repoChoices(currentStore().issues);
     if (this.root && !chips.some((c) => c.root === this.root)) chips.push({ root: this.root, name: baseName(this.root) });
     const hm = String(home() ?? "").replace(/\/+$/, "");
@@ -285,6 +295,7 @@ export default class NewTaskView extends View {
         else if (d === "start") this.start(cx);
         else if (d === "backlog") this.submit(cx);
         else if (d === "toggle") this.toggleTerminal(cx);
+        else if (d === "review") this.toggleReview(cx);
         else this.move(d === "next" ? 1 : -1);
       })
       .size_full()
@@ -341,7 +352,13 @@ export default class NewTaskView extends View {
             el.child(div().absolute().top(0).left(0).right(0).whitespace_normal().line_height(1.55).text_color(k.muted)
               .child(this.terminal ? BRIEF_HINT_TERMINAL : BRIEF_HINT)))
           .child(Textarea.new(this.brief).w_full().h(96).text_size(12).text_color(k.strong))))
-      .child(this.checkbox(k, termOn))
+      .child(
+        v_flex()
+          .child(this.checkbox(k, "review", this.reviewHandle, this.unattended, focused === "review", "Safe unattended",
+            "· review cost: tests and the proof file are enough, no need to watch", (cx) => this.toggleReview(cx)))
+          .child(this.checkbox(k, "terminal", this.termHandle, this.terminal, focused === "terminal", "Just a terminal",
+            "· a shell in a new worktree, no agent, brief optional", (cx) => this.toggleTerminal(cx))),
+      )
       .when(Boolean(this.error), (el) => el.child(div().px(12).py(9).rounded(8).bg(k.fail + "1f").text_color(k.fail).child(String(this.error))))
       .child(
         h_flex()
@@ -358,11 +375,11 @@ export default class NewTaskView extends View {
       );
   }
 
-  /** The Just a terminal checkbox: Tab reaches it, Space or a click toggles it. */
-  checkbox(k, on) {
+  /** A checkbox row (Safe unattended, Just a terminal): Tab reaches it, Space or a click toggles it. */
+  checkbox(k, name, handle, checked, focused, text, hint, toggle) {
     return h_flex()
-      .id("nt-terminal")
-      .track_focus(this.termHandle)
+      .id("nt-" + name)
+      .track_focus(handle)
       .flex_none()
       .items_center()
       .gap(9)
@@ -370,10 +387,11 @@ export default class NewTaskView extends View {
       .py(6)
       .rounded(8)
       .cursor_pointer()
+      .when(focused, (el) => el.bg(k.wash))
       .on_click((_e, cx) => {
-        this.field = "terminal";
-        this.termHandle.focus();
-        this.toggleTerminal(cx);
+        this.field = name;
+        handle.focus();
+        toggle(cx);
       })
       .child(
         div()
@@ -382,15 +400,15 @@ export default class NewTaskView extends View {
           .h(16)
           .rounded(5)
           .border_1()
-          .border_color(this.terminal ? k.brand : k.line)
+          .border_color(checked || focused ? k.brand : k.line)
           .flex()
           .items_center()
           .justify_center()
           .text_size(11)
           .text_color(k.holdInk)
-          .when(this.terminal, (el) => el.bg(k.brand).child("✓")),
+          .when(checked, (el) => el.bg(k.brand).child("✓")),
       )
-      .child(div().text_color(this.terminal ? k.strong : k.text).child("Just a terminal"))
-      .child(div().text_color(k.muted).child("· a shell in a new worktree, no agent, brief optional"));
+      .child(div().flex_none().text_color(checked ? k.strong : k.text).child(text))
+      .child(div().min_w(0).truncate().text_color(k.muted).child(hint));
   }
 }

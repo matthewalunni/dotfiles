@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shownChild, takesFocus, ASK_MS, navChild } from "../../dot_config/herdr-app/mods/deck/lib/views.js";
+import { shownChild, takesFocus, ASK_MS, navChild, agentNumber } from "../../dot_config/herdr-app/mods/deck/lib/views.js";
 
 test("shownChild: only in a deck layout", () => {
   assert.equal(shownChild("main", "deck-issues"), null);
@@ -31,6 +31,10 @@ test("takesFocus: a new, recent show request for it counts once", () => {
 test("shownChild: the issue page is a Deck view", () => {
   assert.equal(shownChild("deck", "deck-issue"), "deck-issue");
 });
+test("Goals is a Deck view and a nav item", () => {
+  assert.equal(shownChild("deck", "deck-goals"), "deck-goals");
+  assert.equal(navChild("deck-goals"), "deck-goals");
+});
 test("navChild: the issue page underlines Issues", () => {
   assert.equal(navChild("deck-issue"), "deck-issues");
   assert.equal(navChild("deck-issues"), "deck-issues");
@@ -53,6 +57,15 @@ test("drawSig changes with the selection, view and store events, not otherwise",
   assert.notEqual(sig({}), sig({ "deck.selected": "b" }));
   assert.notEqual(sig({}), sig({ "deck.view": "deck-issues" }));
   assert.notEqual(sig({}), sig({ layout: "main" }));
+  assert.notEqual(sig({}), sig({ "deck.reviewSort": true })); // ⇧U / deck.review-sort redraws
   assert.notEqual(sig({}), sig({ "deck.store": { issues: [1, 2], log: [{ t: 5, key: "a" }, { t: 6, key: "b" }] } }));
   assert.equal(drawSig(() => undefined), drawSig(() => null));
+});
+
+test("agentNumber: deck.agent:1–9 picks that agent, anything else is not an agent key", () => {
+  assert.equal(agentNumber("agent:1"), 1);
+  assert.equal(agentNumber(" agent:9 "), 9);
+  for (const c of ["agent:0", "agent:10", "agent:", "agent:x", "go:terminal", "", null, undefined]) {
+    assert.equal(agentNumber(c), null, String(c));
+  }
 });

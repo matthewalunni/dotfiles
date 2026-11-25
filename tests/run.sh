@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run every test suite: the herdr deck (node) and the zsh helpers.
+# Run every test suite: the herdr deck (node), the zsh helpers and obs-ctl.
 # Usage: tests/run.sh        exits non-zero if any suite fails
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -21,6 +21,7 @@ else
   echo "== herdr deck: skipped (node not found)"
 fi
 for t in tests/*.test.zsh; do run "$t" zsh "$t"; done
+run "obs-ctl (python)" python3 tests/obs-ctl.test.py -q
 
 echo
 [ $fail -eq 0 ] && echo "all suites passed" || echo "some suites FAILED"

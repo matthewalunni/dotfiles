@@ -1,35 +1,36 @@
-// The top bar: brand, Chat / Issues / Terminal nav, the holding chip, "? keys"
+// The top bar: brand, Terminal / Chat / Issues / Goals nav, the holding chip, "? keys"
 // and the clock. The collector and the chat source run in this copy; main.js starts and stops them
 // (close() only reaches the root view). This copy also runs the keys.json
-// command loop (deck.go:*, deck.next-holding, deck.agent-issue, deck.new-task). The holding
+// command loop (deck.go:*, deck.agent:<n>, deck.next-holding, deck.agent-issue, deck.new-task, deck.review-sort). The holding
 // chip, ⌘⇧J and ⌘⇧I open the issue page (views/issuepage.js).
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { shared, theme, nextCommand, notify } from "herdr";
+import { shared, setShared, theme, nextCommand, notify, run, agents } from "herdr";
+import { REVIEW_SORT_KEY } from "../lib/review.js";
 import { deckTokens } from "../lib/tokens.js";
 import { currentStore, VIEW_KEY, ISSUE_FROM_KEY } from "../data.js";
 import { nextHolding } from "../lib/board.js";
-import { navChild } from "../lib/views.js";
+import { navChild, agentNumber } from "../lib/views.js";
 import { keyChip } from "./ui.js";
 import { openKeys } from "./keys.js";
 import { openNewTask } from "./newtask.js";
 import { goTo, focusedAgent, openIssue, keepFresh, drew } from "./focus.js";
 import { backTarget } from "../lib/issuepage.js";
+import { clockTime } from "../lib/present.js";
 
 const SANS = "SF Pro Text";
 const MONO = "JetBrains Mono";
 const NAV = [
-  { label: "Chat", key: "⌥⌘1", child: "deck-chat" },
-  { label: "Issues", key: "⌥⌘2", child: "deck-issues" },
-  { label: "Terminal", key: "⌥⌘3", child: "deck-terminal" },
+  { label: "Terminal", key: "⌥⌘1", child: "deck-terminal" },
+  { label: "Chat", key: "⌥⌘2", child: "deck-chat" },
+  { label: "Issues", key: "⌥⌘3", child: "deck-issues" },
+  { label: "Goals", key: "⌥⌘4", child: "deck-goals" },
 ];
 // macOS draws the traffic lights over the bar's left edge.
 const LEFT_ROOM = 84;
 
 /** Letter-spaced uppercase: a hair space between letters (no tracking in gpui). */
 const spaced = (s) => [...s.toUpperCase()].join(" ");
-
-const pad2 = (n) => String(n).padStart(2, "0");
 
 /** A press on a control inside the window_drag bar belongs to the control. */
 const own = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
@@ -40,18 +41,23 @@ function focusedIssue(issues) {
   return t ? issues.find((i) => i.terminal === t && i.observed !== false) ?? null : null;
 }
 
-const GO = { chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal" };
+const GO = { chat: "deck-chat", issues: "deck-issues", terminal: "deck-terminal", goals: "deck-goals" };
 
 /**
- * One keys.json command: "go:<view>", "next-holding", "agent-issue", "back" or "new-task"
- * (the New task dialog, as N; nothing while another Deck dialog is open).
+ * One keys.json command: "go:<view>", "agent:<n>" (⌘1–9: agent n, in the
+ * agent.next order, on the Terminal view), "next-holding", "agent-issue", "back", "new-task"
+ * (the New task dialog, as N; nothing while another Deck dialog is open) or
+ * "review-sort" (unattended cards first in Issues, or back, as ⇧U).
  * @param {string} c
  */
 export function runCommand(c) {
   const cmd = String(c ?? "").trim();
-  const go = /^go:(chat|issues|terminal)$/.exec(cmd);
+  const go = /^go:(chat|issues|terminal|goals)$/.exec(cmd);
   if (go) return goTo(GO[go[1]]);
+  const n = agentNumber(cmd);
+  if (n) return showAgent(n);
   if (cmd === "new-task") return void openNewTask();
+  if (cmd === "review-sort") return void setShared(REVIEW_SORT_KEY, shared(REVIEW_SORT_KEY) !== true);
   // ⌘Esc: back out of the issue page (even from its terminal, where Esc is the agent's).
   if (cmd === "back") {
     if (shared(VIEW_KEY) !== "deck-issue") return;
@@ -75,6 +81,15 @@ export function runCommand(c) {
     // keeps where the page came from and puts the keyboard on the overview.
     openHere(issue);
   }
+}
+
+/** ⌘<n>: the Terminal view with agent n in it and the keyboard on it. */
+function showAgent(n) {
+  // Fewer than n agents: stay put. (A failed run() doesn't throw; Herdr only toasts.)
+  if ((agents() ?? []).length < n) return void notify({ title: `No agent ${n}`, level: "info" });
+  // Not goTo's own agent focus: it would put back the agent focused before.
+  goTo(GO.terminal, { agent: false });
+  run("agent.select", { index: n });
 }
 
 /** Opens `issue`'s page; j / k there use the default order (none handed over). */
@@ -156,8 +171,7 @@ export default class BarView extends View {
     const holding = issues.filter((i) => i.stage === "holding" && !i.dismissed).length;
     // "next" is the holding issue after the focused agent's (wrapping).
     const next = nextHolding(issues, focusedIssue(issues)?.key ?? null);
-    const now = new Date();
-    const clock = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    const clock = clockTime(new Date());
 
     const nav = NAV.map(({ label, key, child }) => {
       const on = active === child;

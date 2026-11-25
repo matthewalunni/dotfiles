@@ -1,0 +1,57 @@
+#!/usr/bin/env zsh
+# peek: look at images from the terminal.
+#
+#   peek shot.png more.jpg      # Herdr: opens them in a column beside this pane
+#   peek ~/Desktop/shots        # a folder shows every image in it
+#   peek --inline shot.png      # print them in the terminal (Ghostty, Herdr, kitty)
+#
+# Outside Herdr it always prints inline, using the Kitty graphics protocol. Non-PNG
+# images are converted with macOS's sips first.
+emulate -L zsh
+setopt err_return pipe_fail extended_glob null_glob
+
+local inline=0
+[[ ${1:-} == (--inline|-i) ]] && { inline=1; shift }
+(( $# )) || { print -u2 "usage: peek [--inline] <image|folder>..."; exit 2 }
+
+local -a files
+local a
+for a in "$@"; do
+  if [[ -d $a ]]; then
+    files+=($a/*.(#i)(png|jpg|jpeg|gif|webp|heic|tiff|bmp|svg)(.On))
+  elif [[ -f $a ]]; then
+    files+=($a)
+  else
+    print -u2 "peek: not found: $a"; exit 1
+  fi
+done
+(( ${#files} )) || { print -u2 "peek: no images"; exit 1 }
+
+if (( ! inline )) && [[ -n ${HC_TERMINAL_ID:-} ]] && (( $+commands[herdr-show-images] )); then
+  exec herdr-show-images "${files[@]}"
+fi
+
+local tmp=$(mktemp -d); trap "rm -rf ${(q)tmp}" EXIT
+local f png
+for f in "${files[@]}"; do
+  png=$f
+  if [[ ${f:e:l} != png ]]; then
+    png=$tmp/${f:t:r}.png
+    sips -s format png "$f" --out "$png" >/dev/null 2>&1 || { print -u2 "peek: can't convert $f"; continue }
+  fi
+  print -r -- "${f:t}"
+  python3 -I - "$png" "${COLUMNS:-$(tput cols)}" <<'PY'
+import base64, sys
+path, cols = sys.argv[1], int(sys.argv[2])
+data = base64.standard_b64encode(open(path, "rb").read())
+out = sys.stdout.buffer
+first = True
+while data:
+    chunk, data = data[:4096], data[4096:]
+    ctl = (f"a=T,f=100,q=2,c={max(1, cols - 2)}," if first else "") + f"m={1 if data else 0}"
+    out.write(b"\x1b_G" + ctl.encode() + b";" + chunk + b"\x1b\\")
+    first = False
+out.write(b"\n")
+out.flush()
+PY
+done

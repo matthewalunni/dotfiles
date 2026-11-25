@@ -11,17 +11,19 @@
 // "issuehints" (the key strip along the bottom).
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { shared, setShared, run } from "herdr";
+import { shared, setShared, run, agents, focused } from "herdr";
 import { groupIssues, projectOf } from "../lib/present.js";
 import { boardColumns } from "../lib/board.js";
 import { keyAction } from "../lib/keys.js";
-import { issuePane, stepIssue, backTarget } from "../lib/issuepage.js";
+import { issuePane, sideSwitch, stepIssue, backTarget } from "../lib/issuepage.js";
 import { currentStore, STORE_KEY, SEL_KEY, TAB_KEY, ISSUE_FROM_KEY, VIEW_KEY } from "../data.js";
 import { MONO, tokens, label, keyChip, heading, keyOf, SANS } from "./ui.js";
 import { initDetail, showIssue, detailKeys, detailKey, issueDetail } from "./issues.js";
 import { openKeys } from "./keys.js";
 import { registerFocus, goTo, focusOnShow, openIssue, showIssueSide, keepFresh, drew } from "./focus.js";
 import { shownChild } from "../lib/views.js";
+import { resumeButton } from "./resume.js";
+import { lastSummary } from "../lib/board.js";
 
 /** The selected issue, or null (it was dismissed or expired). */
 function selectedIssue() {
@@ -46,7 +48,7 @@ function pageOrder(current) {
   return shared(ISSUE_FROM_KEY) === "board" ? boardColumns(visible).flatMap((c) => c.items) : visible;
 }
 
-/** Gives the issue's terminal the keyboard (as ⌥⌘3 does), only while it is observed. */
+/** Gives the issue's terminal the keyboard (as ⌥⌘1 does), only while it is observed. */
 function typeInThread(issue) {
   if (issuePane(issue) !== "terminal") return;
   run("agent.focus", { terminal: issue.terminal });
@@ -115,17 +117,26 @@ export default class IssuePage extends View {
     // Shown (opened, or a j / k step): the keys are ours (goTo focused us already; again once drawn).
     focusOnShow(this, "deck-issue", () => this.handle.focus(), cx);
     // Keep the right side in step: an agent that ends while its page is up
-    // turns the pane into "Agent not running".
-    const pane = issuePane(issue);
-    if (this.side !== pane && shownChild(shared("layout"), shared(VIEW_KEY)) === "deck-issue") {
-      this.side = pane;
-      cx.timer.after(0, () => showIssueSide(pane));
+    // turns the pane into "Agent not running"; one that comes back (Resume)
+    // shows again, with its own tab selected (the pane shows the selected tab).
+    const sw = shownChild(shared("layout"), shared(VIEW_KEY)) === "deck-issue" ? sideSwitch(this.side ?? null, issue, agents()) : null;
+    if (sw) {
+      this.side = sw.pane;
+      cx.timer.after(0, () => {
+        if (sw.pane === "terminal") {
+          if (sw.space && focused()?.space !== sw.space) run("space.select", { id: sw.space });
+          run("tab.select", { id: sw.tab });
+        }
+        showIssueSide(sw.pane);
+      });
     }
 
     const back = backTarget(shared(ISSUE_FROM_KEY));
     const root = v_flex()
       .id("deck-issue")
       .track_focus(this.handle)
+      // Clicking away from an open title / brief editor saves it (its blur).
+      .on_mouse_down("left", () => { if (this.inline) this.handle.focus(); })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .size_full().min_h(0).bg(k.bg).font_family(SANS).text_size(12).text_color(k.text);
     if (!issue) {
@@ -213,6 +224,8 @@ export class GoneView extends View {
             .child(div().child(issue.discarded ? "Discarded. Restore it to start an agent." : "Press S to start one. Its live thread shows up here.")),
         );
     }
+    const last = lastSummary(issue);
+    const resume = issue ? resumeButton("gone-resume", issue, "brand") : null;
     return v_flex()
       .size_full()
       .items_center()
@@ -225,7 +238,14 @@ export class GoneView extends View {
       .text_size(12)
       .text_color(k.muted)
       .child(heading("Agent not running", 18, k.strong))
-      .child(div().child(issue ? `${issue.id}'s terminal has ended. The overview shows what Deck last saw.` : "No agent for this issue."));
+      .child(div().child(issue ? `${issue.id}'s terminal has ended. The overview shows what Deck last saw.` : "No agent for this issue."))
+      .when(Boolean(last), (el) => el.child(
+        v_flex().max_w(460).gap(4).p(12).rounded(10).bg(k.wash).line_height(1.5)
+          .child(div().text_color(k.strong).child(last.done))
+          .when(Boolean(last.question), (el) => el.child(div().text_color(k.hold).child("Open question: " + last.question))),
+      ))
+      .when(Boolean(resume), (el) => el.child(resume))
+      .when(!issue?.agent?.id && Boolean(issue), (el) => el.child(div().text_size(11).child("No Claude session was recorded, so it cannot be resumed.")));
   }
 }
 

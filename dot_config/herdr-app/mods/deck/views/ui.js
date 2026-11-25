@@ -4,6 +4,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, notify } from "herdr";
 import { deckTokens } from "../lib/tokens.js";
+import { reviewOf, REVIEW_LABEL } from "../lib/review.js";
 
 export const SANS = "SF Pro Text";
 // Kept so older imports keep working: the condensed display face is retired.
@@ -126,6 +127,13 @@ export function ring(color, pct, size = 12) {
 /** A small filled chip. */
 export function chip(text, fg, bg) {
   return div().flex_none().px(8).py(2).rounded(10).bg(bg).text_size(11).text_color(fg).whitespace_nowrap().child(String(text));
+}
+
+/** A card's review cost badge: "Unattended" (ok green) or "Needs me" (quiet). */
+export function reviewBadge(issue, k = tokens()) {
+  const free = reviewOf(issue) === "unattended";
+  return div().flex_none().px(7).py(1).rounded(8).bg(free ? k.okBg : k.wash).text_size(11).text_color(free ? k.ok : k.muted)
+    .whitespace_nowrap().child(REVIEW_LABEL[reviewOf(issue)]);
 }
 
 /** A square or round dot. */
