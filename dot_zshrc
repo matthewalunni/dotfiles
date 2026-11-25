@@ -87,6 +87,15 @@ nvm()  { _nvm_load && nvm  "$@"; }
 node() { _nvm_load && node "$@"; }
 npm()  { _nvm_load && npm  "$@"; }
 npx()  { _nvm_load && npx  "$@"; }
+# The functions above only exist in this shell, so programs it starts (nvim's
+# language servers, `#!/usr/bin/env node` scripts) can't find node until nvm
+# has been loaded. With no node binary on PATH, put the newest nvm-installed
+# node's bin dir there now; it's just a PATH entry, so startup stays fast.
+if ! whence -p node >/dev/null; then
+  _nvm_bins=("$NVM_DIR"/versions/node/*/bin(N/nOn))
+  (( $#_nvm_bins )) && path+=("$_nvm_bins[1]")
+  unset _nvm_bins
+fi
 
 
 # ========================
