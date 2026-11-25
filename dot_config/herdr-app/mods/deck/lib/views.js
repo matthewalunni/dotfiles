@@ -72,3 +72,13 @@ export function drawSig(get) {
   }
   return JSON.stringify([...SIG_KEYS.map((k) => get(k) ?? null), s?.issues?.length ?? 0, s?.log?.length ?? 0, last?.t ?? 0, last?.key ?? null, ended, resuming, failed]);
 }
+
+/**
+ * The agent a keys.json "deck.agent:<n>" command asks for (1–9, in the order
+ * agent.next walks), or null when `cmd` is not one.
+ * @param {unknown} cmd @returns {number|null}
+ */
+export function agentNumber(cmd) {
+  const m = /^agent:([1-9])$/.exec(String(cmd ?? "").trim());
+  return m ? Number(m[1]) : null;
+}
