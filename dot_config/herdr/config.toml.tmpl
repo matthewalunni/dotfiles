@@ -33,6 +33,11 @@ selection_bg = "{{ $t.selected_bg }}"
 # New panes, tabs and workspaces open in the current pane's directory
 new_cwd = "follow"
 kitty_graphics = false
+{{- if eq .chezmoi.os "linux" }}
+# Panes otherwise use the herdr server's $SHELL, which is whatever the server
+# inherited when it started (bash on a codespace, even after chsh to zsh)
+default_shell = "{{ lookPath "zsh" | default "/usr/bin/zsh" }}"
+{{- end }}
 
 [advanced]
 scrollback_limit_bytes = 8000000
