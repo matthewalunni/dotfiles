@@ -35,3 +35,10 @@ test("deck-new opens Deck's own New task view (one dialog, no copied code)", () 
   assert.match(src, /view:\s*"newtask"/);
   assert.doesNotMatch(src, /from\s+"\.\.\//, "a mod can't import another mod's files");
 });
+
+test("deck layout: ⌘1–9 show agent 1–9 (through Deck, so the Terminal view comes up)", () => {
+  const keys = JSON.parse(read("keys.json"));
+  for (let n = 1; n <= 9; n++) assert.equal(keys["layout:deck"]["cmd-" + n], "deck.agent:" + n);
+  // The main layout keeps ⌘1–9 for tabs.
+  assert.equal(keys.global["cmd-1"], "tab.select:1");
+});

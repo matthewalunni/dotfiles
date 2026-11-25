@@ -10,7 +10,7 @@ const COLS = [
   { title: "Anywhere", tone: "brand", rows: [
     ["⌥⌘1", "Terminal"], ["⌥⌘2", "Chat"], ["⌥⌘3", "Issues"], ["⌥⌘4", "Goals"],
     ["⌘⇧J", "Next agent holding for you"], ["⌘⇧I", "Issue for this agent"], ["⌘esc", "Back from an issue (also from its thread)"],
-    ["⌘[  ⌘]", "Previous / next agent"], ["⌘⇧L", "Switch to main layout"],
+    ["⌘[  ⌘]", "Previous / next agent"], ["⌘1 – 9", "Agent 1–9, in the agents list"], ["⌘⇧L", "Switch to main layout"],
   ] },
   { title: "Issues", tone: "hold", rows: [
     ["j  k", "Move down / up"], ["h  l", "Board: column left / right"], ["⇧H ⇧L", "Board: move the card a column"], ["↵", "Open issue"],
